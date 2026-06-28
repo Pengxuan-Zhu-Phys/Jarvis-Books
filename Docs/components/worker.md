@@ -106,6 +106,13 @@ def process_task(self, task):
 concurrently; opera/likelihood steps run inline (microseconds). One Sample is in flight at a
 time — concurrency is **within** the Sample only (invariant #6).
 
+> **`bind_params` call timing (current code).** In the D1.1 implementation `process_task` calls
+> `sample.set_config(...)` and `sample.start()` first, then `sample.bind_params(self._mapper)`
+> **before** `materialize`, and only when a mapper was built (`if self._mapper is not None`). The
+> mapper itself is constructed once at startup in `_init_runtime` (`build_mapper`). `bind_params`
+> is currently a reserved stub (UMapper lands later — see [sample.md](sample.md)), but the call
+> site is fixed here so it does not move when the real `u → x` mapping arrives.
+
 ---
 
 ## 5. Concurrency, isolation, failure semantics
@@ -120,7 +127,12 @@ time — concurrency is **within** the Sample only (invariant #6).
 - **Crash**: if the Worker process dies mid-Sample, the Factory watchdog (see [factory.md](factory.md))
   detects a stale heartbeat, sweeps the Worker's held slots, re-queues the in-flight Sample,
   and respawns. The Worker itself only guarantees slot release on *handled* exceptions.
-- **Graceful stop**: `SIGTERM`/`SIGINT` → finish the current Sample, then exit.
+- **Graceful stop (current code)**: `run()` installs handlers for both `SIGTERM` and `SIGINT`
+  (`signal.signal(...)`); `_handle_signal` flips `self._is_running = False` only. The
+  `_main_loop` checks the flag at the top of each iteration, so a signal received mid-Sample lets
+  the current `process_task` finish, then the loop exits; the `finally` in `run()` sends a
+  `stopped` heartbeat and closes the Redis client. The Factory's `request_worker_shutdown` /
+  `stop_all_workers` drive this by sending `SIGTERM` (see [factory.md](factory.md) §5).
 
 ---
 

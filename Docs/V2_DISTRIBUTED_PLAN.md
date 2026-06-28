@@ -1,6 +1,7 @@
 # V2 Distributed Runtime — Development Plan (Agent Execution Playbook)
 
-Last updated: 2026-06-24 (initial — replaces the retired `V2_DEVELOPMENT_PLAN.md`).
+Last updated: 2026-06-28 (D1.1 marked in-progress — `TaskFactory`/`Worker` landed on `jarvis2`;
+acceptance criteria refined to the implemented opera-only single-Worker path).
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -83,29 +84,29 @@ user-visible behavior.
 
 Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 
-| WP | Title | Milestone | Depends on | Status | Date | Notes |
-|----|-------|-----------|------------|--------|------|-------|
-| — | M0/M1 (benchmark, lazy materialization, buffered logger, single executor, parity gate) | (V1) | — | **done — now part of frozen V1 1.7.4** | 2026-06 | Committed on the V1 line; **not** a V2 WP. V2 reuses the lazy-`Sample`/buffered-logger *ideas*, reimplemented on the V2 branch. |
-| D0.1 | New `Sample` model (uuid/u_coords/task_dict/info_dict) | D0 | — | in-progress | 2026-06-27 | Skeleton landed on `jarvis2`. Review ★★★★☆: dataclass/`to_task_dict` forbidden-key guard/`from_task_dict`/lazy `materialize`+replay all good. Remaining: finish `materialize`/`resolve_token`/`start`/`close`/`record`/`to_info_dict`, `bind_params` placeholder, `execution_plan.type` validation, tests. → tracked in **D0.4**. |
-| D0.2 | Redis schema + queue wrapper + serialization + `[distributed]` extra | D0 | — | in-progress | 2026-06-27 | Landed on `jarvis2`. Review ★★★☆☆: most complete, but two **hard bugs** — `_calc_free_key` uses `{name}:free` instead of `calc:free:{name}`; `_adjust_calc_counts` reads `HGETALL` **outside** the pipeline (cross-Worker race). → fixes in **D0.4**. |
-| D0.3 | std-`logging` two-layer module (drop loguru) | D0 | — | in-progress | 2026-06-27 | Landed on `jarvis2`. Review ★★★☆☆: two-layer structure correct, loguru dropped, V1 `SampleLogger`/`BufferedSampleLogger` reused. Remaining: `QueueHandler`/`QueueListener` non-blocking, `key=value` contract binding, child-bind via `logger_name`, tests. → **D0.4**. |
-| D0.4 | D0 review fixes + test backfill (gate D0) | D0 | D0.1, D0.2, D0.3 | todo | | From the 2026-06-27 code review; closes the D0 hard bugs (Redis namespace + race) + missing methods/tests before D1. |
-| D0.5 | D0 wrap-up: defensive hardening + spawn-pickling + integration test + polish | D0 | D0.4 | todo | | 2026-06-27 follow-up review. **Non-blocking for D1.1** (D1.1 may start after D0.4), but **required to close D0**. |
-| D1.1 | TaskFactory skeleton + Worker process (opera-only MVP) | D1 | D0.4 | todo | | Gated on **D0.4** (hard fixes). D0.5 wrap-up runs in parallel and must be green before D0 is declared closed. |
-| D1.2 | Calculator in Worker (`preload_templates`, `execute`) + single-Worker parity | D1 | D1.1 | todo | | |
-| D2.1 | Multi-Worker pool + held calculators + Redis free-pool + `pack_id` | D2 | D1.2 | todo | | |
-| D2.2 | Layer-internal calculator concurrency (per-Worker `AsyncSubprocessScheduler`) | D2 | D2.1 | todo | | |
-| D2.3 | `clone_shadow` isolation + LibDeps symlink path | D2 | D2.1 | todo | | |
-| D3.1 | `registered_executables` + two-phase `CommandParser` | D3 | D1.2 | todo | | |
-| D3.2 | `env_setup` capture-from-source + cache | D3 | D3.1 | todo | | |
-| D3.3 | `Runtime.FileOperation.delete_method` | D3 | — | todo | | |
-| D4.1 | Worker staging mv + Archiver process skeleton + handoff | D4 | D2.1 | todo | | |
-| D4.2 | Archiver batch persistence (HDF5/CSV/SAMPLE) + output parity gate | D4 | D4.1 | todo | | |
-| D5.1 | `op_count` writers + TaskFactory background snapshot | D5 | D2.1 | todo | | |
-| D5.2 | `--monitor` dashboard + run_summary from Redis | D5 | D5.1 | todo | | |
-| D6.1 | Heartbeats + dead-Worker respawn + in-flight re-queue | D6 | D2.1 | todo | | |
-| D6.2 | RNG spawning + distributed checkpoint/resume | D6 | D6.1 | todo | | |
-| D7.1 | Slow-regime acceptance: scaling + archive latency + chaos + parity | D7 | D4.2, D5.2, D6.2 | todo | | |
+| WP   | Title                                                                                  | Milestone | Depends on       | Status                                 | Date       | Notes                                                                                                                                                                                                                                                                                                                             |
+| ---- | -------------------------------------------------------------------------------------- | --------- | ---------------- | -------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| —    | M0/M1 (benchmark, lazy materialization, buffered logger, single executor, parity gate) | (V1)      | —                | **done — now part of frozen V1 1.7.4** | 2026-06    | Committed on the V1 line; **not** a V2 WP. V2 reuses the lazy-`Sample`/buffered-logger *ideas*, reimplemented on the V2 branch.                                                                                                                                                                                                   |
+| D0.1 | New `Sample` model (uuid/u_coords/task_dict/info_dict)                                 | D0        | —                | in-progress                            | 2026-06-27 | Skeleton landed on `jarvis2`. Review ★★★★☆: dataclass/`to_task_dict` forbidden-key guard/`from_task_dict`/lazy `materialize`+replay all good. Remaining: finish `materialize`/`resolve_token`/`start`/`close`/`record`/`to_info_dict`, `bind_params` placeholder, `execution_plan.type` validation, tests. → tracked in **D0.4**. |
+| D0.2 | Redis schema + queue wrapper + serialization + `[distributed]` extra                   | D0        | —                | in-progress                            | 2026-06-27 | Landed on `jarvis2`. Review ★★★☆☆: most complete, but two **hard bugs** — `_calc_free_key` uses `{name}:free` instead of `calc:free:{name}`; `_adjust_calc_counts` reads `HGETALL` **outside** the pipeline (cross-Worker race). → fixes in **D0.4**.                                                                             |
+| D0.3 | std-`logging` two-layer module (drop loguru)                                           | D0        | —                | in-progress                            | 2026-06-27 | Landed on `jarvis2`. Review ★★★☆☆: two-layer structure correct, loguru dropped, V1 `SampleLogger`/`BufferedSampleLogger` reused. Remaining: `QueueHandler`/`QueueListener` non-blocking, `key=value` contract binding, child-bind via `logger_name`, tests. → **D0.4**.                                                           |
+| D0.4 | D0 review fixes + test backfill (gate D0)                                              | D0        | D0.1, D0.2, D0.3 | todo                                   |            | From the 2026-06-27 code review; closes the D0 hard bugs (Redis namespace + race) + missing methods/tests before D1.                                                                                                                                                                                                              |
+| D0.5 | D0 wrap-up: defensive hardening + spawn-pickling + integration test + polish           | D0        | D0.4             | todo                                   |            | 2026-06-27 follow-up review. **Non-blocking for D1.1** (D1.1 may start after D0.4), but **required to close D0**.                                                                                                                                                                                                                 |
+| D1.1 | TaskFactory skeleton + Worker process (opera-only MVP)                                 | D1        | D0.4             | in-progress                            | 2026-06-28 | `jarvishep2/factory.py` + `worker.py` landed on `jarvis2`. **Done:** `TaskFactory` lifecycle (`get_instance`/`init_redis`/`start_workers`/`stop_all_workers`/`shutdown`), fixed-frequency polling monitor (`start_monitor`/`get_monitor_snapshot`, ~2 Hz, **not** op_count-gated), `Worker(Process)` opera+likelihood loop, SIGTERM/SIGINT graceful stop, `Jarvis2Core.init_factory` `mode==redis` wiring. **Deferred per design:** watchdog/respawn (D6.1), `get_run_metrics` (D5.2), op_count gating (D5.1), calculators (D1.2). Remaining to close: captured-V1 golden parity gate + `tests/test_worker_mvp.py`. Doc: [`components/factory.md`](components/factory.md).                            |
+| D1.2 | Calculator in Worker (`preload_templates`, `execute`) + single-Worker parity           | D1        | D1.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D2.1 | Multi-Worker pool + held calculators + Redis free-pool + `pack_id`                     | D2        | D1.2             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D2.2 | Layer-internal calculator concurrency (per-Worker `AsyncSubprocessScheduler`)          | D2        | D2.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D2.3 | `clone_shadow` isolation + LibDeps symlink path                                        | D2        | D2.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D3.1 | `registered_executables` + two-phase `CommandParser`                                   | D3        | D1.2             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D3.2 | `env_setup` capture-from-source + cache                                                | D3        | D3.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D3.3 | `Runtime.FileOperation.delete_method`                                                  | D3        | —                | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D4.1 | Worker staging mv + Archiver process skeleton + handoff                                | D4        | D2.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D4.2 | Archiver batch persistence (HDF5/CSV/SAMPLE) + output parity gate                      | D4        | D4.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D5.1 | `op_count` writers + TaskFactory background snapshot                                   | D5        | D2.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D5.2 | `--monitor` dashboard + run_summary from Redis                                         | D5        | D5.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D6.1 | Heartbeats + dead-Worker respawn + in-flight re-queue                                  | D6        | D2.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D6.2 | RNG spawning + distributed checkpoint/resume                                           | D6        | D6.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
+| D7.1 | Slow-regime acceptance: scaling + archive latency + chaos + parity                     | D7        | D4.2, D5.2, D6.2 | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
 
 Parallelism note: D0.1 / D0.2 / D0.3 are independent and may proceed in any order. D3.3 is
 independent of the rest of D3.
@@ -300,28 +301,55 @@ done. **Rollback**: how it is disabled. **Out of scope**: excluded work.
 
 ### WP-D1.1 — TaskFactory skeleton + Worker process (opera-only MVP)
 
-- **Goal**: end-to-end `mode: redis` for an **opera-only** scan with **one** Worker.
-- **Design refs**: §2, §4, §6; `V2/factory_design.md`; `V2/worker_design.md`.
-- **Files**: `jarvishep/factory.py` (add `TaskFactory`; keep `WorkerFactory` as thread
-  fallback), NEW `jarvishep/worker.py`, `jarvishep/core.py` (`init_WorkerFactory` mode
-  switch, spawn/teardown), `jarvishep/Sampling/sampler.py` (submit `task_dict` to Redis when
+- **Goal / scope**: get the **single-Worker opera-only path** running end to end under
+  `mode: redis`. The bar is: **one** Worker pulls Samples from Redis, runs only the opera (and
+  likelihood) steps of the `execution_plan`, and submits results, with a Factory that can spawn
+  it, observe it, and shut it down cleanly. Calculators, multi-Worker concurrency, and the
+  Archiver are explicitly **not** in this WP.
+- **Design refs**: §2, §4, §6; `V2/factory_design.md`; `V2/worker_design.md`; component docs
+  [`components/factory.md`](components/factory.md), [`components/worker.md`](components/worker.md),
+  [`components/core.md`](components/core.md).
+- **Files** (package is **`jarvishep2/`** on the `jarvis2` branch; the old `jarvishep/` paths are
+  the V1 line): `jarvishep2/factory.py` (`TaskFactory`), NEW `jarvishep2/worker.py`
+  (`Worker(Process)`), `jarvishep2/core.py` (`Jarvis2Core.init_factory` mode switch +
+  spawn/teardown), `jarvishep2/Sampling/sampler.py` (submit `task_dict` to Redis when
   `mode: redis`), NEW `tests/test_worker_mvp.py`.
 - **Steps**:
-  1. `TaskFactory.start_workers(n=1)` spawns `Worker(Process)` (spawn ctx); Workers
-     `blpop` `hep:task_queue`.
-  2. Worker main loop: `from_task_dict → materialize → run opera layer → to_info_dict →
-     submit_result → incr op_count` (design §4 pseudocode).
-  3. Sampler: when `mode: redis`, `push_task(sample.to_task_dict())` instead of
-     `factory.submit_task(sample_info)`.
-  4. Result collection: control process drains `hep:results` → existing HDF5 writer
-     (Archiver lands in D4; here write directly, thread-writer style).
-  5. Spawn precondition check (importable user funcs, picklable config); on failure warn +
-     fall back to `mode: thread` (invariant: never crash where v1 ran).
-- **Accept**: opera-only reference scan (`Jarvis2`, 1 Worker) produces DATABASE records
-  **set-equal** to the captured V1 golden output; clean shutdown on `SIGINT`; suite green
-  under `fakeredis`.
-- **Rollback**: `Runtime.mode: thread`.
-- **Out of scope**: calculators, multi-worker, Archiver, monitor.
+  1. `TaskFactory.start_workers(n=1)` spawns `Worker(Process)` (spawn ctx; only `redis_config` +
+     picklable `worker_config` cross the boundary — see `factory.md` §3a); Workers `blpop`
+     `hep:task_queue`.
+  2. Worker main loop: `from_task_dict → bind_params → materialize → run opera/likelihood layers
+     → to_info_dict → submit_result → incr_op("sample")` (design §4 pseudocode).
+  3. Sampler: when `mode: redis`, `push_task(sample.to_task_dict())` instead of the thread-pool
+     submit.
+  4. Result collection: control process drains results → HDF5 writer (the D1.1 `SimpleArchiver`
+     writes directly; the batched Archiver lands in D4).
+  5. Boot precondition: `mode == redis` brings the Factory up; otherwise `init_factory` is a
+     no-op. V2 carries **no thread fallback** (invariant #5) — an unpicklable config / unimportable
+     user func is a hard, early failure, not a silent downgrade.
+- **Accept** (each line independently verifiable under `fakeredis` + real spawn):
+  1. **Spawn** — `TaskFactory.init_redis()` then `start_workers(1)` produces one live `Worker`
+     process (`is_alive()` true; refuses a second `start_workers` while it is alive).
+  2. **Pull + execute** — a pushed opera-only `task_dict` is pulled and run through the
+     `from_task_dict → materialize → opera/likelihood → submit_result` pipeline; the result
+     appears on the results path and `op_count("sample")` advances.
+  3. **Opera-only parity** — an opera-only reference scan (`Jarvis2`, 1 Worker) produces DATABASE
+     records **set-equal** to the captured V1 golden output.
+  4. **Graceful shutdown** — `SIGINT`/`SIGTERM` (or `TaskFactory.shutdown()`) lets the in-flight
+     Sample finish, joins the Worker (no orphan), and closes Redis.
+  5. **Monitor snapshot** — `get_monitor_snapshot()` returns a dict with at least worker
+     rows/counts and Redis queue/stats fields (`workers`, `workers_alive`, `task_queue_length`,
+     `sample_stats`); fixed-frequency polling is acceptable for D1.1 (op_count gating is D5.1).
+  6. Full suite green under `fakeredis`.
+- **Rollback**: revert the WP commit (V2 has no `mode: thread`; see §5 rollback semantics).
+- **Out of scope**: calculators (D1.2), multi-worker + free-pool (D2.1), Archiver batching (D4),
+  watchdog/respawn (D6.1), `op_count`-gated snapshot + dashboard (D5).
+- **Notes / deviations from the original design** (code is ground truth):
+  - `start_workers` receives the live control-process `RedisQueue`, but only its picklable
+    connection settings (`redis_config`) are kept for spawn (`factory.md` §3a).
+  - The monitor is **fixed-frequency polling** (~2 Hz), **not** the `op_count`-gated 60 Hz
+    snapshot — that optimization is D5.1.
+  - No watchdog/respawn and no `get_run_metrics` yet (D6.1 / D5.2).
 
 ### WP-D1.2 — Calculator in Worker + single-Worker parity
 

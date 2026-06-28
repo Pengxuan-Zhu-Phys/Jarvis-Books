@@ -35,7 +35,7 @@ distributed components.
 8.  init_sampler()              # Distributor → sampler; set_redis(); load_variable()
 9.  init_workflow()             # DAG + execution_plan_template + flowchart.json
 10. init_libraries()            # install LibDeps (registered executables)
-11. init_factory()              # TaskFactory: init_redis, start_workers(n), start_monitor, start_watchdog
+11. init_factory()              # TaskFactory: (reuse core Redis or init_redis), start_workers(n), start_monitor   [start_watchdog → D6.1, not yet]
 12. init_archiver()             # Archiver process: spawn, attach DB config
 13. init_run_summary()          # metrics from coordination/Redis at shutdown
 14. run()                       # sampler proposes → Redis → Workers → Archiver
@@ -45,14 +45,23 @@ distributed components.
 Worker config shipped at step 11 is **picklable** (calculator configs, opera list, workflow
 blueprint, mapper config, Phase-1 resolved commands) — no live handles (spawn).
 
+> **`Runtime.mode == "redis"` gate (current code).** The distributed bring-up (steps 11–12) only
+> runs when `is_redis_runtime()` is true; otherwise `init_factory` logs *"Runtime.mode != redis;
+> skipping TaskFactory bring-up"* and returns `None`. In the D1.1 implementation `init_factory`
+> reuses the client created by `init_redis` (step 6) rather than opening a second one, then
+> `start_workers(Runtime.workers)` + `start_monitor(update_hz=2.0)`. `shutdown` mirrors this:
+> stop the Archiver, `factory.shutdown(wait=…)` (which also closes Redis), else close Redis
+> directly.
+
 ---
 
 ## 3. Member functions (selected)
 
 | Method | Behavior |
 |--------|----------|
-| `init_redis` | Build `RedisQueue`; ensure keys; (resume) do not reset op_counts. |
-| `init_factory` | Create `TaskFactory`; `start_workers(Runtime.workers)`; `start_monitor`; `start_watchdog`. |
+| `init_redis` | Build `RedisQueue` from `Runtime.redis`; `connect()`. **(current code)** with no `redis` config and no injected client it falls back to `make_fakeredis_queue()` (CI / tests). The same client is later reused by `init_factory`/`init_archiver`. |
+| `is_redis_runtime` | `Runtime.mode == "redis"` (case-insensitive; default `"auto"`). Gates `init_factory`. |
+| `init_factory` | **(current code)** No-op unless `is_redis_runtime()` (`Runtime.mode == "redis"`, else logs and returns `None`). Obtain `TaskFactory.get_instance(redis_config)`; **reuse the core's Redis client** (`factory.redis = self.redis`) or `factory.init_redis()`; `start_workers(Runtime.workers, **worker_config)` (defaults to 1, clamped ≥ 1); `start_monitor(update_hz=2.0)`. *No `start_watchdog` yet (D6.1).* |
 | `init_archiver` | Spawn `Archiver(Process)` with DB + `Calculators.Archiver` config. |
 | `run` | Drive the sampler loop: propose → `push_task`/`push_many_tasks`; for MCMC, consume result feedback; throttle on queue high-water. |
 | `monitor` | Launch the dashboard (`--monitor [--pid N]`) → `SnapshotReader`. |
