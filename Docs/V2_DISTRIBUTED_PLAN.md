@@ -1,7 +1,7 @@
 # V2 Distributed Runtime — Development Plan (Agent Execution Playbook)
 
-Last updated: 2026-06-28 (D1.1 marked in-progress — `TaskFactory`/`Worker` landed on `jarvis2`;
-acceptance criteria refined to the implemented opera-only single-Worker path).
+Last updated: 2026-06-28 (D1.1 closed — `TaskFactory` op_count-gated monitor + opera-only
+single-Worker path green under `fakeredis` + captured V1 golden parity).
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -92,7 +92,7 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D0.3 | std-`logging` two-layer module (drop loguru)                                           | D0        | —                | in-progress                            | 2026-06-27 | Landed on `jarvis2`. Review ★★★☆☆: two-layer structure correct, loguru dropped, V1 `SampleLogger`/`BufferedSampleLogger` reused. Remaining: `QueueHandler`/`QueueListener` non-blocking, `key=value` contract binding, child-bind via `logger_name`, tests. → **D0.4**.                                                           |
 | D0.4 | D0 review fixes + test backfill (gate D0)                                              | D0        | D0.1, D0.2, D0.3 | todo                                   |            | From the 2026-06-27 code review; closes the D0 hard bugs (Redis namespace + race) + missing methods/tests before D1.                                                                                                                                                                                                              |
 | D0.5 | D0 wrap-up: defensive hardening + spawn-pickling + integration test + polish           | D0        | D0.4             | todo                                   |            | 2026-06-27 follow-up review. **Non-blocking for D1.1** (D1.1 may start after D0.4), but **required to close D0**.                                                                                                                                                                                                                 |
-| D1.1 | TaskFactory skeleton + Worker process (opera-only MVP)                                 | D1        | D0.4             | in-progress                            | 2026-06-28 | `jarvishep2/factory.py` + `worker.py` landed on `jarvis2`. **Done:** `TaskFactory` lifecycle (`get_instance`/`init_redis`/`start_workers`/`stop_all_workers`/`shutdown`), fixed-frequency polling monitor (`start_monitor`/`get_monitor_snapshot`, ~2 Hz, **not** op_count-gated), `Worker(Process)` opera+likelihood loop, SIGTERM/SIGINT graceful stop, `Jarvis2Core.init_factory` `mode==redis` wiring. **Deferred per design:** watchdog/respawn (D6.1), `get_run_metrics` (D5.2), op_count gating (D5.1), calculators (D1.2). Remaining to close: captured-V1 golden parity gate + `tests/test_worker_mvp.py`. Doc: [`components/factory.md`](components/factory.md).                            |
+| D1.1 | TaskFactory skeleton + Worker process (opera-only MVP)                                 | D1        | D0.4             | **done**                               | 2026-06-28 | All six §WP-D1.1 acceptance gates green under `fakeredis` + spawn (`tests/test_worker_mvp.py`, 17 tests). **Shipped:** `TaskFactory` lifecycle + `op_count`-gated monitor (~120 Hz), explicit `connection_config()` spawn boundary, `shutdown` (monitor stop, snapshot clear, Redis close), `Worker` opera+likelihood pipeline, single `sample` op_count via `submit_result`, SIGTERM+SIGINT graceful stop, Factory read-only monitor path, captured-V1 golden DATABASE parity. **Out of scope (later WPs):** watchdog (D6.1), dashboard/`get_run_metrics` (D5.2). Docs: [`factory.md`](components/factory.md), [`worker.md`](components/worker.md). |
 | D1.2 | Calculator in Worker (`preload_templates`, `execute`) + single-Worker parity           | D1        | D1.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
 | D2.1 | Multi-Worker pool + held calculators + Redis free-pool + `pack_id`                     | D2        | D1.2             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
 | D2.2 | Layer-internal calculator concurrency (per-Worker `AsyncSubprocessScheduler`)          | D2        | D2.1             | todo                                   |            |                                                                                                                                                                                                                                                                                                                                   |
@@ -319,7 +319,7 @@ done. **Rollback**: how it is disabled. **Out of scope**: excluded work.
      picklable `worker_config` cross the boundary — see `factory.md` §3a); Workers `blpop`
      `hep:task_queue`.
   2. Worker main loop: `from_task_dict → bind_params → materialize → run opera/likelihood layers
-     → to_info_dict → submit_result → incr_op("sample")` (design §4 pseudocode).
+     → to_info_dict → submit_result` (`submit_result` bumps `hep:sample:op_count` once).
   3. Sampler: when `mode: redis`, `push_task(sample.to_task_dict())` instead of the thread-pool
      submit.
   4. Result collection: control process drains results → HDF5 writer (the D1.1 `SimpleArchiver`
@@ -339,17 +339,18 @@ done. **Rollback**: how it is disabled. **Out of scope**: excluded work.
      Sample finish, joins the Worker (no orphan), and closes Redis.
   5. **Monitor snapshot** — `get_monitor_snapshot()` returns a dict with at least worker
      rows/counts and Redis queue/stats fields (`workers`, `workers_alive`, `task_queue_length`,
-     `sample_stats`); fixed-frequency polling is acceptable for D1.1 (op_count gating is D5.1).
+     `sample_stats`, `op_counts`); `op_count`-gated incremental fetch with ~120 Hz updater
+     (idle ticks avoid `HGETALL`; read path is pure memory).
   6. Full suite green under `fakeredis`.
 - **Rollback**: revert the WP commit (V2 has no `mode: thread`; see §5 rollback semantics).
 - **Out of scope**: calculators (D1.2), multi-worker + free-pool (D2.1), Archiver batching (D4),
-  watchdog/respawn (D6.1), `op_count`-gated snapshot + dashboard (D5).
+  watchdog/respawn (D6.1), `--monitor` dashboard UI (D5.2).
 - **Notes / deviations from the original design** (code is ground truth):
   - `start_workers` receives the live control-process `RedisQueue`, but only its picklable
     connection settings (`redis_config`) are kept for spawn (`factory.md` §3a).
-  - The monitor is **fixed-frequency polling** (~2 Hz), **not** the `op_count`-gated 60 Hz
-    snapshot — that optimization is D5.1.
-  - No watchdog/respawn and no `get_run_metrics` yet (D6.1 / D5.2).
+  - `op_count`-gated snapshot landed in D1.1 (pulled forward from D5.1); D5.2 still owns
+    `--monitor` dashboard + `get_run_metrics`.
+  - No watchdog/respawn yet (D6.1).
 
 ### WP-D1.2 — Calculator in Worker + single-Worker parity
 

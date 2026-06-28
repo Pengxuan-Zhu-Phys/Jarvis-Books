@@ -3,8 +3,9 @@
 **Role**: the long-lived process that does all real work. Pulls one Sample at a time from
 Redis, runs its workflow (same-layer calculators concurrent), and hands the result to the
 Archiver. Holds calculator instances and Opera functions for its whole lifetime.
-**Status**: design — plan WP-D1.1 (MVP) → D1.2 (calculators) → D2.1 (pool/free-pool) → D2.2
-(layer concurrency) → D2.3 (clone_shadow).
+**Status**: **D1.1 implemented** (opera + likelihood MVP on `jarvis2`); **D1.2 partially
+implemented** (calculator steps in-process, local `pack_id`); D2.1+ (free-pool, layer
+concurrency, clone_shadow) not yet built.
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §4 (Locked
 decision); discussions `worker_design.md` (primary), `Jarvis_HEP_High_Concurrency_Design_Blueprint.md`.
 **Reuses V1**: `CalculatorModule` (`jarvishep/Module/calculator.py`), `AsyncSubprocessScheduler`
@@ -35,21 +36,24 @@ policy), or archive final products (it stages and hands off).
 
 ```python
 class Worker(multiprocessing.Process):
-    def __init__(self, worker_id: int, redis_config: dict,
-                 calculator_configs: dict, opera_list: list[dict],
-                 workflow_blueprint: dict, mapper_config: dict | None = None,
-                 subprocess_config: dict | None = None):
+    def __init__(
+        self,
+        worker_id: int,
+        redis: RedisQueue | Mapping[str, Any],   # live queue or picklable config
+        worker_config: Mapping[str, Any],        # mapper, operas, calculators, sample_config
+    ):
         super().__init__(name=f"HEP2-Worker-{worker_id}", daemon=False)
-        # config only — NO live handles here (must pickle under spawn)
-        ...
+        self.redis_config = RedisQueue.extract_connection_config(redis)
+        self.worker_config = dict(worker_config)
+        # NO live Redis client, calculators, or scheduler here
 
-    # ---- set up inside run() (child process), never in __init__ ----
-    redis:        RedisQueue
-    mapper:       UMapper
-    calculators:  dict[str, CalculatorModule]
-    opera_funcs:  dict[str, Callable]
-    scheduler:    AsyncSubprocessScheduler
-    is_running:   bool
+    # ---- built inside run() (child process) ----
+    _redis:       RedisQueue | None
+    _mapper:      Any
+    _operas:      dict[str, Any]
+    _calculators: dict[str, CalculatorModule]
+    _likelihood:  LogLikelihoodEvaluator | None
+    _is_running:  bool
 ```
 
 **Spawn rule**: `__init__` stores only picklable config; all live objects (Redis client,
@@ -97,9 +101,8 @@ def process_task(self, task):
         sample.materialize_failure_artifacts(error=e)    # invariant #9
         top.error("sample failed; see sample log")
     finally:
-        self._stage_and_submit(sample)
+        self._stage_and_submit(sample)   # submit_result bumps hep:sample:op_count once
         sample.close()
-        self.redis.incr_op("sample")
 ```
 
 `_run_layer` uses the per-Worker `AsyncSubprocessScheduler` to run the layer's calculators
@@ -152,8 +155,12 @@ time — concurrency is **within** the Sample only (invariant #6).
 `tests/test_worker_mvp.py` (D1.1, opera-only, `fakeredis` + real spawn):
 1. **End-to-end** — one Worker drains N opera tasks; DATABASE records **set-equal** to the
    captured V1 golden output.
-2. **Spawn safety** — Worker pickles/launches under `spawn`; no live handle in `__init__`.
-3. **Graceful stop** — `SIGTERM` finishes the in-flight Sample then exits; no orphan.
+2. **Spawn safety** — Worker pickles/launches under `spawn`; Factory passes
+   `connection_config()` only.
+3. **Graceful stop** — `SIGTERM` and `SIGINT` finish the in-flight Sample then exit; no orphan.
+4. **op_count semantics** — one `sample` op_count increment per completed Sample (via
+   `submit_result` only).
+5. **Factory read-only** — `_collect_latest_status` issues zero Redis writes on idle ticks.
 
 `tests/test_worker_calculator.py` (D1.2):
 4. **Calculator parity** — 1 Worker on `tests/parity_project` (`--check-modules` scale) →
