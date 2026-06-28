@@ -1,0 +1,82 @@
+\chapter*{Preface}
+\addcontentsline{toc}{chapter}{Preface}
+\markboth{Preface}{Preface}
+
+\newthought{This manual} is the complete, ground-up reference for \Jarvis---a
+\textsc{yaml}-driven framework for orchestrating likelihood-based parameter scans in
+high-energy physics. It is a living document, revised in step with each \Jarvis\ release;
+this build documents \Jversion. It is written for the physicist who wants to go from an empty
+directory to a finished, reproducible scan, and who then wants to understand every knob
+along the way.
+
+\section*{Who this is for}
+
+You will get the most from this book if you are comfortable running commands in a Unix
+shell and editing \textsc{yaml} files. No prior experience with \Jarvis\ is assumed.
+Part~\ref{part:getting-started} takes a newcomer end to end; the later parts are a
+reference you can dip into key by key.
+
+\section*{How to read it}
+
+\begin{itemize}
+  \item \textbf{New users} should read Part~\ref{part:getting-started}
+        (\nameref{part:getting-started}) in order, run the quick-start scan, then skim
+        Part~\ref{part:task-card} to understand the task card.
+  \item \textbf{Writing a real scan?} Live in Part~\ref{part:task-card}
+        (the \textsc{yaml} reference) and Part~\ref{part:backends} (calculators, operas,
+        and library dependencies).
+  \item \textbf{Choosing or tuning a sampler?} Part~\ref{part:samplers} has one focused
+        section per method, plus a decision guide and a master comparison table.
+  \item \textbf{Running, monitoring, and post-processing?} Part~\ref{part:running}.
+  \item \textbf{Squeezing out performance?} Part~\ref{part:advanced}.
+  \item The \textbf{appendices} are lookup tables: every \textsc{cli} flag, every
+        \textsc{yaml} key, every distribution, every sampler.
+\end{itemize}
+
+\section*{Conventions}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\code{monospace}] Code, file names, \textsc{yaml} keys, and shell commands.
+  \item[\marker{\&J/}] The path \emph{marker} that Jarvis expands at runtime
+        (Chapter~\ref{ch:core-concepts}).
+  \item[\token{@SampleID}, \token{@Sdir}, \token{@PackID}] Runtime \emph{tokens} substituted
+        per sample.
+\end{description}
+
+\noindent Three kinds of call-outs appear throughout:
+
+\begin{jnote}
+A clarification or a detail that is easy to miss.
+\end{jnote}
+
+\begin{jtip}
+A recommended practice that will save you time.
+\end{jtip}
+
+\begin{jwarn}
+A foot-gun. For example: the calculator key is spelled \yamlkey{make\_paraller}
+(legacy spelling, kept on purpose), and a task card uses \emph{either} \yamlkey{Calculators}
+\emph{or} \yamlkey{Operas} as its workflow backend---not both.
+\end{jwarn}
+
+\section*{What's new in this build}
+
+As of \Jversion, \Jarvis\ ships an optional high-throughput runtime, configured entirely through the
+\yamlkey{Runtime} task-card block (Chapter~\ref{ch:runtime-block}). Scans can be proposed and
+persisted in batches (\yamlkey{batch\_size}), run across multiple worker processes
+(\yamlkey{mode: process}, \yamlkey{Operas}-only for now), and persist through a separate writer
+process (\yamlkey{writer: process}); per-sample folders are now created lazily
+(\yamlkey{sample\_artifacts: auto}), with failed points still guaranteed a complete log. None of this
+changes existing task cards, the \textsc{cli}, the output layout, or checkpoint behaviour---with no
+\yamlkey{Runtime} block the engine runs exactly as before. Measure any of it reproducibly with
+\cli{-{}-benchmark} (Chapter~\ref{ch:performance}).
+
+\section*{Source of truth}
+
+\Jarvis\ evolves quickly. Where this manual and the running code ever disagree, the code
+wins; please report the gap on the issue tracker. Every \textsc{yaml} key printed here was
+checked against the runtime configuration loader and the per-sampler \textsc{json} schemas
+shipped in \schemaref{}.
+
+\vspace{1\baselineskip}
+\noindent If \Jarvis\ saves you a week of bookkeeping, it has done its job.

@@ -1,0 +1,92 @@
+\chapter{The Scan Block}
+\label{ch:scan-block}
+
+\newthought{The \yamlkey{Scan} block} answers two questions: \emph{what is this run called}, and
+\emph{where do its outputs go}. It is small, but it decides the whole directory layout, so it is
+worth understanding clearly.
+
+\section{The minimal form}
+\label{sec:scan-minimal}
+
+Most cards need only two keys:
+
+\begin{yamlwin}
+Scan:
+  name: "MSSM_Run"
+  save_dir: "&J/outputs"
+\end{yamlwin}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{name}] A short, unique name for this run. It becomes the folder name that holds
+        all the outputs, so prefer something filesystem-friendly (letters, digits, underscores).
+  \item[\yamlkey{save\_dir}] Where output folders are created. Almost always \marker{\&J/outputs}
+        --- the project-local \file{outputs/} directory. The \marker{\&J/} marker keeps the card
+        portable (Chapter~\ref{ch:core-concepts}).
+\end{description}
+
+\section{What the names produce}
+\label{sec:scan-layout}
+
+\Jarvis\ builds the output tree from \yamlkey{Scan.name}. With \code{name: "MSSM\_Run"} and
+\code{save\_dir: "\&J/outputs"} you get:
+
+\begin{jfiletree}
+\dirtree{%
+.1 \dtfold{(project root)}.
+.2 \dtfold{outputs/MSSM\_Run/}.
+.3 \dtfold{DATABASE/}\DTcomment{HDF5, CSV, schema}.
+.3 \dtfold{SAMPLE/}\DTcomment{per-sample files}.
+.2 \dtfold{logs/MSSM\_Run/}\DTcomment{run logs}.
+.2 \dtfold{images/MSSM\_Run/}\DTcomment{flowchart, plots}.
+}
+\end{jfiletree}
+
+\noindent The same run name appears in \file{outputs/}, \file{logs/}, and \file{images/}, so
+everything for one run is easy to find. The full output contract is described in
+Chapter~\ref{ch:outputs}.
+
+\begin{jnote}
+The \file{outputs/}, \file{logs/}, and \file{images/} folders are created on first use. A fresh
+project does not contain them yet.
+\end{jnote}
+
+\section{Controlling per-sample storage}
+\label{sec:scan-sample-directory}
+
+By default \Jarvis\ keeps a folder of working files for each sample under \file{SAMPLE/}. For
+large scans that is a lot of folders, so the optional \yamlkey{sample\_directory} key lets you
+cap and archive them:
+
+\begin{yamlwin}
+Scan:
+  name: "MSSM_Run"
+  save_dir: "&J/outputs"
+  sample_directory:
+    limit: 200
+    width: 6
+    archive_samples: true
+\end{yamlwin}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{limit}] The maximum number of live sample folders to keep at once (here, 200).
+        Older ones are archived past this limit.
+  \item[\yamlkey{width}] How many digits to use for the numbered folder names (here, 6, giving
+        \file{000001}, \file{000002}, \ldots).
+  \item[\yamlkey{archive\_samples}] When \code{true}, samples beyond the limit are compressed
+        into archives instead of being kept as loose folders, keeping \file{SAMPLE/} tidy.
+\end{description}
+
+\begin{jtip}
+For a quick test you can omit \yamlkey{sample\_directory} entirely. Add it once a scan grows
+large enough that thousands of per-sample folders would clutter the disk. Opera-only scans can
+skip per-sample folders altogether---see the \yamlkey{Runtime} options in
+Chapter~\ref{ch:runtime-block}.
+\end{jtip}
+
+\section{Summary}
+\label{sec:scan-summary}
+
+\yamlkey{Scan} is two ideas: a \yamlkey{name} (which becomes the run's folder) and a
+\yamlkey{save\_dir} (where that folder lives). Add \yamlkey{sample\_directory} only when you need
+to control how many per-sample folders are kept. Next, the \yamlkey{Sampling} block
+(Chapter~\ref{ch:sampling-block}) decides how points are drawn and scored.

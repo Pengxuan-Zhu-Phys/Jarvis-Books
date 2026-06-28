@@ -1,0 +1,145 @@
+\chapter{Library Dependencies}
+\label{ch:libdeps}
+
+\newthought{Some workflows need shared libraries} built and installed before any calculator or
+opera can run---think HepMC, Pythia8, or Delphes. The optional \yamlkey{LibDeps} block declares
+those libraries inside the task card, so the setup is reproducible and part of the project rather
+than a hand-run script.
+
+\section{What LibDeps is for}
+\label{sec:lib-why}
+
+\yamlkey{LibDeps} answers three questions about supporting libraries:
+
+\begin{enumerate}
+  \item \textbf{Where} should they live? --- a shared root directory.
+  \item \textbf{How} is each one installed? --- a reproducible command recipe.
+  \item \textbf{In what order}? --- explicit prerequisites.
+\end{enumerate}
+
+\noindent These libraries are usually neither calculators nor operas; they provide build-time or
+run-time support for the tools that are.
+
+\section{The two layers}
+\label{sec:lib-layers}
+
+\yamlkey{LibDeps} has a shared top level and a list of \yamlkey{Modules}, one per library:
+
+\begin{yamlwin}
+LibDeps:
+  path: "&J/deps/library"
+  make_paraller: 16
+  Modules:
+    - name: "HepMC"
+      required_modules: []
+      installed: False
+      installation:
+        path: "&J/deps/library/HepMC"
+        source: "&J/deps/library/source/HepMC-2.06.09.tar.gz"
+        commands:
+          - "..."
+\end{yamlwin}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{path}] the shared root for all dependency files; reusable in commands as
+        \code{\$\{LibDeps:path\}}.
+  \item[\yamlkey{make\_paraller}] default build parallelism; reusable as
+        \code{make -j\$\{LibDeps:make\_paraller\}}.
+\end{description}
+
+\noindent Each module has a \yamlkey{name}, a \yamlkey{required\_modules} list, an
+\yamlkey{installed} flag, and an \yamlkey{installation} section (\yamlkey{path},
+\yamlkey{source}, and ordered \yamlkey{commands}).
+
+\section{Variable substitution in commands}
+\label{sec:lib-vars}
+
+Inside \yamlkey{installation.commands} you can use these placeholders, which keep the recipe
+readable and portable:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\code{\$\{LibDeps:path\}}] the shared root;
+  \item[\code{\$\{LibDeps:make\_paraller\}}] the shared build parallelism;
+  \item[\code{\$\{path\}}] this module's \yamlkey{installation.path};
+  \item[\code{\$\{source\}}] this module's \yamlkey{installation.source}.
+\end{description}
+
+\section{Installation order}
+\label{sec:lib-order}
+
+Declare prerequisites with \yamlkey{required\_modules}---for example, Pythia8 needs HepMC:
+
+\begin{yamlwin}
+- name: "Pythia8"
+  required_modules: ["HepMC"]
+\end{yamlwin}
+
+\begin{jwarn}
+In the current version, \yamlkey{required\_modules} on a \yamlkey{LibDeps} module is recorded as
+\emph{metadata}---it documents intent but is not auto-enforced. Install libraries in a sensible
+order yourself: a dependency must be built before the library that configures against it (HepMC
+before Pythia8).
+\end{jwarn}
+
+\section{A worked example: HepMC then Pythia8}
+\label{sec:lib-example}
+
+\begin{yamlwin}[LibDeps block]
+LibDeps:
+  path: "&J/deps/library"
+  make_paraller: 16
+  Modules:
+    - name: "HepMC"
+      required_modules: []
+      installed: False
+      installation:
+        path: "&J/deps/library/HepMC"
+        source: "&J/deps/library/source/HepMC-2.06.09.tar.gz"
+        commands:
+          - "cd ${LibDeps:path}"
+          - "rm -rf HepMC*"
+          - "cp ${source} ./"
+          - "tar -xzf HepMC-2.06.09.tar.gz"
+          - "cd ${LibDeps:path}/HepMC-2.06.09"
+          - "./configure --with-momentum=GEV --with-length=MM --prefix=${path}"
+          - "make -j${LibDeps:make_paraller}"
+          - "make install"
+    - name: "Pythia8"
+      required_modules: ["HepMC"]
+      installed: False
+      installation:
+        path: "&J/deps/library/Pythia8"
+        source: "&J/deps/library/source/pythia8230.tgz"
+        commands:
+          - "cd ${LibDeps:path}/Source"
+          - "tar -zxvf ${source}"
+          - "cd ${LibDeps:path}/Source/pythia8230"
+          - "./configure --with-hepmc2=${LibDeps:path}/HepMC --prefix=${path}"
+          - "make -j${LibDeps:make_paraller}"
+          - "make install"
+\end{yamlwin}
+
+\noindent Pythia8's \code{-{}-with-hepmc2} flag points at HepMC's installed
+\yamlkey{path}---which is exactly why HepMC must be built first.
+
+\section{What Jarvis does at runtime}
+\label{sec:lib-runtime}
+
+When \Jarvis\ loads a card with \yamlkey{LibDeps}, it resolves the paths and placeholders, then
+runs each module's \yamlkey{commands} in order, streaming their output to a per-module install
+log. It also writes a small installation record per module.
+
+\begin{jnote}
+If \Jarvis\ finds a matching installation record, it treats the library as already installed and
+\emph{asks} whether to reinstall---it does not silently rebuild. You can skip library
+installation entirely for a run with \cmd{-{}-skip-library-installation}
+(Chapter~\ref{ch:cli}).
+\end{jnote}
+
+\section{Summary}
+\label{sec:lib-summary}
+
+\yamlkey{LibDeps} turns one-time library setup into a reproducible, project-local recipe: a shared
+\yamlkey{path}, one \yamlkey{Modules} entry per library with ordered \yamlkey{commands}, and
+\code{\$\{...\}} placeholders for portability. Build prerequisites first, and let the card
+document your environment.

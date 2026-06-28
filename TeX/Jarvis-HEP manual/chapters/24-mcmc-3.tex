@@ -1,0 +1,64 @@
+\chapter{MCMC Family III: Slice and Elliptical}
+\label{ch:mcmc-3}
+
+\newthought{Slice samplers avoid the accept/reject tuning} that makes random-walk \textsc{mcmc}
+fiddly. Instead of proposing a step and maybe rejecting it, they sample \emph{under the density
+curve} directly, adapting their step size automatically. Both methods here use the standard
+\textsc{mcmc} \yamlkey{Bounds} from Chapter~\ref{ch:mcmc-1}.
+
+\section{SliceMCMC}
+\label{sec:s-slicemcmc}
+
+\paragraph{How it works} To take a step, slice sampling first draws a height uniformly between zero
+and the density at the current point---defining a horizontal ``slice'' through the distribution. It
+then samples the next point uniformly from the part of the slice where the density is at least that
+height. \Jarvis\ finds that region by stepping outward to bracket an interval (initial width set by
+\yamlkey{proposal\_scale}) and then shrinking it until a point inside the slice is found. The step
+size therefore adapts to the local shape on its own, with no acceptance rate to tune.
+
+\paragraph{When to use} A robust, low-tuning alternative to random-walk \textsc{mcmc}, especially
+when you do not want to hand-fit a proposal scale. \yamlkey{proposal\_scale} only sets the initial
+bracket width; the method adjusts from there.
+
+\begin{yamlwin}
+Sampling:
+  Method: "SliceMCMC"
+  Variables: [ ... ]
+  Bounds:
+    num_chains: 8
+    num_iters: 1000
+    proposal_scale: 0.5
+  LogLikelihood:
+    - {name: "LogL", expression: "..."}
+\end{yamlwin}
+
+\section{ESS (elliptical slice sampling)}
+\label{sec:s-ess}
+
+\paragraph{How it works} Elliptical slice sampling is built for posteriors with a \emph{Gaussian
+prior}. From the current point it draws an auxiliary sample from the prior and forms an
+\emph{ellipse} through the two; it then slice-samples an angle along that ellipse to pick the next
+point. Every point on the ellipse respects the Gaussian prior automatically, so there is no step
+size to tune and no rejections to waste---moves are always accepted somewhere on the ellipse.
+
+\paragraph{When to use} Models where the prior is (close to) Gaussian and you want efficient,
+tuning-free sampling. It is less suited to flat-prior problems, where the slice methods above or
+the Chapter~\ref{ch:mcmc-1} samplers are a better fit.
+
+\begin{yamlwin}
+Sampling:
+  Method: "ESS"
+  Variables: [ ... ]
+  Bounds:
+    num_chains: 8
+    num_iters: 1000
+    proposal_scale: 1.0
+  LogLikelihood:
+    - {name: "LogL", expression: "..."}
+\end{yamlwin}
+
+\section{Summary}
+\label{sec:mcmc3-summary}
+
+Both samplers trade explicit proposal tuning for automatic step adaptation: \sampler{SliceMCMC} for
+general use, \sampler{ESS} when a Gaussian prior makes the elliptical move natural.

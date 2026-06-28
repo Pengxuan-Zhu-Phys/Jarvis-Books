@@ -1,0 +1,115 @@
+%==============================================================================
+% jarvis-boxes.tex
+% Admonition boxes for the Jarvis-HEP manual, built on tcolorbox.
+%
+% Four flavours, used sparingly (see the style guide in the writing plan):
+%   \begin{jnote} ... \end{jnote}        general clarification
+%   \begin{jtip} ... \end{jtip}          best-practice advice
+%   \begin{jwarn} ... \end{jwarn}        foot-guns / things that bite
+%   \begin{jschema}{File_schema.json} ... \end{jschema}
+%                                        "verify these keys against the schema"
+%
+% Boxes are sized to the Tufte text column.  For a full-width box, wrap the
+% environment in {fullwidth}.
+%==============================================================================
+
+\usepackage[most]{tcolorbox}
+
+% Reuse the palette defined in jarvis-listings.tex.
+\providecolor{jNote}{HTML}{1F4E79}
+\providecolor{jTip}{HTML}{2E7D32}
+\providecolor{jWarn}{HTML}{B3261E}
+\providecolor{jSchema}{HTML}{6A1B9A}
+
+\tcbset{
+  jbox/.style={
+    enhanced, breakable,
+    boxrule=0pt, leftrule=2.5pt,
+    arc=1pt, outer arc=1pt,
+    left=8pt, right=6pt, top=5pt, bottom=5pt,
+    fonttitle=\sffamily\bfseries\footnotesize,
+    fontupper=\small,
+    before skip=0.8\baselineskip, after skip=0.8\baselineskip,
+  }
+}
+
+% Title bar: a LIGHT tint of the accent colour, with the accent itself as the
+% (dark) title text -- so the heading reads but is no longer a heavy dark band.
+\newtcolorbox{jnote}{%
+  jbox, colback=jNote!4, colframe=jNote,
+  colbacktitle=jNote!15, coltitle=jNote!90!black,
+  title={Note}}
+
+\newtcolorbox{jtip}{%
+  jbox, colback=jTip!5, colframe=jTip,
+  colbacktitle=jTip!15, coltitle=jTip!90!black,
+  title={Tip}}
+
+\newtcolorbox{jwarn}{%
+  jbox, colback=jWarn!5, colframe=jWarn,
+  colbacktitle=jWarn!15, coltitle=jWarn!90!black,
+  title={Warning}}
+
+% Schema-check box takes the schema file name as a mandatory argument.
+\newtcolorbox{jschema}[1]{%
+  jbox, colback=jSchema!4, colframe=jSchema,
+  colbacktitle=jSchema!15, coltitle=jSchema!90!black,
+  title={Verify against \texttt{#1}}}
+
+%==============================================================================
+% Shell-command box: a terminal-styled wrapper for CLI snippets, matching the
+% call-out boxes above (light title bar + accent left rule + light body).
+% Uses tcblisting (listings engine) with the `shellinner' style from
+% jarvis-listings.tex; \faTerminal is provided by fontawesome5 (loaded later but
+% expanded only at use time).  Use \begin{shellbox} ... \end{shellbox}.
+%==============================================================================
+\definecolor{jShell}{HTML}{334155}   % terminal slate
+
+%==============================================================================
+% YAML "window" box: a GUI-editor look for YAML listings -- a title bar with
+% traffic-light dots and a filename, faint indentation guides, and light line
+% numbers.  Use \begin{yamlwin}[filename] ... \end{yamlwin} (the optional title
+% defaults to "YAML").  The yamlwindow style (jarvis-listings.tex) colours
+% expression values pink and &J paths dark green.
+%==============================================================================
+\definecolor{jWinFrame}{HTML}{CDD2D8}  % window border
+\definecolor{jWinBar}{HTML}{ECEEF1}    % title-bar background
+\definecolor{jWinTitle}{HTML}{5A6470}  % title-bar text
+\definecolor{tlRed}{HTML}{FF5F56}
+\definecolor{tlYel}{HTML}{FFBD2E}
+\definecolor{tlGrn}{HTML}{27C93F}
+\newcommand{\trafficlights}{\tikz[baseline=-0.6ex]{%
+  \fill[tlRed](0,0)circle(2.1pt);\fill[tlYel](7pt,0)circle(2.1pt);\fill[tlGrn](14pt,0)circle(2.1pt);}}
+
+\newtcblisting{yamlwin}[1][YAML]{%
+  enhanced, breakable,
+  colback=jBg, colframe=jWinFrame,
+  boxrule=0.7pt, arc=4pt, outer arc=4pt,
+  boxsep=0pt, left=4pt, right=5pt, top=5pt, bottom=5pt,
+  colbacktitle=jWinBar, coltitle=jWinTitle,
+  fonttitle=\sffamily\footnotesize,
+  toptitle=4pt, bottomtitle=4pt,
+  title={\trafficlights\hspace{0.8em}{\ttfamily\footnotesize #1}},
+  before skip=0.9\baselineskip, after skip=0.9\baselineskip,
+  % faint vertical indentation guides (one per 2-space level), like an editor
+  underlay={\begin{tcbclipinterior}\foreach \k in {1,...,7}{%
+    \draw[jGuide,line width=0.4pt]
+      ([xshift=2.4em+\k*1em]interior.north west)--([xshift=2.4em+\k*1em]interior.south west);}%
+    \end{tcbclipinterior}},
+  listing only,
+  listing options={style=yamlwindow},
+}
+
+\newtcblisting{shellbox}{%
+  enhanced, breakable,
+  boxrule=0pt, leftrule=2.5pt, arc=1pt, outer arc=1pt,
+  boxsep=0pt, left=8pt, right=6pt, top=4pt, bottom=4pt,
+  colback=jShell!4, colframe=jShell,
+  colbacktitle=jShell!15, coltitle=jShell!90!black,
+  fonttitle=\sffamily\bfseries\footnotesize,
+  toptitle=3.5pt, bottomtitle=3.5pt,
+  title={\raisebox{-0.2pt}{\scalebox{0.8}{\faTerminal}}\ \ Shell},
+  before skip=0.8\baselineskip, after skip=0.8\baselineskip,
+  listing only,
+  listing options={style=shellinner},
+}

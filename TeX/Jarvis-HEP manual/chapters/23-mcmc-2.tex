@@ -1,0 +1,97 @@
+\chapter{MCMC Family II: Population and Differential Evolution}
+\label{ch:mcmc-2}
+
+\newthought{These samplers run many chains at once} and build their proposals from the
+\emph{population} of chains rather than a fixed step. That makes them good at correlated and
+multi-modal posteriors, where a single-chain random walk gets stuck. They share the standard
+\textsc{mcmc} \yamlkey{Bounds} from Chapter~\ref{ch:mcmc-1}; the tempering methods add two keys.
+
+\section{Differential-evolution chains}
+\label{sec:mcmc2-de}
+
+These three use \yamlkey{num\_chains}, \yamlkey{num\_iters}, and \yamlkey{proposal\_scale}.
+
+\paragraph{DEMCMC} \emph{Differential-evolution \textsc{mcmc}.} It runs a population of chains and
+proposes each chain's next step from the \emph{difference} between two other randomly chosen
+chains' current states (scaled by \yamlkey{proposal\_scale}), then accepts with the usual
+Metropolis rule. Because the proposal direction and length come from the population itself, the
+chains automatically adapt to the posterior's shape and correlations.
+
+\paragraph{DREAM} \emph{Differential-evolution adaptive Metropolis}\cite{Vrugt:2009}. A more
+powerful population method: it forms proposals from scaled differences of several chain pairs,
+adapts a crossover pattern so it can update subsets of parameters at a time, and detects and
+resets stuck (outlier) chains. This combination explores high-dimensional, multi-modal posteriors
+robustly.
+
+\paragraph{DREAMLite} A lighter-weight \sampler{DREAM} variant with the same configuration and the
+same core idea, trading some of the full method's machinery for lower overhead. Also selectable as
+\alias{DREAM-lite}{DREAMLite}.
+
+\begin{yamlwin}
+Sampling:
+  Method: "DREAM"
+  Variables: [ ... ]
+  Bounds:
+    num_chains: 16
+    num_iters: 2000
+    proposal_scale: 0.5
+  LogLikelihood:
+    - {name: "LogL", expression: "..."}
+\end{yamlwin}
+
+\section{Ensemble sampling}
+\label{sec:mcmc2-ensemble}
+
+\paragraph{EnsembleMCMC} An affine-invariant ensemble sampler. It evolves a population of
+``walkers''; to move one walker it picks another at random and proposes a point along the line
+joining them (a \emph{stretch} move). The trick is that this scheme is invariant to linear
+rescalings of the parameters, so it copes with strongly correlated or badly-scaled posteriors with
+almost no tuning. Uses the standard \yamlkey{Bounds} (here \yamlkey{num\_chains} is the number of
+walkers).
+
+\paragraph{When to use} Correlated posteriors where you would rather not tune a proposal covariance
+by hand; a strong general-purpose default.
+
+\section{Parallel tempering}
+\label{sec:mcmc2-pt}
+
+When a posterior has well-separated peaks, a single chain rarely crosses the low-likelihood valleys
+between them. \emph{Parallel tempering} fixes this by running several chains at different
+\emph{temperatures}: hot chains see a flattened likelihood and roam freely across the whole space,
+cold chains sample the true posterior, and the chains periodically \emph{swap} states so discoveries
+made by the hot chains reach the cold ones.
+
+These methods add two keys to the standard \yamlkey{Bounds}:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{exchange\_interval}] how often (in iterations) to attempt swaps between
+        neighbouring temperatures.
+  \item[\yamlkey{proposal\_scales}] a \emph{list} of proposal scales, one per chain/temperature
+        (replacing the single \yamlkey{proposal\_scale}).
+\end{description}
+
+\paragraph{PTMCMC} Parallel-tempered random-walk \textsc{mcmc}: one tempered chain per rung of a
+temperature ladder, with periodic swaps.
+
+\paragraph{PTEnsemble} The same tempering idea applied to \emph{ensemble} sampling: a tempered
+ensemble at each rung, combining affine-invariant moves with mode-hopping swaps.
+
+\begin{yamlwin}
+Sampling:
+  Method: "PTMCMC"
+  Variables: [ ... ]
+  Bounds:
+    num_chains: 8
+    num_iters: 4000
+    exchange_interval: 20
+    proposal_scales: [0.05, 0.1, 0.2, 0.4, 0.8, 1.2, 1.6, 2.0]
+  LogLikelihood:
+    - {name: "LogL", expression: "..."}
+\end{yamlwin}
+
+\section{Summary}
+\label{sec:mcmc2-summary}
+
+For correlated posteriors reach for \sampler{EnsembleMCMC} or \sampler{DREAM}; for multi-modal ones
+use the tempered \sampler{PTMCMC}/\sampler{PTEnsemble}. All take more compute than single-chain
+\textsc{mcmc} but explore far more reliably.

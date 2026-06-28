@@ -1,0 +1,115 @@
+\chapter{ML and Evolutionary Samplers}
+\label{ch:ml-evolutionary}
+
+\newthought{Two samplers steer themselves} toward the interesting parts of a space rather than
+covering it uniformly: \sampler{DNN} learns where to look with a neural-network surrogate, and
+\sampler{Diver} evolves a population toward the best fit.
+
+\section{DNN}
+\label{sec:s-dnn}
+
+\paragraph{How it works} \sampler{DNN} is an iterative, machine-learning-guided sampler. It starts
+with an initial batch of points, then repeats a loop: train a neural network on the points seen so
+far to predict which regions look promising, draw new candidates where the surrogate is
+optimistic, evaluate them with the real workflow, and retrain. Over several iterations the
+sampling concentrates where it matters, so expensive evaluations are not wasted on barren regions.
+
+\paragraph{When to use} Expensive likelihoods where a surrogate can focus the search---especially
+when good regions are sparse and you want to find them with fewer full evaluations.
+
+\paragraph{Format} The \yamlkey{Bounds} block configures both the loop and the network
+(Table~\ref{tab:dnn-keys}).
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    \textbf{Key} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{Ninit}         & number of initial points before the first training \\
+    \yamlkey{Niters}        & number of guided iterations \\
+    \yamlkey{Hidden\_layers} & network shape, e.g. \code{[64, 64]} \\
+    \yamlkey{Batch\_size}   & training batch size \\
+    \yamlkey{Nepoch}        & training epochs per iteration \\
+    \yamlkey{Learning\_rate} & optimiser learning rate \\
+    \yamlkey{Outputs}       & which observables the network targets \\
+    \bottomrule
+  \end{tabular}
+  \caption{\sampler{DNN} \yamlkey{Bounds} keys.}
+  \label{tab:dnn-keys}
+\end{table}
+
+\begin{yamlwin}
+Sampling:
+  Method: "DNN"
+  Variables: [ ... ]
+  Bounds:
+    Ninit: 2000
+    Niters: 10
+    Hidden_layers: [64, 64]
+    Batch_size: 128
+    Nepoch: 50
+    Learning_rate: 0.001
+    Outputs: ["LogL"]
+  LogLikelihood:
+    - {name: "LogL", expression: "..."}
+\end{yamlwin}
+
+\section{Diver}
+\label{sec:s-diver}
+
+\paragraph{How it works} \sampler{Diver} uses \emph{differential evolution} (\textsc{de}) to
+maximise the likelihood. It keeps a population of \yamlkey{NP} candidate points and, each
+generation, builds a trial for every member by adding a scaled difference of other members
+($F\cdot(x_a - x_b)$, the \yamlkey{F} mutation factor) and mixing coordinates with crossover
+probability \yamlkey{Cr}; a trial replaces its parent only if it scores better. The self-adaptive
+variants \code{jDE} and \code{lambdajDE} tune \yamlkey{F} and \yamlkey{Cr} automatically as the
+run proceeds. This makes \sampler{Diver} robust on rugged, multi-modal landscapes.
+
+\paragraph{When to use} Global optimisation and best-fit discovery---finding the highest-likelihood
+point(s) in a difficult space---rather than mapping a posterior.
+
+\paragraph{Format} Settings go in a \yamlkey{run} block (the alias \yamlkey{Bounds} works too);
+\yamlkey{MaxWorker} is optional. The most common keys (Table~\ref{tab:diver-keys}):
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    \textbf{Key} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{mode}     & strategy: \code{current}, \code{jDE}, or \code{lambdajDE} \\
+    \yamlkey{NP}       & population size \\
+    \yamlkey{maxgen}   & maximum generations \\
+    \yamlkey{maxciv}   & number of ``civilisations'' (independent restarts) \\
+    \yamlkey{F}, \yamlkey{Cr} & mutation factor and crossover probability \\
+    \yamlkey{convthresh}, \yamlkey{convsteps} & convergence threshold and window \\
+    \yamlkey{bndry}    & boundary handling (e.g. \code{reflection}) \\
+    \yamlkey{seed}     & random seed for reproducibility \\
+    \bottomrule
+  \end{tabular}
+  \caption{Common \sampler{Diver} \yamlkey{run} keys.}
+  \label{tab:diver-keys}
+\end{table}
+
+\begin{yamlwin}
+Sampling:
+  Method: "Diver"
+  Variables: [ ... ]
+  run:
+    mode: jDE
+    NP: 1000
+    maxgen: 500
+    maxciv: 1
+    Cr: 0.9
+    convthresh: 1.0e-3
+    convsteps: 10
+    seed: 1234
+  LogLikelihood:
+    - {name: "LogL", expression: "..."}
+\end{yamlwin}
+
+\begin{jtip}
+Differential evolution is stochastic: run \sampler{Diver} a few times with different
+\yamlkey{seed}s and confirm the best fit is repeatable before trusting it.
+\end{jtip}

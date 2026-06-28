@@ -1,0 +1,194 @@
+\chapter{Core Concepts}
+\label{ch:core-concepts}
+
+\newthought{A handful of ideas} recur on every page of this manual: the task card, the
+standalone project, the path markers and runtime tokens that make paths portable, and the
+fixed contract for where output lands. Understand these five and the rest of the book is
+detail. None of them require code---they are conventions \Jarvis\ enforces so that scans stay
+self-contained and reproducible.
+
+\section{The task card}
+\label{sec:task-card}
+
+A \emph{task card} is a single \textsc{yaml} file that fully describes one scan. It is the only
+thing you normally edit. As Chapter~\ref{ch:introduction} put it, every card fills in the same
+three steps for each parameter point: draw a point, run a workflow to get observables, and
+score them with a \yamlkey{LogLikelihood}.
+
+A card is organised into a small set of top-level blocks. You will meet each in detail in
+Part~\ref{part:task-card}; the shape is:
+
+\begin{yamlwin}
+Scan:         # run name + where outputs go
+Sampling:     # how points are drawn + the objective
+Calculators:  # external-program workflow   (choose one backend)
+Operas:       # in-process workflow         (choose one backend)
+EnvReqs:      # platform + dependency contract
+LibDeps:      # shared external libraries (optional)
+Utils:        # helper functions (optional)
+\end{yamlwin}
+
+\noindent \yamlkey{Scan} and \yamlkey{Sampling} are required; \yamlkey{EnvReqs} is strongly
+recommended; the rest are optional, with one important rule covered in
+Section~\ref{sec:backends}.
+
+\section{Standalone projects}
+\label{sec:standalone-projects}
+
+\Jarvis\ deliberately has \emph{no repo-root requirement}. You do not run it from a checkout of
+the framework; you run it from \emph{your} project directory. A project is just a folder
+containing two \emph{marker files}:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\file{.jarvis-project.json}] machine-readable project metadata;
+  \item[\file{jarvis.project.yaml}] human-editable project metadata.
+\end{description}
+
+\noindent When \Jarvis\ starts, it walks upward from your task card looking for either marker
+and treats the directory that holds it as the \emph{task root}. Everything project-local is
+resolved relative to that root. \cli{Jarvis project create} (Chapter~\ref{ch:quickstart})
+writes both markers for you.
+
+\begin{jnote}
+You can override the task root explicitly by setting the environment variable
+\code{JARVIS\_HEP\_TASK\_ROOT} (or \code{JHEP\_TASK\_ROOT}). If no marker is found and no
+override is set, \Jarvis\ falls back to the current working directory. Setting the markers is
+the robust, recommended way.
+\end{jnote}
+
+\section{Path markers}
+\label{sec:path-markers}
+
+Hard-coded absolute paths make a project impossible to move or share. \Jarvis\ solves this with
+a \emph{path marker}: a short symbol that expands to a real directory at runtime.
+
+The one public path marker is \marker{\&J}:
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    \textbf{Marker} & \textbf{Expands to} \\
+    \midrule
+    \marker{\&J/...} & the standalone project root (the task root of
+                       Section~\ref{sec:standalone-projects}) \\
+    \bottomrule
+  \end{tabular}
+  \caption[The public path marker.]{The public path marker. Always write project-local paths
+           with \marker{\&J/}.}
+  \label{tab:markers}
+\end{table}
+
+\noindent So \marker{\&J/outputs} means ``the \file{outputs/} directory inside this project,''
+wherever the project happens to live. Because the marker is resolved fresh on every run, the
+same card works on your laptop, a collaborator's machine, or an \textsc{hpc} node with no
+edits.
+
+\begin{jnote}
+\marker{\&J/} is the only path marker you need. Keep everything a scan depends on inside the
+project and reference it with \marker{\&J/...}; for a shared default file, keep a copy under
+\marker{\&J/deps/...} and point to that---exactly what the built-in quick-starts do.
+\end{jnote}
+
+\section{Runtime tokens}
+\label{sec:runtime-tokens}
+
+Where a path marker names a \emph{directory}, a \emph{runtime token} names a value that changes
+\emph{per sample}. Tokens let one calculator definition give every sample its own isolated
+working directory and file names. There are three (Table~\ref{tab:tokens}).
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Token} & \textbf{Substituted with} \\
+    \midrule
+    \token{@SampleID} & the current sample's \textsc{uuid} \\
+    \token{@Sdir}     & the current sample's save directory, under
+                        \file{outputs/.../SAMPLE/<uuid>} (or \file{.../SAMPLE/tests/<uuid>}
+                        under \cli{-{}-check-modules}) \\
+    \token{@PackID}   & a calculator module \emph{instance} id, enabling per-instance working
+                        directories so parallel samples never clobber each other \\
+    \bottomrule
+  \end{tabular}
+  \caption[Runtime tokens.]{Runtime tokens, substituted per sample on calculator workflow
+           paths.}
+  \label{tab:tokens}
+\end{table}
+
+\noindent These tokens are available on calculator workflow paths---commands, working
+directories, and sample-scoped input/output file paths. You will use \token{@PackID} heavily
+when wrapping external programs (Chapter~\ref{ch:calculators}); \token{@Sdir} when you want a
+calculator to write into the per-sample artifact directory.
+
+\begin{jnote}
+Referencing \token{@Sdir} (or running any calculator workflow) causes \Jarvis\ to
+\emph{materialize} a per-sample directory on disk. Pure-\yamlkey{Operas} scans can skip that
+filesystem work entirely---a performance lever discussed in
+Chapter~\ref{ch:runtime-block}.
+\end{jnote}
+
+\section{The output contract}
+\label{sec:output-contract}
+
+Every run writes a predictable tree, derived from \yamlkey{Scan.name} (written \code{<scan>}
+below). Knowing this layout means you always know where to look.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.45\linewidth}p{0.47\linewidth}@{}}
+    \toprule
+    \textbf{Location} & \textbf{Contents} \\
+    \midrule
+    \file{outputs/<scan>/DATABASE/} & \textsc{hdf5} samples, schema, \textsc{csv} exports, run metadata \\
+    \file{outputs/<scan>/SAMPLE/}   & per-sample working files and retained artifacts \\
+    \file{logs/<scan>/}             & Jarvis, sampler, and runtime logs \\
+    \file{images/<scan>/}           & semantic \file{flowchart.json}, plot configs, figures \\
+    \file{outputs/<scan>/run\_summary.\{json,csv,txt\}} & end-of-run summaries \\
+    \bottomrule
+  \end{tabular}
+  \caption[The output contract.]{The project-local output contract. Every run follows it.}
+  \label{tab:output-contract}
+\end{table}
+
+\noindent Two details worth remembering now:
+
+\begin{itemize}
+  \item The \file{DATABASE/} path is shared between a normal run and a \cli{-{}-check-modules}
+        dry run; only the \file{SAMPLE/} side differs (the check writes under
+        \file{SAMPLE/tests/}).
+  \item \Jarvis\ always writes \file{flowchart.json} (a semantic description of your workflow);
+        if \JPlot\ is installed it additionally renders \file{flowchart.png}. The
+        \cli{-{}-skip-draw-flowchart} flag suppresses only the \textsc{png} step.
+\end{itemize}
+
+Part~\ref{part:running} returns to each of these artifacts in depth.
+
+\section{Choosing a workflow backend}
+\label{sec:backends}
+
+The workflow---step two of the loop---is provided by \emph{one} of two backends:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{Calculators}] drives external programs through files and shell commands. Use
+        it for compiled \textsc{hep} packages and file-based toolchains
+        (Chapter~\ref{ch:calculators}).
+  \item[\yamlkey{Operas}] evaluates in-process Python operators. Use it for algebraic or
+        array-based work, and for fast prototyping (Chapter~\ref{ch:operas}).
+\end{description}
+
+\begin{jwarn}
+A task card uses \emph{either} \yamlkey{Calculators} \emph{or} \yamlkey{Operas} as its workflow
+backend, not both. Pick the one that matches your tools; the quick-starts in
+Chapter~\ref{ch:quickstart} use \yamlkey{Operas} because the \code{EggBox} toy is an in-process
+operator.
+\end{jwarn}
+
+\section{Putting it together}
+\label{sec:concepts-together}
+
+With the vocabulary in hand, the whole framework reads cleanly: you author a \emph{task card}
+inside a \emph{standalone project}; \marker{\&J/} keeps its paths portable and runtime tokens
+isolate each sample; a sampler draws points, your chosen \emph{backend} turns them into
+observables, a \yamlkey{LogLikelihood} scores them, and the results land in the fixed
+\emph{output contract}. The next part dissects the task card block by block.

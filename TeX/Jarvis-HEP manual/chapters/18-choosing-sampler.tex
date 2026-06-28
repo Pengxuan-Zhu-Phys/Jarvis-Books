@@ -1,0 +1,110 @@
+\chapter{Choosing a Sampler}
+\label{ch:choosing-sampler}
+
+\newthought{The sampler decides which parameter points} \Jarvis\ evaluates. This part of the book
+has one focused section per method; this chapter helps you pick the right family and explains the
+few things every sampler shares. Each later section gives the \emph{algorithm idea} and the
+\emph{exact \textsc{yaml} format} for that method.
+
+\section{A quick decision guide}
+\label{sec:choose-guide}
+
+Match your goal to a starting point (Table~\ref{tab:choose}). Most first runs should use
+\sampler{Random} or \sampler{Bridson} to validate the model, then switch to a specialised method
+once the workflow is stable.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.46\linewidth}l@{}}
+    \toprule
+    \textbf{Your goal} & \textbf{Start with} \\
+    \midrule
+    Quick workflow / plumbing test            & \sampler{Random} \\
+    Broad space-filling coverage              & \sampler{Bridson} (or \sampler{Grid}) \\
+    Replay a fixed list of points             & \sampler{CSV} \\
+    Posterior / Bayesian sampling             & \textsc{mcmc} family \\
+    Evidence / model comparison               & \sampler{Dynesty}, \sampler{MultiNest} \\
+    Global best-fit / optimisation            & \sampler{Diver} \\
+    \textsc{ml}-guided exploration            & \sampler{DNN} \\
+    Profile a nuisance parameter (inner step) & \sampler{Profile1D} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Goal-to-sampler quick guide.}
+  \label{tab:choose}
+\end{table}
+
+\section{The shared shape}
+\label{sec:choose-shared}
+
+Every sampler is configured in the \yamlkey{Sampling} block (Chapter~\ref{ch:sampling-block}):
+\yamlkey{Method} names it, \yamlkey{Variables} and \yamlkey{LogLikelihood} are the same
+everywhere, and the method's own dials live in \yamlkey{Bounds} (or, for a few samplers, in a
+method-named key). The skeleton is always:
+
+\begin{yamlwin}
+Sampling:
+  Method: "SamplerName"
+  Variables: [ ... ]
+  Bounds: { ... }        # the dials for this sampler
+  LogLikelihood: [ ... ]
+\end{yamlwin}
+
+\begin{jwarn}
+Control keys are \emph{not} interchangeable between samplers. Even similar-sounding keys differ
+in name and meaning---\yamlkey{Point number} belongs to \sampler{Random},
+\yamlkey{Radius} to \sampler{Bridson}, \yamlkey{num\_chains} to the \textsc{mcmc} family. Always
+use the section for your chosen method as the source of truth.
+\end{jwarn}
+
+\section{Main and nuisance samplers}
+\label{sec:choose-main-nuisance}
+
+\Jarvis\ distinguishes two roles:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Main sampler] chooses the physics parameter points that drive the scan (everything in
+        this chapter's table).
+  \item[Nuisance sampler] an optional \emph{inner} step run around each main point to
+        profile/optimise nuisance parameters. It augments---does not replace---the main sampler.
+        \sampler{Profile1D} is the one provided (Chapter~\ref{ch:nuisance}).
+\end{description}
+
+\section{The sampler families at a glance}
+\label{sec:choose-families}
+
+Table~\ref{tab:sampler-map} maps every method to its family and primary control keys. The rest of
+Part~\ref{part:samplers} is one section per method.
+
+\begin{table*}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{1.0in}p{2.35in}p{2.45in}@{}}
+    \toprule
+    \textbf{Family (chapter)} & \textbf{Methods} & \textbf{Primary keys} \\
+    \midrule
+    Basic (Ch.~\ref{ch:basic-samplers})        & \sampler{Random}, \sampler{Grid}, \sampler{Bridson}, \sampler{CSV} & \yamlkey{Point number} / per-var \yamlkey{num} / \yamlkey{Radius} / \yamlkey{CSV} \\
+    ML \& evolutionary (Ch.~\ref{ch:ml-evolutionary}) & \sampler{DNN}, \sampler{Diver}            & \yamlkey{Bounds} / \yamlkey{run} \\
+    Nested (Ch.~\ref{ch:nested})               & \sampler{Dynesty}, \sampler{MultiNest}            & \yamlkey{nlive}, \yamlkey{rseed}, \yamlkey{run\_nested} \\
+    MCMC I (Ch.~\ref{ch:mcmc-1})               & \sampler{MCMC}, \sampler{AMMCMC}, \sampler{RobustAM}, \sampler{DRAM} & \yamlkey{num\_chains}, \yamlkey{num\_iters}, \yamlkey{proposal\_scale} \\
+    MCMC II (Ch.~\ref{ch:mcmc-2})              & \sampler{DEMCMC}, \sampler{DREAM}, \sampler{DREAMLite}, \sampler{EnsembleMCMC}, \sampler{PTEnsemble}, \sampler{PTMCMC} & (above) $+$ \yamlkey{exchange\_interval}, \yamlkey{proposal\_scales} \\
+    MCMC III (Ch.~\ref{ch:mcmc-3})             & \sampler{SliceMCMC}, \sampler{ESS}                & \yamlkey{num\_chains}, \yamlkey{num\_iters}, \yamlkey{proposal\_scale} \\
+    Gradient (Ch.~\ref{ch:gradient})           & \sampler{MALA}, \sampler{HMC}, \sampler{NUTS}     & (\emph{placeholder} engines) \\
+    Nuisance (Ch.~\ref{ch:nuisance})           & \sampler{Profile1D}                               & \yamlkey{Sampling.Nuisance} \\
+    Experimental (Ch.~\ref{ch:experimental})   & \sampler{RLTPMCMC}                                 & tempering $+$ \textsc{rl} control \\
+    \bottomrule
+  \end{tabular}
+  \caption{Every sampler, by family and primary control keys.}
+  \label{tab:sampler-map}
+\end{table*}
+
+\begin{jnote}
+Registered aliases: \alias{ToyMCMC}{MCMC} and \alias{DREAM-lite}{DREAMLite}. Either name selects
+the same sampler.
+\end{jnote}
+
+\section{A note on diagnostics}
+\label{sec:choose-diagnostics}
+
+What to check after a run depends on the family: coverage/spread for space-filling samplers;
+trace plots, acceptance rate, autocorrelation, and effective sample size for \textsc{mcmc};
+evidence stability and live-point behaviour for nested samplers; best-fit improvement and
+repeatability for \sampler{Diver}. The per-method sections point out the most useful checks.

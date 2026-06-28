@@ -1,0 +1,198 @@
+\chapter{Introduction}
+\label{ch:introduction}
+
+\newthought{Jarvis-HEP is a Python framework} for orchestrating likelihood-based
+parameter scans in high-energy physics.\sidenote{\Jarvis\ stands for \emph{Just a Really
+Viable Interface to Suite for High Energy Physics}.} It coordinates expensive external
+calculators, explores difficult parameter spaces with a large family of sampling
+algorithms, persists structured outputs in \textsc{hdf5} and \textsc{csv}, and closes every
+run with explicit diagnostics. You describe \emph{what} to scan in a single \textsc{yaml}
+task card; \Jarvis\ handles the \emph{how}.
+
+This chapter sets the mental model for the rest of the book: what \Jarvis\ is, the problems
+it is built to solve, how a run flows internally, and where it sits among its sibling tools
+\Operas\ and \JPlot.
+
+\section{What Jarvis-HEP does}
+\label{sec:what-it-does}
+
+Parameter scans in particle physics share a recurring, tedious shape. For each point in a
+parameter space you must launch one or more external programs, feed them correctly formatted
+input, wait, parse their output, turn that output into a likelihood, and record everything in
+a way you can analyse later and reproduce months afterward. Doing this by hand is slow and
+error-prone; doing it at the scale of millions of points is impossible without
+infrastructure.\cite{Guo:2026kfy}
+
+\Jarvis\ \emph{is} that infrastructure. It keeps a set of normally separate concerns inside
+one runtime:
+
+\begin{itemize}
+  \item \textbf{Sampling} --- how parameter points are drawn (random, space-filling, nested,
+        \textsc{mcmc}, gradient-based, \textsc{ml}-guided, \ldots).
+  \item \textbf{Workflow orchestration} --- running external calculators in dependency order,
+        or evaluating in-process operators.
+  \item \textbf{Likelihood evaluation} --- turning observables into a \yamlkey{LogLikelihood}.
+  \item \textbf{Persistence} --- structured, post-processable \textsc{hdf5}/\textsc{csv} output.
+  \item \textbf{Operability} --- logging, checkpoint/resume, monitoring, and end-of-run summaries.
+\end{itemize}
+
+\begin{jnote}
+This manual is a living document, revised in step with each \Jarvis\ release; this build
+documents \Jversion. \Jarvis\ runs on \textbf{Python 3.10 and newer}---every release is
+validated by an automated test suite across the supported 3.10+ interpreters before it
+ships, which is what ``3.10+'' means here---and is distributed under the \textsc{mit} License.
+\end{jnote}
+
+\section{The three-step mental model}
+\label{sec:mental-model}
+
+Everything in \Jarvis\ is organised around a single idea. For every parameter point, a run
+does exactly three things:
+
+\begin{enumerate}
+  \item \textbf{Draw a parameter point.} A \emph{sampler} proposes a point in the parameter
+        space you defined under \yamlkey{Sampling.Variables}.
+  \item \textbf{Run a workflow that turns that point into observables.} Either external
+        \yamlkey{Calculators} (file-based programs) or in-process \yamlkey{Operas}
+        (Python operators) consume the point and produce named observables.
+  \item \textbf{Compute a \yamlkey{LogLikelihood} from those observables.} One or more named
+        expressions score the point; the sampler uses that score to decide what to do next.
+\end{enumerate}
+
+\begin{marginfigure}
+\centering
+\smallcaps{point}\\[2pt]
+$\big\downarrow$ \emph{sampler}\\[2pt]
+\smallcaps{workflow}\\[2pt]
+$\big\downarrow$ \emph{calculators / operas}\\[2pt]
+\smallcaps{observables}\\[2pt]
+$\big\downarrow$ \emph{LogLikelihood}\\[2pt]
+\smallcaps{score}
+\caption[The per-point loop.]{The per-point loop. Keep this picture in mind; every task card
+is a way to fill in these three arrows.}
+\label{fig:per-point-loop}
+\end{marginfigure}
+
+Hold on to Figure~\ref{fig:per-point-loop}. A \Jarvis\ task card is nothing more than a
+precise way of filling in those three steps, plus the bookkeeping around them. The whole of
+Part~\ref{part:task-card} is a field-by-field tour of that card.
+
+\section{Problems it is built to solve}
+\label{sec:problems}
+
+\Jarvis\ targets scan workflows that are painful to manage by hand: expensive external
+calculators, sparse or fine-tuned parameter regions, profile-likelihood style studies, and
+output bookkeeping that has to stay reproducible. Table~\ref{tab:at-a-glance} maps those pain
+points to the framework's answers.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.42\linewidth}p{0.5\linewidth}@{}}
+    \toprule
+    \textbf{Problem} & \textbf{Jarvis-HEP answer} \\
+    \midrule
+    External program orchestration & Ordered calculator workflow with async-friendly execution \\
+    Hard-to-scan parameter spaces & Many sampler families: random and Bridson through nested and \textsc{mcmc} \\
+    Output sprawl & Project-local outputs, logs, images, and packaged rerun workflows \\
+    Post-run analysis & \textsc{hdf5} storage plus schema-driven \textsc{csv} conversion \\
+    Run visibility & Logger-routed diagnostics and end-of-run summaries \\
+    \bottomrule
+  \end{tabular}
+  \caption{What \Jarvis\ is for, at a glance.}
+  \label{tab:at-a-glance}
+\end{table}
+
+\section{Design principles}
+\label{sec:principles}
+
+A handful of decisions shape how the framework feels in daily use. They are worth stating up
+front, because they explain many of the defaults you will meet later.
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[No repo-root requirement] Normal usage runs from a \emph{standalone project}
+        directory, not from a checkout of the framework. Chapter~\ref{ch:core-concepts}
+        explains the project markers.
+  \item[Project-local outputs by default] Every run writes under your project root, so a
+        scan is self-contained and easy to move or archive.
+  \item[Explicit logging over silent failure] When something goes wrong, \Jarvis\ tells you,
+        and a failed sample can replay its buffered log for forensic analysis.
+  \item[Structured, post-processable outputs] Results land in \textsc{hdf5} with schema and
+        \textsc{csv} export, so they remain usable long after the run ends.
+  \item[Additive diagnostics] Run summaries and monitoring are built in, not bolted on.
+\end{description}
+
+\section{How a run flows}
+\label{sec:run-flow}
+
+Internally, a scan threads through a fixed pipeline. You do not need to memorise it to use
+\Jarvis, but seeing it once makes the later chapters click into place:
+
+\begin{quote}
+\sffamily\footnotesize
+Task \textsc{yaml} $\rightarrow$ Sampler $\rightarrow$ Factory / Workflow $\rightarrow$
+Calculator or Opera modules $\rightarrow$ Structured outputs $+$ Logs \& run summary
+\end{quote}
+
+The command-line entry point loads and validates your task card, instantiates the sampler
+you named, builds the calculator/opera dependency graph, spins up a worker pool, runs the
+per-point loop of Section~\ref{sec:mental-model}, streams results into the \textsc{hdf5}
+writer, and finishes with a machine- and human-readable summary. Inside a calculator module,
+the maintained execution order is always the same---\emph{write input files, run external
+commands, read output files}---a contract we return to in Chapter~\ref{ch:calculators}.
+
+\section{What you will produce}
+\label{sec:what-you-produce}
+
+A finished run leaves a predictable set of project-local artifacts. You will meet each in
+detail in Part~\ref{part:running}; for now, a preview:
+
+\begin{itemize}
+  \item \file{outputs/<scan>/DATABASE/} --- \textsc{hdf5} samples, schema files, \textsc{csv}
+        exports, and run metadata.
+  \item \file{outputs/<scan>/SAMPLE/} --- per-sample working files and retained artifacts.
+  \item \file{logs/<scan>/} --- Jarvis, sampler, and runtime logs.
+  \item \file{images/<scan>/} --- the semantic \file{flowchart.json}, generated plot configs,
+        and figures.
+  \item \file{run\_summary.json}, \file{run\_summary.csv}, \file{run\_summary.txt} ---
+        end-of-run summaries.
+\end{itemize}
+
+\section{The Jarvis ecosystem}
+\label{sec:ecosystem}
+
+\Jarvis\ ships alongside two sibling projects. You can use \Jarvis\ on its own, but together
+they cover the full scan-to-figure path (Table~\ref{tab:ecosystem}).
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Project} & \textbf{Role} \\
+    \midrule
+    \Jarvis  & Sampling, workflow orchestration, persistence (this manual). \\
+    \Operas  & In-process operator library for \yamlkey{Operas} workflows; installed by
+               default and used by the built-in quick-starts (Chapter~\ref{ch:jarvis-operas}). \\
+    \JPlot   & Plotting and flowchart rendering from \Jarvis\ outputs; optional
+               (Chapter~\ref{ch:jarvisplot}). \\
+    \bottomrule
+  \end{tabular}
+  \caption{The three Jarvis projects.}
+  \label{tab:ecosystem}
+\end{table}
+
+\section{Where to go next}
+\label{sec:next}
+
+\begin{itemize}
+  \item If you have not installed \Jarvis\ yet, go to Chapter~\ref{ch:installation}.
+  \item To run something immediately, jump to the quick start in
+        Chapter~\ref{ch:quickstart}.
+  \item To understand the vocabulary used throughout the book---projects, path markers, and
+        runtime tokens---read Chapter~\ref{ch:core-concepts}.
+\end{itemize}
+
+\begin{jtip}
+If you remember only one thing from this chapter, make it the three-step loop of
+Figure~\ref{fig:per-point-loop}. Every feature in this manual hangs off one of those three
+arrows.
+\end{jtip}

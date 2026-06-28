@@ -1,0 +1,131 @@
+\chapter{Operas}
+\label{ch:operas}
+
+\newthought{Use \yamlkey{Operas}} when your calculation can run directly in Python through a
+\Operas\ operator---no input files, no shell commands, just a function call. It is the fastest way
+to prototype a scan, and the backend the built-in quick-starts use.
+
+\section{When to choose Operas}
+\label{sec:op-when}
+
+Pick \yamlkey{Operas} when:
+
+\begin{itemize}
+  \item the calculation already exists as a registered operator;
+  \item you want a lightweight prototype before building a file-based calculator;
+  \item the work is algebraic or array-based and needs no external executable.
+\end{itemize}
+
+\noindent Choose \yamlkey{Calculators} (Chapter~\ref{ch:calculators}) instead when you must drive
+an external program through files.
+
+\section{The section shape}
+\label{sec:op-shape}
+
+\begin{yamlwin}
+Operas:
+  make_paraller: 4
+  Functions:                      # optional: expose operators to expressions
+    - name: helper.eggbox2d
+      alias: eggbox2d
+      inputs: [x, y]
+  Modules:
+    - name: EggBox
+      operator: "helper.eggbox2d"
+      call_mode: call
+      required_modules: []
+      input:
+        - {name: x, expression: "xx * Pi"}
+        - {name: y, expression: "yy * Pi"}
+      kwargs: {}
+      output:
+        - {name: z, entry: z}
+\end{yamlwin}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{make\_paraller}] worker count (default 4; keep the legacy spelling).
+  \item[\yamlkey{Functions}] an optional whitelist that exposes selected \Operas\ functions to
+        symbolic expressions (Section~\ref{sec:op-functions}).
+  \item[\yamlkey{Modules}] the operator modules that make up the workflow.
+\end{description}
+
+\section{Module keys}
+\label{sec:op-keys}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{name}] a unique module name, used in logs and dependency resolution.
+  \item[\yamlkey{operator}] the registered \Operas\ operator to call, e.g.
+        \code{helper.eggbox2d}.
+  \item[\yamlkey{call\_mode}] how to invoke it: \code{call} (default) or \code{acall} (async).
+  \item[\yamlkey{required\_modules}] upstream modules that must run first (empty list if none).
+  \item[\yamlkey{input}] the operator's inputs (see below).
+  \item[\yamlkey{kwargs}] extra keyword arguments passed to the operator.
+  \item[\yamlkey{output}] the observables to read back, each a \yamlkey{name} and the source
+        \yamlkey{entry} in the operator's result.
+\end{description}
+
+\paragraph{The \yamlkey{input} list} Each item is either a plain string---``forward this
+observable under the same name''---or a mapping with explicit keys:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{name}] the operator's argument name;
+  \item[\yamlkey{expression}] an optional symbolic expression to compute the value
+        (Chapter~\ref{ch:symbols});
+  \item[\yamlkey{entry}] an optional source field, to forward an existing observable under a new
+        name.
+\end{description}
+
+\begin{yamlwin}
+input:
+  - "mh"                                   # forward observable mh unchanged
+  - {name: x, expression: "xx * Pi"}       # compute from current observables
+  - {name: sigma, entry: "dd.sigma_si"}    # rename an existing field
+\end{yamlwin}
+
+\section{Exposing operator functions to expressions}
+\label{sec:op-functions}
+
+The optional \yamlkey{Functions} list makes chosen \Operas\ functions callable inside symbolic
+expressions (likelihoods, mappings). Each item supports:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{name}] the full registered function name;
+  \item[\yamlkey{alias}] an optional short name to use in expressions;
+  \item[\yamlkey{inputs}] the ordered input names for the generated wrapper.
+\end{description}
+
+\noindent This is handy when you want to call an operator directly from a \yamlkey{LogLikelihood}
+term rather than as a workflow module.
+
+\section{A worked example}
+\label{sec:op-example}
+
+The quick-start's \code{EggBox} module (Chapter~\ref{ch:quickstart}) is a complete Opera: it runs
+the operator \code{helper.eggbox2d} on the scan variables \yamlkey{x} and \yamlkey{y} and reads
+the result \yamlkey{z}:
+
+\begin{yamlwin}
+Operas:
+  make_paraller: 8
+  Modules:
+    - name: EggBox
+      operator: "helper.eggbox2d"
+      call_mode: call
+      required_modules: []
+      input:
+        - {name: x, expression: "x"}
+        - {name: y, expression: "y"}
+      output:
+        - {name: z, entry: z}
+\end{yamlwin}
+
+\noindent The observable \yamlkey{z} then flows into the likelihood, exactly as a calculator's
+output would.
+
+\section{Summary}
+\label{sec:op-summary}
+
+\yamlkey{Operas} runs in-process operators: name the \yamlkey{operator}, map its \yamlkey{input}
+(strings, expressions, or renames), and read its \yamlkey{output}. It is the quickest workflow
+backend and is covered further---including the operator catalog---in
+Chapter~\ref{ch:jarvis-operas}.

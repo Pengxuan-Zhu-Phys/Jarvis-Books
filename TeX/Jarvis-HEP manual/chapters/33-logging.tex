@@ -1,0 +1,69 @@
+\chapter{Logging}
+\label{ch:logging}
+
+\newthought{When something goes wrong}, the logs tell you where. \Jarvis\ routes diagnostics
+deliberately---run-wide messages to the run logs, and per-sample detail to that sample's own
+log---so a failure is easy to trace back to one point.
+
+\section{Where logs go}
+\label{sec:log-where}
+
+Run-wide logs live under \file{logs/<scan>/}: a main Jarvis log, a sampler log, and a factory log.
+Per-sample detail lives with the sample itself under \file{SAMPLE/} (Chapter~\ref{ch:outputs}).
+By default the level is fairly quiet; pass \cli{-{}-debug} to lower it and see everything
+(Chapter~\ref{ch:cli})---useful when diagnosing a problem, noisy otherwise.
+
+\section{Sample-local logging}
+\label{sec:log-sample}
+
+Each sample gets its own logger. Crucially, the child components of a sample---its likelihood
+evaluation and its calculator commands---bind to that \emph{same} sample logger. So a sample's
+log contains the whole story of that point: which inputs were written, what the external tool
+printed, and how each likelihood term evaluated. You rarely need to correlate across files.
+
+\section{Two kinds of log lines}
+\label{sec:log-kinds}
+
+\Jarvis\ writes two distinct line styles, and keeps them separate on purpose:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Structured records] framework messages, carrying a marker, the module name, a timestamp, a
+        level, and the message body.
+  \item[Raw stream lines] the verbatim stdout/stderr of an external program---plain text, with no
+        marker, module name, or timestamp added.
+\end{description}
+
+\noindent So when a calculator runs, its command is announced with a structured ``run execution
+command'' header, and the program's own output then follows as raw lines---you see exactly what
+the tool printed, unmodified.
+
+\section{Failure replay}
+\label{sec:log-replay}
+
+For speed, opera-only and other ``lazy'' scans do not create a per-sample folder on disk for every
+point (Chapter~\ref{ch:runtime-block}). To keep diagnostics for these, \Jarvis\ buffers each
+sample's log \emph{in memory} as it runs:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[On success] the buffer is simply discarded---a successful point needs no forensic log, so
+        nothing is written and nothing slows down.
+  \item[On failure] the buffered messages are \emph{replayed} to a real
+        \file{Sample\_running.log}, in the standard log format, followed by a failure footer.
+\end{description}
+
+\noindent The result: fast, clutter-free runs, but a complete log for exactly the samples that
+failed---which are the ones you need to investigate.
+
+\begin{jtip}
+When a scan reports failures, look first at the failed samples' replayed logs under
+\file{SAMPLE/}: they contain the calculator's raw output and the likelihood diagnostics for that
+point, which usually pinpoint the cause.
+\end{jtip}
+
+\section{Summary}
+\label{sec:log-summary}
+
+\Jarvis\ logs run-wide events to \file{logs/<scan>/} and per-sample detail to each sample's logger
+(shared by its likelihood and calculators). Structured framework records and raw tool output stay
+distinct; failed lazy samples replay their buffered log for forensics; and \cli{-{}-debug} turns up
+the detail when you need it.

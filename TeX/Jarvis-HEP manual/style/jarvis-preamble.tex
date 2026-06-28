@@ -1,0 +1,95 @@
+%==============================================================================
+% jarvis-preamble.tex
+% Shared packages, metadata macros, and semantic text commands for the
+% Jarvis-HEP manual.  Loaded by main.tex after \documentclass{tufte-book}.
+%
+% The tufte-book class already provides: xcolor, hyperref (unless nohyper),
+% geometry, graphicx, \allcaps, \smallcaps, \newthought, \sidenote,
+% \marginnote, \footnote->sidenote, fullwidth env, marginfigure, etc.
+% We only add what a code/reference manual additionally needs.
+%==============================================================================
+
+% --- Math ---------------------------------------------------------------------
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% --- Tables -------------------------------------------------------------------
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{ragged2e}      % \RaggedRight inside narrow table cells
+
+% --- Misc ---------------------------------------------------------------------
+\usepackage{pmboxdraw}     % render block/box-drawing glyphs (the Jarvis -v banner) in pdfLaTeX
+\usepackage{newunicodechar} % map the literal dot glyph U+2B24 (the banner icon) to a drawn circle
+\usepackage{varwidth}      % shrink-to-content box so the banner panel hugs its text (no empty margin)
+\usepackage{xspace}        % smart trailing space for text macros
+\usepackage{enumitem}      % tighter description/itemize lists
+\setlist{noitemsep, topsep=2pt}
+
+% --- Project version single-source --------------------------------------------
+% This manual is a LIVING document: it is revised in step with each Jarvis-HEP
+% release.  \JversionNum names the release this particular build documents --
+% bump it (and rebuild) on every release; do not hard-code version numbers in
+% the prose, always use \Jversion so there is a single source of truth.
+\newcommand{\JversionNum}{1.7.3}
+\newcommand{\Jversion}{v\JversionNum\xspace}
+
+% --- Product / ecosystem names ------------------------------------------------
+\newcommand{\Jarvis}{\textsc{Jarvis-HEP}\xspace}
+\newcommand{\Operas}{\textsc{Jarvis-Operas}\xspace}
+\newcommand{\JPlot}{\textsc{Jarvis-PLOT}\xspace}
+
+% --- Inline semantic markup ---------------------------------------------------
+% Monospace helper that lets long tokens break in the narrow text column: an
+% underscore (\_) and a dot offer a zero-penalty breakpoint, so names like
+% interpolations\_1D or Runtime.batch\_size can wrap instead of overflowing.
+\newcommand{\jbttbreak}{\penalty0\hskip0pt\relax}
+\newcommand{\jtt}[1]{\begingroup
+  \def\_{\textunderscore\jbttbreak}%
+  \texttt{#1}\endgroup}
+% Code-ish things rendered in monospace with consistent meaning across the book.
+\newcommand{\code}[1]{\jtt{#1}}                          % generic inline code
+\newcommand{\yamlkey}[1]{\jtt{#1}}                       % a YAML key / block name
+\newcommand{\cli}[1]{\jtt{#1}}                           % a shell / CLI fragment
+\newcommand{\token}[1]{\jtt{#1}}                         % runtime token @SampleID etc.
+\newcommand{\marker}[1]{\jtt{#1}}                        % path marker &J/
+\newcommand{\file}[1]{\jtt{#1}}                          % a file or path (overridden in dirtree)
+\newcommand{\sampler}[1]{\textsf{#1}}                    % a sampler method name
+\newcommand{\optitem}[1]{\textit{#1}}                    % an "(optional)" tag etc.
+
+% Reference to a sampler JSON schema file (authoritative key source).
+\newcommand{\schemaref}[1]{\texttt{card/schema/#1}}
+
+% A "registered alias" inline note, e.g. \alias{ToyMCMC}{MCMC}
+\newcommand{\alias}[2]{\texttt{#1}~(alias of~\texttt{#2})}
+
+% --- Required / Optional inline tags for key tables ---------------------------
+\newcommand{\req}{\textbf{required}}
+\newcommand{\opt}{optional}
+
+% --- Tufte: \paragraph is our de-facto third heading level --------------------
+% tufte-book forbids \subsubsection, so \paragraph (provided by the class) is the
+% deepest heading we use.  We deliberately do NOT redefine it, to avoid clashing
+% with the class's titlesec-based sectioning.
+
+% --- A compact key/value description list for YAML key references -------------
+\newenvironment{keylist}
+  {\begin{description}[style=nextline, leftmargin=1.2em, font=\ttfamily]}
+  {\end{description}}
+
+% --- Coloured cross-reference & citation links --------------------------------
+% tufte loads hyperref with colorlinks=false (links are black, box-less), so
+% references look like plain text.  Turn on coloured links so references to
+% figures, tables, equations, and sections -- and citations -- stand out.
+% (hyperref is already loaded by the tufte-book class at this point.)
+\definecolor{jlink}{HTML}{1F6FB2}  % cross-refs: figures, tables, equations, sections
+\definecolor{jcite}{HTML}{2E7D32}  % citations / bibliography
+\definecolor{jurl}{HTML}{1A5FB4}   % URLs
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = jlink,
+  citecolor  = jcite,
+  urlcolor   = jurl,
+  linktoc    = page,   % keep ToC titles black; colour only the page-number links
+}

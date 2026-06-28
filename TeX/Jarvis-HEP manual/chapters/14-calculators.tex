@@ -1,0 +1,179 @@
+\chapter{Calculators}
+\label{ch:calculators}
+
+\newthought{Use \yamlkey{Calculators}} when your workflow has to drive an external program---a
+compiled \textsc{hep} package, a shell wrapper, or any file-based toolchain. \Jarvis\ treats each
+program as a black box: it writes the input, runs the program, and reads the output. This chapter
+shows the fixed shape every calculator follows.
+
+\section{The black-box idea}
+\label{sec:calc-blackbox}
+
+You do not need to understand a tool's internals---only three things:
+
+\begin{enumerate}
+  \item what input format it expects (\textsc{json}, \textsc{slha}, plain text);
+  \item how to run it (a command line);
+  \item what output it produces and which values to read.
+\end{enumerate}
+
+\noindent That is exactly what a calculator module declares. Any \textsc{hep} tool---spectrum
+generator, dark-matter code, collider recaster---fits the same pattern.
+
+\section{The five phases}
+\label{sec:calc-phases}
+
+Every calculator module is described by the same five phases, in this order:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{installation}] prepare the program once per instance (copy, unpack, compile).
+  \item[\yamlkey{initialization}] reset the working directory before each sample (copy a fresh
+        template, delete stale outputs).
+  \item[\yamlkey{execution.input}] write this sample's input file(s) (Chapter~\ref{ch:io-types}).
+  \item[\yamlkey{execution.commands}] run the program.
+  \item[\yamlkey{execution.output}] read observables back out (Chapter~\ref{ch:io-types}).
+\end{description}
+
+\section{The module keys}
+\label{sec:calc-keys}
+
+Calculator modules live under \yamlkey{Calculators.Modules}; a top-level
+\yamlkey{make\_paraller} sets the worker count (Table~\ref{tab:calc-keys}).
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{name}            & module name, used in the workflow graph and logs \\
+    \yamlkey{required\_modules} & modules that must finish before this one runs \\
+    \yamlkey{clone\_shadow}   & give each sample its own working copy (recommended \code{true}) \\
+    \yamlkey{path}            & the program's runtime directory \\
+    \yamlkey{source}          & where the program's source/payload lives \\
+    \yamlkey{installation}    & commands to build/prepare the program (once) \\
+    \yamlkey{initialization}  & commands to reset state before each sample \\
+    \yamlkey{execution}       & \yamlkey{path}, \yamlkey{commands}, \yamlkey{input}, \yamlkey{output} \\
+    \yamlkey{timeout}         & optional total seconds for one \yamlkey{execution} (see below) \\
+    \bottomrule
+  \end{tabular}
+  \caption{Calculator module keys.}
+  \label{tab:calc-keys}
+\end{table}
+
+\begin{jwarn}
+The worker-count key is spelled \yamlkey{make\_paraller} --- a deliberate legacy spelling. Keep
+it exactly; \yamlkey{make\_parallel} will not be recognised. You can also reuse it inside build
+commands, e.g. \code{make -j\$\{Calculators:make\_paraller\}}.
+\end{jwarn}
+
+\section{Per-sample isolation: \texttt{clone\_shadow} and \token{@PackID}}
+\label{sec:calc-shadow}
+
+Most external tools write into their own directory, so running several samples in the same
+directory would let them clobber each other. With \yamlkey{clone\_shadow: true}, each sample runs
+in its own \emph{shadow} copy, and the \token{@PackID} token in a path expands to that copy's
+unique id:
+
+\begin{yamlwin}
+path: "&J/calculators/runtime/program/MyCode/@PackID"
+\end{yamlwin}
+
+\noindent Use \yamlkey{clone\_shadow: true} unless you have a strong reason not to.
+
+\section{A worked example}
+\label{sec:calc-example}
+
+Here is a complete module that drives a spectrum generator: it copies and builds the program,
+prepares a template input, writes two parameters into it, runs the tool, and reads two masses
+back out.
+
+\begin{yamlwin}[Calculators block]
+Calculators:
+  make_paraller: 4
+  path: "&J/calculators/runtime/program"
+  Modules:
+    - name: Spectrum
+      required_modules: [Parameters]
+      clone_shadow: true
+      path: "&J/calculators/runtime/program/Spectrum/@PackID"
+      source: "&J/deps/program/spectrum"
+      installation:
+        - "cp ${source}/spectrum.tar.gz ${path}"
+        - "cd ${path}"
+        - "tar -zxvf spectrum.tar.gz"
+        - "make -j${Calculators:make_paraller}"
+      initialization:
+        - "cp ${source}/template.in ${path}/run.in"
+        - "rm -f ${path}/run.out"
+      timeout: 120
+      execution:
+        path: "&J/calculators/runtime/program/Spectrum/@PackID"
+        commands:
+          - "./run run.in"
+        input:
+          - name: run_input
+            path: "&J/calculators/runtime/program/Spectrum/@PackID/run.in"
+            type: "SLHA"
+            save: true
+            actions:
+              - type: "Replace"
+                variables:
+                  - {name: "M1", placeholder: ">>>M1<<<"}
+                  - {name: "M2", placeholder: ">>>M2<<<"}
+        output:
+          - name: run_output
+            path: "&J/calculators/runtime/program/Spectrum/@PackID/run.out"
+            type: "xSLHA"
+            save: true
+            variables:
+              - {name: mh1, block: MASS, entry: 25}
+              - {name: mN1, block: MASS, entry: 1000022}
+\end{yamlwin}
+
+\noindent The output names (\yamlkey{mh1}, \yamlkey{mN1}) are now available to the likelihood and
+to any downstream module---this is where an external package becomes useful to the rest of the
+scan.
+
+\begin{jtip}
+Onboard a new package with a \emph{fixed point} first: set \yamlkey{Sampling.Method} to
+\sampler{CSV} (Chapter~\ref{ch:basic-samplers}) and run one or two known points. This validates
+install, input, run, and output separately---before you add sampler complexity. Once it works,
+drop the same \yamlkey{Calculators} block into your real scan.
+\end{jtip}
+
+\section{The full lifecycle}
+\label{sec:calc-lifecycle}
+
+For each sample, \Jarvis\ runs the fixed sequence:
+
+\begin{enumerate}
+  \item create the sample and allocate a calculator instance directory;
+  \item \yamlkey{installation} (once per instance): copy, unpack, build;
+  \item \yamlkey{initialization}: reset per-sample input/output state;
+  \item \yamlkey{execution.input}: write this sample's input file(s);
+  \item \yamlkey{execution.commands}: run the program;
+  \item \yamlkey{execution.output}: read the result into observables;
+  \item the \yamlkey{LogLikelihood} scores the point, and \Jarvis\ writes one database row.
+\end{enumerate}
+
+\section{The execution timeout}
+\label{sec:calc-timeout}
+
+\yamlkey{timeout} is an optional safety cut: a total number of seconds for one sample's
+\yamlkey{execution} section (input writes, commands, and output reads). It starts after
+\yamlkey{initialization}. If omitted, there is no calculator-level limit. Use it to stop a sample
+that hangs from stalling the whole scan.
+
+\begin{jnote}
+A separate, lower-level per-command limit lives under \yamlkey{Runtime.Subprocess}
+(Chapter~\ref{ch:runtime-block}). When both are set, the effective command limit is bounded by
+the remaining \yamlkey{timeout} budget.
+\end{jnote}
+
+\section{Summary}
+\label{sec:calc-summary}
+
+A calculator wraps a program as five phases---install, initialize, write input, run, read
+output---with per-sample isolation via \yamlkey{clone\_shadow} and \token{@PackID}. The next
+chapter, Chapter~\ref{ch:io-types}, details the input and output file formats those phases use.

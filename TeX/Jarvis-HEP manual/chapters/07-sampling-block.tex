@@ -1,0 +1,87 @@
+\chapter{The Sampling Block}
+\label{ch:sampling-block}
+
+\newthought{The \yamlkey{Sampling} block} is the heart of a task card. It says \emph{how} points
+are chosen, \emph{which} parameters vary, and \emph{how good} each point is. This chapter gives
+the overall shape; the two biggest pieces---variables and the likelihood---get their own
+chapters next, and each sampler is documented in Part~\ref{part:samplers}.
+
+\section{The four parts}
+\label{sec:sampling-parts}
+
+\begin{yamlwin}
+Sampling:
+  Method: "Random"      # which sampler to use
+  Variables: []         # the parameters to scan
+  Bounds: {}            # sampler-specific settings (optional)
+  LogLikelihood: []     # how to score each point
+\end{yamlwin}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{Method}] The name of the sampler, e.g. \sampler{Random}, \sampler{Bridson},
+        \sampler{MCMC}, \sampler{Dynesty}. Choosing one is covered in
+        Chapter~\ref{ch:choosing-sampler}.
+  \item[\yamlkey{Variables}] The list of parameters to scan and the distribution each is drawn
+        from. Full reference in Chapter~\ref{ch:variables}.
+  \item[\yamlkey{Bounds}] Settings specific to the chosen \yamlkey{Method} (for example, the
+        number of \textsc{mcmc} chains, or a sampler's iteration count). Each sampler's chapter
+        lists its keys. Simple samplers need none.
+  \item[\yamlkey{LogLikelihood}] One or more named expressions that score a point. Full
+        reference in Chapter~\ref{ch:loglikelihood}.
+\end{description}
+
+\begin{jnote}
+Each sampler reads its own settings from \yamlkey{Bounds} (and a few read a method-named block
+such as \yamlkey{CSV} for the \sampler{CSV} replay method). Treat \yamlkey{Bounds} as ``the
+dials for this sampler'' and look up the exact dials in the sampler's chapter.
+\end{jnote}
+
+\section{A worked example}
+\label{sec:sampling-example}
+
+Here is a complete \yamlkey{Sampling} block for an \sampler{MCMC} run over two variables:
+
+\begin{yamlwin}
+Sampling:
+  Method: "MCMC"
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0, max: 5}}
+    - name: y
+      distribution: {type: Flat, parameters: {min: 0, max: 5}}
+  Bounds:
+    num_chains: 8
+    num_iters: 600
+    proposal_scale: 0.06
+  LogLikelihood:
+    - {name: "LogL_Z", expression: "LogGauss(z, 100, 10)"}
+\end{yamlwin}
+
+\noindent Read it as a sentence: ``Run \sampler{MCMC} (with 8 chains of 600 iterations) over flat
+variables \yamlkey{x} and \yamlkey{y} on $[0,5]$, scoring each point by how close the observable
+\yamlkey{z} is to $100 \pm 10$.''
+
+\section{Optional: pre-selecting points}
+\label{sec:sampling-selection}
+
+Some samplers accept an optional \yamlkey{selection}: a true/false condition that a point must
+satisfy to be accepted. It is written as a symbolic expression
+(Chapter~\ref{ch:symbols}):
+
+\begin{yamlwin}
+Sampling:
+  selection: "(x > 0) & (y < 4)"
+\end{yamlwin}
+
+\noindent Use it to skip obviously uninteresting regions before the (often expensive) workflow
+runs. The expression must evaluate to a strict boolean.
+
+\section{Where to go next}
+\label{sec:sampling-next}
+
+\begin{itemize}
+  \item To define the variables: Chapter~\ref{ch:variables}.
+  \item To define the score: Chapter~\ref{ch:loglikelihood}.
+  \item To choose and tune a sampler: Chapter~\ref{ch:choosing-sampler} and the per-method
+        chapters in Part~\ref{part:samplers}.
+\end{itemize}

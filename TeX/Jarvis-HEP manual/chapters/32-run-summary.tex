@@ -1,0 +1,104 @@
+\chapter{Run Summary and Monitoring}
+\label{ch:run-summary}
+
+\newthought{Every run ends with a summary} and can be watched while it runs. Together they tell you
+whether a scan went well---how many points succeeded, how fast, and how hard the machine worked.
+
+\section{The run summary files}
+\label{sec:rs-files}
+
+When a scan finishes, \Jarvis\ writes the same summary in three forms into the run's output
+directory, and also prints it to the terminal and appends it to the main log:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\file{run\_summary.json}] a machine-readable flat dictionary.
+  \item[\file{run\_summary.csv}] a single-row table with the same fields.
+  \item[\file{run\_summary.txt}] the human-readable terminal tables.
+\end{description}
+
+\section{What it reports}
+\label{sec:rs-metrics}
+
+The summary covers timing, throughput, parallelism, and resources
+(Table~\ref{tab:rs-metrics}).
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.58\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{Meaning} \\
+    \midrule
+    \code{wall\_time\_sec}            & total elapsed time of the run \\
+    \code{total\_points\_submitted}   & points handed to the factory \\
+    \code{total\_points\_finished}    & points completed successfully \\
+    \code{total\_points\_failed}      & points that failed \\
+    \code{success\_rate}             & finished $/$ submitted \\
+    \code{throughput\_points\_per\_min} & finished points per minute \\
+    \code{avg/median\_point\_eval\_sec} & per-point evaluation time \\
+    \code{configured/peak/mean\_active\_workers} & parallelism: set, peak, time-weighted mean \\
+    \code{time\_in\_external\_tools\_sec} & cumulative time inside calculator commands \\
+    \code{cpu\_percent\_mean}, \code{memory\_rss\_mb\_peak} & best-effort resource use (needs \code{psutil}) \\
+    \bottomrule
+  \end{tabular}
+  \caption{Selected run-summary fields.}
+  \label{tab:rs-metrics}
+\end{table}
+
+\begin{jwarn}
+The execution-breakdown totals are \emph{cumulative across points}, not wall-clock. Because many
+points run in parallel, the summed ``external tool'' and ``internal workflow'' times can exceed
+\code{wall\_time\_sec}---they are not a measure of wasted time. The report says so directly:
+``tracked cumulative timing across completed points; not equal to wall-clock time.''
+\end{jwarn}
+
+\section{The shutdown tables}
+\label{sec:rs-shutdown}
+
+At the end of a run you will also see two short tables in the terminal. The \textsc{hdf5} writer
+reports how many records it enqueued and flushed; the factory reports the point tallies and the
+average rate:
+
+\begin{plaincode}
+Factory shutdown summary
+  submitted   10028
+  ok          10028
+  failed          0
+  total_time  00:03:05
+  avg_rate    53.93 points/s
+\end{plaincode}
+
+\noindent A clean run shows \code{failed} at (or near) zero and \code{ok} equal to
+\code{submitted}.
+
+\section{Watching a live run}
+\label{sec:rs-monitor}
+
+For a long scan, open a real-time resource monitor in a second terminal with \cli{-{}-monitor}
+(Chapter~\ref{ch:cli}):
+
+\begin{shellbox}
+Jarvis bin/my_scan.yaml --monitor
+\end{shellbox}
+
+\noindent It refreshes every few seconds and shows \textsc{cpu}/memory use for the running scan;
+press \code{q} to quit. Because it attaches to the live process, start it while the scan is
+running.
+
+\section{Benchmarking throughput}
+\label{sec:rs-benchmark}
+
+To measure raw throughput---for tuning workers or comparing machines---use \cli{-{}-benchmark},
+which runs in a throughput mode for a fixed number of seconds and reports points-per-second:
+
+\begin{shellbox}
+Jarvis bin/my_scan.yaml --benchmark 60
+\end{shellbox}
+
+\noindent Performance tuning based on these numbers is covered in Chapter~\ref{ch:performance}.
+
+\section{Summary}
+\label{sec:rs-summary}
+
+Read \file{run\_summary.txt} after a run for the headline numbers (success rate, throughput,
+parallelism), remember the breakdown totals are cumulative not wall-clock, watch long runs with
+\cli{-{}-monitor}, and measure raw speed with \cli{-{}-benchmark}.

@@ -1,0 +1,60 @@
+\chapter{Path Markers and Runtime Tokens}
+\label{app:markers-tokens}
+
+\newthought{The substitution cheat-sheet.} Path markers resolve at load time; runtime tokens are
+filled in per sample; placeholders expand inside calculator and library commands. Full discussion:
+Chapters~\ref{ch:core-concepts} and~\ref{ch:symbols}.
+
+\section{Path marker}
+\label{sec:app-marker}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Marker} & \textbf{Resolves to} \\
+    \midrule
+    \marker{\&J/...} & the standalone project (task) root \\
+    \bottomrule
+  \end{tabular}
+  \caption[The path marker.]{The only path marker the runtime resolves. (A leading
+  \code{\textasciitilde} expands to the home directory; plain relative paths resolve from the
+  project root.)}
+  \label{tab:app-marker}
+\end{table}
+
+\section{Runtime tokens (per sample)}
+\label{sec:app-tokens}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.60\linewidth}@{}}
+    \toprule
+    \textbf{Token} & \textbf{Substituted with} \\
+    \midrule
+    \token{@SampleID} & the current sample's \textsc{uuid} \\
+    \token{@Sdir}     & the sample's save dir under \file{outputs/.../SAMPLE/<uuid>} \\
+    \token{@PackID}   & a calculator instance id (per-sample working directory) \\
+    \bottomrule
+  \end{tabular}
+  \caption{Runtime tokens, available on calculator workflow paths.}
+  \label{tab:app-tokens}
+\end{table}
+
+\section{Command placeholders}
+\label{sec:app-placeholders}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.58\linewidth}@{}}
+    \toprule
+    \textbf{Placeholder} & \textbf{Expands to} \\
+    \midrule
+    \code{\$\{path\}}, \code{\$\{source\}} & the module's runtime / source paths \\
+    \code{\$\{Calculators:make\_paraller\}} & a config value in scope (here, the worker count) \\
+    \code{\$\{LibDeps:path\}}, \code{\$\{path\}}, \code{\$\{source\}} & shared root and per-module paths in \yamlkey{LibDeps} \\
+    \bottomrule
+  \end{tabular}
+  \caption{\code{\$\{...\}} placeholders inside calculator/library commands.}
+  \label{tab:app-placeholders}
+\end{table}

@@ -1,0 +1,93 @@
+\chapter{Integration: Jarvis-Operas}
+\label{ch:jarvis-operas}
+
+\newthought{\Operas\ is the operator library} behind the \yamlkey{Operas} workflow backend
+(Chapter~\ref{ch:operas}). It is a registry of named Python functions that \Jarvis\ can look up and
+call. This chapter explains the registry, its \cmd{jopera} command, and how your task card reaches
+into it; \Operas\ has its own documentation for the full \textsc{api}.
+
+\section{The registry model}
+\label{sec:op-registry}
+
+\Operas\ registers Python callables under stable names and resolves them on demand. Every operator
+has a two-part name:
+
+\begin{shellbox}
+<namespace>:<name>      # e.g. math:add, stat:chi2_cov, helper:eggbox
+\end{shellbox}
+
+\noindent An operator can be called synchronously or asynchronously---which is exactly what an
+\yamlkey{Operas} module's \yamlkey{call\_mode} (\code{call} or \code{acall}) selects
+(Chapter~\ref{ch:operas}). \Operas\ comes bundled with \Jarvis\ (Chapter~\ref{ch:installation}).
+
+\section{Built-in operators}
+\label{sec:op-builtins}
+
+A few operators ship ready to use (Table~\ref{tab:op-builtins})---enough to build and test a
+workflow before adding your own.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    \textbf{Operator} & \textbf{Purpose} \\
+    \midrule
+    \code{math:add(a, b)}            & add two values \\
+    \code{math:identity(x)}          & return the input unchanged \\
+    \code{stat:chi2\_cov(residual, cov)} & a covariance-matrix $\chi^2$ term \\
+    \code{helper:eggbox(inputs)}     & the EggBox helper used by the quick-starts \\
+    \bottomrule
+  \end{tabular}
+  \caption{Selected built-in \Operas\ operators.}
+  \label{tab:op-builtins}
+\end{table}
+
+\section{Discovering operators with \texttt{jopera}}
+\label{sec:op-cli}
+
+The \cmd{jopera} command lets you explore and test the registry from the shell---a fast way to
+check an operator's name and signature before wiring it into a card:
+
+\begin{shellbox}
+jopera list                       # all operators
+jopera list --namespace math      # one namespace
+jopera info stat:chi2_cov --json  # signature and metadata
+jopera call helper:eggbox --kwargs '{"inputs":{"x":0.5,"y":0.0}}'
+\end{shellbox}
+
+\noindent \cmd{jopera} also has \code{acall} (async), \code{load} (load user operators), and
+\code{help}.
+
+\section{How a task card uses it}
+\label{sec:op-card}
+
+Your card reaches the registry in two ways, both from Chapter~\ref{ch:operas}:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[As workflow modules] an \yamlkey{Operas} module names an \yamlkey{operator} and maps its
+        \yamlkey{input}/\yamlkey{output}---the operator becomes a step in the workflow.
+  \item[As expression functions] the \yamlkey{Operas.Functions} whitelist exposes chosen operators
+        to symbolic expressions, so you can call them inside a \yamlkey{LogLikelihood} term
+        (Chapter~\ref{ch:symbols}).
+\end{description}
+
+\section{Your own operators}
+\label{sec:op-user}
+
+When a calculation does not exist as a built-in, write it as a Python callable and load it from a
+file---no need to wrap an external program:
+
+\begin{shellbox}
+jopera call my_ops:my_score --user-ops /path/to/my_ops.py
+\end{shellbox}
+
+\noindent Once registered, your operator is referenced from an \yamlkey{Operas} module just like a
+built-in. This is the lightest way to add a custom observable or score to a scan.
+
+\section{Summary}
+\label{sec:op-jarvis-summary}
+
+\Operas\ is a named registry (\code{namespace:name}) of Python operators that the \yamlkey{Operas}
+backend calls. Explore it with \cmd{jopera}, use built-ins like \code{helper:eggbox} or load your
+own, and reference them from \yamlkey{Operas} modules and expressions. For the full registry
+\textsc{api} and operator catalog, see the \Operas\ documentation.

@@ -1,0 +1,136 @@
+\chapter{I/O File Types}
+\label{ch:io-types}
+
+\newthought{A calculator talks to its program through files}, and this chapter is the reference
+for those files. There are only two questions: how do you \emph{write} the program's input, and
+how do you \emph{read} its output back into \Jarvis\ observables?
+
+\section{Writing inputs}
+\label{sec:io-input}
+
+Input files are listed under \yamlkey{execution.input}. Each entry names a file, gives its
+\yamlkey{type}, and lists \yamlkey{actions} that fill it in. Two types are supported.
+
+\paragraph{\yamlkey{JSON}} For programs that read \textsc{json}. The action is \yamlkey{Dump},
+whose \yamlkey{variables} take a \yamlkey{name}, an optional \yamlkey{expression}, and an
+optional \yamlkey{entry} (a nested \textsc{json} path):
+
+\begin{yamlwin}
+input:
+  - name: ModelInput
+    path: "&J/calculators/runtime/program/MyCode/@PackID/input.json"
+    type: "JSON"
+    save: false
+    actions:
+      - type: "Dump"
+        variables:
+          - {name: "M1"}
+          - {name: "tb", expression: "TanBETA"}
+          - {name: "mu", expression: "M2 - M1", entry: "susy.mu"}
+\end{yamlwin}
+
+\paragraph{\yamlkey{SLHA}} For Les Houches-style files. Three actions are available:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{Replace}] substitute text placeholders in a template file;
+  \item[\yamlkey{SLHA}] write directly into \textsc{slha} blocks/entries;
+  \item[\yamlkey{File}] copy a file produced earlier by another module.
+\end{description}
+
+\noindent The most common is \yamlkey{Replace}: you keep a template with markers like
+\code{>>>M1<<<} and \Jarvis\ swaps in the value:
+
+\begin{yamlwin}
+input:
+  - name: FSInput
+    path: "&J/calculators/runtime/program/MyCode/@PackID/LesHouches.in"
+    type: "SLHA"
+    save: false
+    actions:
+      - type: "Replace"
+        variables:
+          - {name: "M1", placeholder: ">>>M1<<<"}
+          - {name: "TanBETA", placeholder: ">>>TB<<<"}
+\end{yamlwin}
+
+\section{Reading outputs}
+\label{sec:io-output}
+
+Output files are listed under \yamlkey{execution.output}. Each entry names a file, gives its
+\yamlkey{type}, and lists the \yamlkey{variables} to extract (Table~\ref{tab:io-out}).
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.42\linewidth}l@{}}
+    \toprule
+    \textbf{\yamlkey{type}} & \textbf{Reads from} & \textbf{Variable keys} \\
+    \midrule
+    \yamlkey{JSON}  & a \textsc{json} file                 & \yamlkey{name}, \yamlkey{entry} \\
+    \yamlkey{SLHA}  & standard \textsc{slha} output        & \yamlkey{name}, \yamlkey{block}, \yamlkey{entry} \\
+    \yamlkey{xSLHA} & xSLHA-parsed output (spectrum files) & \yamlkey{name}, \yamlkey{block}, \yamlkey{entry} \\
+    \yamlkey{File}  & a whole file (kept as an artifact)   & \yamlkey{name} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Output file types and their variable keys.}
+  \label{tab:io-out}
+\end{table}
+
+\noindent For example, reading a relic density and a cross-section from \textsc{json}, and two
+masses from a spectrum file:
+
+\begin{yamlwin}
+output:
+  - name: MOJson
+    path: "&J/calculators/runtime/program/microMEGAs/@PackID/out.json"
+    type: "JSON"
+    save: true
+    variables:
+      - {name: Omega_h2, entry: "relic_density"}
+      - {name: sigSI_p_pb, entry: "sigma_si_p_pb"}
+  - name: Spectr
+    path: "&J/calculators/runtime/program/MyCode/@PackID/LesHouches.out"
+    type: "xSLHA"
+    save: true
+    variables:
+      - {name: mh1, block: MASS, entry: 25}
+      - {name: mN1, block: MASS, entry: 1000022}
+\end{yamlwin}
+
+\noindent The names you declare here (\yamlkey{Omega\_h2}, \yamlkey{mh1}, \ldots) become the
+symbols used by the likelihood and downstream modules.
+
+\section{What \texttt{save} means}
+\label{sec:io-save}
+
+Every input/output entry has a \yamlkey{save} flag:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{save: true}] keep a copy of the file in the sample record under \file{SAMPLE/}.
+  \item[\yamlkey{save: false}] do not preserve the file.
+\end{description}
+
+\noindent Set \yamlkey{save: true} for files you may want to inspect later (a written input, a
+spectrum output); leave scratch files at \yamlkey{false}.
+
+\section{From observables to HDF5 and CSV}
+\label{sec:io-hdf5}
+
+\Jarvis\ stores every sample's observables in \textsc{hdf5}, alongside a schema, and can convert
+them to \textsc{csv} (Chapter~\ref{ch:outputs}):
+
+\begin{itemize}
+  \item \file{DATABASE/samples.0.hdf5} --- the structured records;
+  \item \file{DATABASE/samples.schema.json} --- how observables map to \textsc{csv} columns.
+\end{itemize}
+
+\noindent The schema controls how rich (nested) observables are flattened into a flat table. The
+flatten modes are \yamlkey{scalar}, \yamlkey{json}, \yamlkey{split}, and \yamlkey{drop}---so you
+can keep structured data in \textsc{hdf5} while exporting a tidy table for analysis.
+
+\section{Summary}
+\label{sec:io-summary}
+
+Inputs are written with \yamlkey{JSON}/\yamlkey{Dump} or \yamlkey{SLHA}/\yamlkey{Replace} (and
+\yamlkey{SLHA}/\yamlkey{File}); outputs are read with \yamlkey{JSON}, \yamlkey{SLHA},
+\yamlkey{xSLHA}, or \yamlkey{File}. \yamlkey{save} decides what is kept per sample, and
+everything you read lands in \textsc{hdf5}/\textsc{csv} for analysis.

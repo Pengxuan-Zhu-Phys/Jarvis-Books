@@ -1,0 +1,103 @@
+\chapter{Checkpoint and Resume}
+\label{ch:checkpoint}
+
+\newthought{Long scans get interrupted}---a machine reboots, a job hits its time limit, you press
+\code{Ctrl-C}. \Jarvis\ guards against losing that work by checkpointing the sampler's state, so a
+run can pick up where it left off.
+
+\section{The checkpoint file}
+\label{sec:ckpt-file}
+
+\Jarvis\ keeps a single checkpoint file per sampler, overwritten in place, at:
+
+\begin{jfiletree}
+\dirtree{%
+.1 \dtfold{<task\_root>/}.
+.2 \dtfold{checkpoints/}.
+.3 \dtfold{<scan>/}.
+.4 \dtfold{<sampler>/}.
+.5 \dtfile{state.pkl}\DTcomment{latest checkpoint}.
+}
+\end{jfiletree}
+
+\noindent Two design choices make this safe:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Atomic writes] each save goes to a temporary file and is moved into place with an atomic
+        rename, so \file{state.pkl} is never half-written---even if the process dies mid-save.
+  \item[Safe barriers] checkpoints are taken on a 30-second heartbeat, but only at points where the
+        sampler's state is internally consistent (a ``safe barrier''), never in the middle of an
+        update.
+\end{description}
+
+\begin{jnote}
+With batching (Chapter~\ref{ch:runtime-block}), a safe barrier sits on a \emph{batch boundary}: a
+checkpoint is written only once the writer has acknowledged the persisted batch and no batch is still
+in flight. That is what lets a resumed run continue without ever duplicating a point.
+\end{jnote}
+
+\section{Resuming}
+\label{sec:ckpt-resume}
+
+If you re-run a card whose checkpoint exists \emph{without} \cli{-{}-resume}, \Jarvis\ asks what to
+do:
+
+\begin{shellbox}
+Detected checkpoint file. Re-run from scratch? [y/N] (default: resume in 30s):
+\end{shellbox}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\code{y} / \code{yes}] start a \emph{fresh} run and discard the existing checkpoint.
+  \item[Enter, anything else, or 30\,s timeout] \emph{resume} from the checkpoint.
+\end{description}
+
+\noindent To resume non-interactively (in a batch job), pass \cli{-{}-resume}, which skips the
+prompt and continues from the latest checkpoint:
+
+\begin{shellbox}
+Jarvis bin/my_scan.yaml --resume
+\end{shellbox}
+
+\noindent If no checkpoint exists, \Jarvis\ simply starts fresh.
+
+\section{What is and isn't restored}
+\label{sec:ckpt-restored}
+
+On resume, \Jarvis\ is deliberate about what it trusts:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Configuration comes from the checkpoint] the run continues with the config captured when
+        the checkpoint was written, so a resumed run stays consistent with itself.
+  \item[The worker factory is rebuilt] the execution machinery is reconstructed fresh from the
+        saved blueprint.
+  \item[In-flight points are not restored] points that were still running when the run stopped are
+        not resurrected; the sampler continues from its last safe barrier.
+\end{description}
+
+\section{Inside the checkpoint}
+\label{sec:ckpt-payload}
+
+For the curious, the checkpoint is a structured record (not just a pickle blob), with sections
+for the run specification, the factory blueprint, the sampler state, and an integrity block:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\code{run\_spec}] the normalized config, scan name, task root, workflow modules.
+  \item[\code{factory\_blueprint}] worker count, workflow, and module pools to rebuild the factory.
+  \item[\code{sampler\_state}] the sampler's signature, random-number state, and (for \textsc{mcmc})
+        chains and pending samples.
+  \item[\code{integrity}] hashes and signatures used to confirm the checkpoint matches the card.
+\end{description}
+
+\begin{jnote}
+Because the checkpoint stores the random-number state and the sampler's chains, a resumed
+\textsc{mcmc} run continues its chains correctly rather than restarting them---preserving the
+statistical validity of the sampling.
+\end{jnote}
+
+\section{Summary}
+\label{sec:ckpt-summary}
+
+\Jarvis\ checkpoints each sampler to one atomically-written \file{state.pkl} on a 30-second
+safe-barrier heartbeat. Re-running prompts you to resume or restart; \cli{-{}-resume} resumes
+without asking. Resumed runs use the checkpoint's config, rebuild the factory, and drop in-flight
+points.

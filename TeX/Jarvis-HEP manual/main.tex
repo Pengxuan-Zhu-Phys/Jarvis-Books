@@ -1,0 +1,218 @@
+%==============================================================================
+% Jarvis-HEP — The Complete User & Reference Manual
+% Master file.  Build:  latexmk -pdf main.tex   (pdfLaTeX + biber)
+%
+% Class: tufte-book (kept by design decision 2026-06-13).
+%   - hyperref ENABLED (no 'nohyper') for clickable cross-refs + PDF bookmarks.
+%   - 'nobib' so we drive the bibliography with biblatex+biber ourselves.
+% Structure lives in style/ (preamble, listings, boxes) and chapters/.
+% Drafting tip: uncomment \includeonly{...} to compile a single chapter fast.
+%==============================================================================
+% symmetric -> sidenote/margin on the OUTER edge, mirrored on odd/even pages
+%             (implies twoside; the outer margin is left blank for notes).
+% openany   -> chapters start on the next page (no blank pages between chapters);
+%             part dividers are restored to a recto start below.
+\documentclass[symmetric,openany,nobib]{tufte-book}
+
+% --- Shared setup -------------------------------------------------------------
+\input{style/jarvis-preamble}
+\input{style/jarvis-listings}
+\input{style/jarvis-boxes}
+\input{style/jarvis-dirtree}    % pretty directory trees (dirtree + FontAwesome icons)
+\input{figures/version-banner}  % \JarvisVersionBanner (faithful Jarvis -v reproduction)
+
+% --- Bibliography (biblatex + biber) ------------------------------------------
+\usepackage[backend=biber, style=numeric, sorting=none]{biblatex}
+\addbibresource{jarvis.bib}
+
+% --- Index --------------------------------------------------------------------
+% The reference lookups are the curated appendices (B: YAML key index,
+% D: sampler quick reference). A full back-of-book \index is deferred until
+% \index{} entries are seeded throughout the text, so it is disabled here to
+% avoid printing an empty index.
+\usepackage{makeidx}
+%\makeindex
+
+% --- Book metadata ------------------------------------------------------------
+\title{Jarvis-HEP}
+\newcommand{\booksubtitle}{The Complete User \& Reference Manual}
+\author{Pengxuan Zhu \& the Jarvis-HEP Developers}
+\publisher{Jarvis-HEP Project}
+\date{Revised \today}
+
+% --- Custom Tufte title page (title + subtitle, no ugly hyphenation) ----------
+\makeatletter
+\renewcommand{\maketitlepage}{%
+  \begingroup
+  % Use the full Tufte measure (text block + margin) for the cover.
+  \setlength{\hsize}{\@tufte@fullwidth}\setlength{\linewidth}{\@tufte@fullwidth}%
+  \setlength{\parindent}{0pt}%
+  \nohyphenation\RaggedRight
+  {\fontsize{20}{24}\selectfont\textit{\@author}\par}
+  \vspace{1.2in}%
+  % --- Icon on the left, title + subtitle on the right (vertically centred) ---
+  \noindent
+  \begin{minipage}[c]{1.65in}%
+    \includegraphics[width=1.5in]{figures/JarvisHEP.png}%
+  \end{minipage}%
+  \hspace{0.3in}%
+  \begin{minipage}[c]{\dimexpr\linewidth-2.0in\relax}%
+    {\fontsize{42}{46}\selectfont\@title\par}%
+    \vspace{0.14in}%
+    {\fontsize{17}{21}\selectfont\itshape\booksubtitle\par}%
+  \end{minipage}\par
+  \vspace{0.6in}%
+  {\fontsize{13}{15}\selectfont\textsf{\smallcaps{\@date}}\par}
+  \vfill
+  {\fontsize{13}{15}\selectfont\textit{\@publisher}\par}
+  \thispagestyle{empty}%
+  \endgroup
+}
+\makeatother
+
+%%
+% Compact table of contents (tufte's default leaves a lot of vertical air between
+% entries; we tighten part/chapter spacing so the chapters-only ToC stays short).
+\titlecontents{part}[0pt]%
+  {\addvspace{0.9\baselineskip}\large\sffamily\bfseries}%
+  {\allcaps{Part~\thecontentslabel}\quad}{\allcaps{}}%
+  {}[\vspace{0.15\baselineskip}]
+\titlecontents{chapter}[2.6em]%
+  {\itshape}%
+  {\contentslabel{2.4em}}{}%
+  {\qquad\normalfont\thecontentspage}[\vspace{0.12\baselineskip}]
+
+%%
+% Number chapters (tufte-book leaves them unnumbered by default).  secnumdepth=0
+% numbers chapters but not sections.
+\setcounter{secnumdepth}{0}
+
+%%
+% Restore a recto start (with blank-page separation) for PART dividers, while
+% `openany' keeps chapters from inserting blank pages between themselves.
+\let\jorigpart\part
+\renewcommand{\part}{\cleardoublepage\jorigpart}
+
+% --- Compile a subset while drafting (uncomment + edit) -----------------------
+% \includeonly{chapters/01-introduction}
+
+\begin{document}
+
+%==============================================================================
+% FRONT MATTER
+%==============================================================================
+\frontmatter
+
+\maketitle
+
+% Copyright page
+\newpage
+\begin{fullwidth}
+~\vfill
+\thispagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{\baselineskip}
+\noindent Copyright \copyright\ \the\year\ The Jarvis-HEP Developers.
+
+\par This manual tracks \Jarvis\ and is revised with each release. This build documents
+\Jarvis\ \Jversion.
+
+\par\smallcaps{Released under the MIT License.}  Jarvis-HEP and this manual are
+distributed in the hope that they will be useful, but \smallcaps{without any
+warranty}; without even the implied warranty of merchantability or fitness for a
+particular purpose.
+
+\par Project home: \url{https://github.com/Pengxuan-Zhu-Phys/Jarvis-HEP}.
+\par Online docs: \url{https://pengxuan-zhu-phys.github.io/Jarvis-Docs/}.
+
+\par\textit{Manual generated \today.}
+\end{fullwidth}
+
+% Contents and lists
+\tableofcontents
+\listoffigures
+\listoftables
+
+% Preface
+\cleardoublepage
+\input{chapters/00-preface}
+
+%==============================================================================
+% MAIN MATTER
+%==============================================================================
+\mainmatter
+% Show the chapter number + title in the running head (recto). \mainmatter sets
+% \chaptermark, so we override it here to include the number.
+\renewcommand{\chaptermark}[1]{\markboth{\thechapter.\ #1}{}}
+
+\part{Getting Started}\label{part:getting-started}
+\include{chapters/01-introduction}
+\include{chapters/02-installation}
+\include{chapters/03-quickstart}
+\include{chapters/04-core-concepts}
+
+\part{The Task Card: YAML Reference}\label{part:task-card}
+\include{chapters/05-task-yaml}
+\include{chapters/06-scan-block}
+\include{chapters/07-sampling-block}
+\include{chapters/08-variables}
+\include{chapters/09-loglikelihood}
+\include{chapters/10-symbols}
+\include{chapters/11-envreqs}
+\include{chapters/12-utils}
+
+\part{Workflow Backends}\label{part:backends}
+\include{chapters/13-workflow-model}
+\include{chapters/14-calculators}
+\include{chapters/15-io-types}
+\include{chapters/16-operas}
+\include{chapters/17-libdeps}
+
+\part{Samplers}\label{part:samplers}
+\include{chapters/18-choosing-sampler}
+\include{chapters/19-basic-samplers}
+\include{chapters/20-ml-evolutionary}
+\include{chapters/21-nested}
+\include{chapters/22-mcmc-1}
+\include{chapters/23-mcmc-2}
+\include{chapters/24-mcmc-3}
+\include{chapters/25-gradient}
+\include{chapters/26-nuisance}
+\include{chapters/27-experimental}
+
+\part{Running, Monitoring \& Outputs}\label{part:running}
+\include{chapters/28-cli}
+\include{chapters/29-project-cli}
+\include{chapters/30-checkpoint}
+\include{chapters/31-outputs}
+\include{chapters/32-run-summary}
+\include{chapters/33-logging}
+
+\part{Advanced \& Performance}\label{part:advanced}
+\include{chapters/34-runtime-block}
+\include{chapters/35-performance}
+\include{chapters/36-jarvisplot}
+\include{chapters/37-jarvis-operas}
+\include{chapters/38-reproducibility}
+
+%==============================================================================
+% BACK MATTER
+%==============================================================================
+\appendix
+\part{Reference}
+\include{appendix/A-cli-table}
+\include{appendix/B-yaml-index}
+\include{appendix/C-distributions}
+\include{appendix/D-sampler-table}
+\include{appendix/E-markers-tokens}
+\include{appendix/F-glossary}
+\include{appendix/G-troubleshooting}
+\include{appendix/H-gallery}
+
+\backmatter
+
+\printbibliography[heading=bibintoc, title={Bibliography}]
+
+% \printindex  % disabled: see the note by \makeindex above
+
+\end{document}

@@ -1,0 +1,105 @@
+\chapter{LogLikelihood}
+\label{ch:loglikelihood}
+
+\newthought{\yamlkey{LogLikelihood}} is how a point gets a score. After the workflow turns a
+parameter point into observables, \Jarvis\ evaluates these expressions to decide how good the
+point is---and samplers use that score to decide what to do next.
+
+\section{The minimal form}
+\label{sec:logl-minimal}
+
+\yamlkey{LogLikelihood} lives inside \yamlkey{Sampling} and is a list of named terms. The
+simplest case is a single term:
+
+\begin{yamlwin}
+Sampling:
+  LogLikelihood:
+    - name: LogL
+      expression: "-0.5 * chi2"
+\end{yamlwin}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{name}] A stable name for the term. \Jarvis\ writes its value into the sample
+        record under this name, so you can inspect it afterwards.
+  \item[\yamlkey{expression}] A symbolic expression (Chapter~\ref{ch:symbols}) evaluated once the
+        scan variables and workflow outputs are available.
+\end{description}
+
+\begin{jnote}
+Every term you list is computed and saved---even intermediate ones---so they are all available
+for later analysis, not just the final score.
+\end{jnote}
+
+\section{Several terms at once}
+\label{sec:logl-multi}
+
+Real fits combine several constraints. List each as its own term so you can inspect them
+separately:
+
+\begin{yamlwin}
+Sampling:
+  LogLikelihood:
+    - {name: "LogL_Z", expression: "LogGauss(z, 100, 10)"}
+    - {name: "LogL_H", expression: "LogGauss(h, 125, 2)"}
+\end{yamlwin}
+
+\noindent Here \yamlkey{z} and \yamlkey{h} are observables produced by the workflow, and
+\expr{LogGauss(value, mean, error)} is a built-in Gaussian log-likelihood
+(Chapter~\ref{ch:symbols}).
+
+\section{How the total score is formed}
+\label{sec:logl-total}
+
+The total log-likelihood is stored in the standard field \yamlkey{LogL}. There are two ways it is
+set:
+
+\paragraph{Automatic sum (default)} If you do \emph{not} define a term named \yamlkey{LogL},
+\Jarvis\ adds up all your terms and stores the sum as \yamlkey{LogL}. The two-term example above
+therefore produces \yamlkey{LogL\_Z}, \yamlkey{LogL\_H}, and
+$\yamlkey{LogL} = \yamlkey{LogL\_Z} + \yamlkey{LogL\_H}$.
+
+\paragraph{Explicit total} If you \emph{do} define a term named \yamlkey{LogL}, that expression
+is used as the total. The other terms are still computed and saved, and your \yamlkey{LogL}
+expression may reference them by name:
+
+\begin{yamlwin}
+Sampling:
+  LogLikelihood:
+    - {name: "LogL_Z", expression: "LogGauss(z, 100, 10)"}
+    - {name: "LogL_H", expression: "LogGauss(h, 125, 2)"}
+    - {name: "LogL",   expression: "LogL_Z + 0.5 * LogL_H"}
+\end{yamlwin}
+
+\noindent Use the explicit form when terms should be weighted differently, or combined in any way
+other than a plain sum.
+
+\begin{jtip}
+Keep a single, clearly-named total. Downstream tools (and \JPlot) expect one \yamlkey{LogL}
+column as the overall score; the named sub-terms are there for diagnostics.
+\end{jtip}
+
+\section{What an expression may use}
+\label{sec:logl-inputs}
+
+A \yamlkey{LogLikelihood} expression can reference:
+
+\begin{itemize}
+  \item scan variables from \yamlkey{Sampling.Variables} (by their \yamlkey{name});
+  \item observables that the workflow (calculators or operas) produced;
+  \item built-in constants and functions, and your own \yamlkey{Utils} functions
+        (Chapter~\ref{ch:symbols} and Chapter~\ref{ch:utils}).
+\end{itemize}
+
+\begin{jwarn}
+Every name in an expression must already exist when the term is evaluated. If a likelihood uses
+an observable, make sure the module that produces it runs earlier in the workflow---otherwise the
+name is undefined.
+\end{jwarn}
+
+\section{Summary}
+\label{sec:logl-summary}
+
+\yamlkey{LogLikelihood} is a list of \yamlkey{name}/\yamlkey{expression} terms. Omit a
+\yamlkey{LogL} term to have \Jarvis\ sum everything automatically, or define \yamlkey{LogL}
+explicitly to control the combination. Expressions read scan variables, workflow observables, and
+the functions in Chapter~\ref{ch:symbols}.

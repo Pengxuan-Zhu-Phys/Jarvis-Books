@@ -1,0 +1,89 @@
+%==============================================================================
+% jarvis-dirtree.tex
+% Pretty directory trees for the manual, built on dirtree + fontawesome5.
+%
+% pdfLaTeX cannot render colour emoji (those need LuaLaTeX/XeLaTeX), so we use
+% FontAwesome 5 glyphs coloured in the Jarvis palette as folder/file icons.
+%
+% ICON STYLE: outline only ("regular"), never filled ("solid").  Every icon below
+% uses the [regular] variant.  Note that FontAwesome 5 *Free* ships only a limited
+% regular set: file-csv and file-contract are solid-only, so CSV uses the outline
+% spreadsheet glyph and there is no contract icon here.
+%
+% Usage:
+%   \begin{jfiletree}
+%   \dirtree{%
+%     .1 \dtfold{MyScan/}.
+%     .2 \dtfold{bin/}.
+%     .3 \dtyaml{task.yaml}.
+%     .2 \dtmark{.jarvis-project.json}\DTcomment{project marker}.
+%   }
+%   \end{jfiletree}
+%
+% \DTcomment{...} adds a right-aligned, dotted-leader annotation.
+%==============================================================================
+
+\usepackage{dirtree}
+\usepackage{fontawesome5}
+
+% Icon colours (Jarvis palette).
+\definecolor{jfolder}{HTML}{75A3FA}   % folders: Jarvis blue
+\definecolor{jfileicon}{HTML}{7B8794} % files: neutral slate
+\definecolor{jmarkicon}{HTML}{B3261E} % project markers: Jarvis red
+
+% Generic builder: an outline (regular) icon in a colour, then the monospace name.
+\newcommand{\dticon}[2]{\textcolor{#1}{#2}\hspace{0.45em}}
+
+% --- Folders (Jarvis blue) ----------------------------------------------------
+\newcommand{\dtfold}[1]{\dticon{jfolder}{\faFolder[regular]}\texttt{#1}}
+\newcommand{\dtfoldopen}[1]{\dticon{jfolder}{\faFolderOpen[regular]}\texttt{#1}}
+
+% --- Typed files (neutral slate) ----------------------------------------------
+\newcommand{\dtfile}[1]{\dticon{jfileicon}{\faFile[regular]}\texttt{#1}}        % generic file
+\newcommand{\dtcode}[1]{\dticon{jfileicon}{\faFileCode[regular]}\texttt{#1}}     % yaml/json/config/script
+\newcommand{\dtjson}[1]{\dticon{jfileicon}{\faFileCode[regular]}\texttt{#1}}     % json (alias of \dtcode)
+\newcommand{\dtcsv}[1]{\dticon{jfileicon}{\faFileExcel[regular]}\texttt{#1}}     % csv / tabular data
+\newcommand{\dtdata}[1]{\dticon{jfileicon}{\faChartBar[regular]}\texttt{#1}}     % hdf5 / results data
+\newcommand{\dtdoc}[1]{\dticon{jfileicon}{\faFile[regular]}\texttt{#1}}          % readme / markdown / text
+\newcommand{\dtimage}[1]{\dticon{jfileicon}{\faFileImage[regular]}\texttt{#1}}   % image / plot
+\newcommand{\dtpdf}[1]{\dticon{jfileicon}{\faFilePdf[regular]}\texttt{#1}}       % pdf
+\newcommand{\dtarchive}[1]{\dticon{jfileicon}{\faFileArchive[regular]}\texttt{#1}} % tar.gz / zip
+\newcommand{\dtnote}[1]{\dticon{jfileicon}{\faStickyNote[regular]}\texttt{#1}}   % note
+
+% --- Project markers (Jarvis red) ---------------------------------------------
+\newcommand{\dtmark}[1]{\dticon{jmarkicon}{\faFile[regular]}\texttt{#1}}         % .jarvis-project.json
+\newcommand{\dtyaml}[1]{\dticon{jmarkicon}{\faFileCode[regular]}\texttt{#1}}     % jarvis.project.yaml marker
+
+% Width-constrained wrapper so dirtree lays out inside the text column (its
+% dotted \DTcomment leaders run to the column's right edge).
+\newenvironment{jfiletree}
+  {\par\addvspace{0.6\baselineskip}\noindent\begin{minipage}{\linewidth}\footnotesize}
+  {\end{minipage}\par\addvspace{0.6\baselineskip}}
+
+%==============================================================================
+% Inline file/folder mentions.
+% \file{...} (defined plain in jarvis-preamble.tex) is upgraded here to prepend
+% the matching outline icon, so EVERY inline file/folder reference in the prose
+% uses the same icon set as the directory trees.  The icon is chosen from the
+% name: a trailing "/" or ">" (e.g. a "<uuid>" placeholder dir) => folder;
+% otherwise by extension; anything else => a generic file.
+%==============================================================================
+\usepackage{xstring}
+
+% half-space before the icon + icon (coloured) + half-space + path name (dark green)
+% (\, is a thin space, ~half a normal interword space)
+\newcommand{\jfilenode}[3]{\,\textcolor{#1}{#2}\,\textcolor{jPath}{\jtt{#3}}}
+
+\renewcommand{\file}[1]{%
+  \IfEndWith{#1}{/}{\jfilenode{jfolder}{\faFolder[regular]}{#1}}{%
+  \IfEndWith{#1}{>}{\jfilenode{jfolder}{\faFolder[regular]}{#1}}{%
+  \IfEndWith{#1}{.yaml}{\jfilenode{jfileicon}{\faFileCode[regular]}{#1}}{%
+  \IfEndWith{#1}{.json}{\jfilenode{jfileicon}{\faFileCode[regular]}{#1}}{%
+  \IfEndWith{#1}{.csv}{\jfilenode{jfileicon}{\faFileExcel[regular]}{#1}}{%
+  \IfEndWith{#1}{.hdf5}{\jfilenode{jfileicon}{\faChartBar[regular]}{#1}}{%
+  \IfEndWith{#1}{.md}{\jfilenode{jfileicon}{\faFile[regular]}{#1}}{%
+  \IfEndWith{#1}{.txt}{\jfilenode{jfileicon}{\faFile[regular]}{#1}}{%
+  \IfEndWith{#1}{.png}{\jfilenode{jfileicon}{\faFileImage[regular]}{#1}}{%
+  \IfEndWith{#1}{.pdf}{\jfilenode{jfileicon}{\faFilePdf[regular]}{#1}}{%
+  \jfilenode{jfileicon}{\faFile[regular]}{#1}}}}}}}}}}}%
+}

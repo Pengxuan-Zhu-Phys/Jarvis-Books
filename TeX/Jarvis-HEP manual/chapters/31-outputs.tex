@@ -1,0 +1,98 @@
+\chapter{Outputs and Data Products}
+\label{ch:outputs}
+
+\newthought{A finished run leaves a predictable tree} of files. This chapter is the map: what each
+folder holds, which file you actually analyse, and how to get a flat table out of the structured
+database.
+
+\section{The output tree}
+\label{sec:out-tree}
+
+Everything is derived from \yamlkey{Scan.name} (written \code{<scan>}):
+
+\begin{jfiletree}
+\dirtree{%
+.1 \dtfold{(project root)}.
+.2 \dtfold{outputs/<scan>/}.
+.3 \dtfold{DATABASE/}\DTcomment{the dataset you analyse}.
+.4 \dtdata{samples.0.hdf5}\DTcomment{structured records}.
+.4 \dtcsv{samples.0.csv}\DTcomment{flat CSV export}.
+.4 \dtcode{samples.schema.json}\DTcomment{column schema}.
+.4 \dtcode{running.json}\DTcomment{run metadata}.
+.4 \dtcode{archive\_manifest.jsonl}\DTcomment{sample index}.
+.3 \dtfold{SAMPLE/}\DTcomment{per-sample artifacts (archived)}.
+.3 \dtcode{run\_summary.\{json,csv,txt\}}\DTcomment{end-of-run summary}.
+.2 \dtfold{logs/<scan>/}\DTcomment{Jarvis, sampler, factory logs}.
+.2 \dtfold{images/<scan>/}\DTcomment{flowchart.json, plot configs, figures}.
+}
+\end{jfiletree}
+
+\section{DATABASE: the dataset}
+\label{sec:out-database}
+
+\file{DATABASE/} is what you analyse. It holds:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\file{samples.0.hdf5}] every sample's observables in \textsc{hdf5}---compact and fast for
+        tools.
+  \item[\file{samples.0.csv}] a flat \textsc{csv} export of the same data, for a quick look or for
+        \JPlot.
+  \item[\file{samples.schema.json}] the schema describing how observables map to \textsc{csv}
+        columns.
+  \item[\file{running.json}, \file{archive\_manifest.jsonl}] run metadata and an index of archived
+        samples.
+\end{description}
+
+\begin{jnote}
+The same \file{DATABASE/} path is used by a normal run and a \cli{-{}-check-modules} dry run; only
+the \file{SAMPLE/} side differs (a check writes under \file{SAMPLE/tests/}).
+\end{jnote}
+
+\section{SAMPLE: per-sample artifacts}
+\label{sec:out-sample}
+
+\file{SAMPLE/} keeps the working files for each sample---written inputs, read outputs, and the
+per-sample log. To stay tidy on large scans, samples are compressed into per-sample archives
+(e.g. \file{000001.tar.gz}), and \file{DATABASE/archive\_manifest.jsonl} records where each one
+went. The \yamlkey{Scan.sample\_directory} keys (Chapter~\ref{ch:scan-block}) control how many are
+kept live versus archived.
+
+\begin{jnote}
+Under the default \yamlkey{Runtime.sample\_artifacts: auto} (Chapter~\ref{ch:runtime-block}), an
+\yamlkey{Operas}-only scan leaves \file{SAMPLE/} \emph{empty on success}---per-sample folders are
+created only when a workflow needs them (a \yamlkey{Calculators} step or a \token{@Sdir} path) or
+when a point \emph{fails} (to hold its replayed log). The \file{DATABASE/} layout is identical either
+way. Set \yamlkey{sample\_artifacts: always} to restore a folder for every sample.
+\end{jnote}
+
+\section{logs and images}
+\label{sec:out-logs-images}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\file{logs/<scan>/}] the run logs---a main Jarvis log, a sampler log, and a factory log
+        (Chapter~\ref{ch:logging}).
+  \item[\file{images/<scan>/}] the semantic \file{flowchart.json} (always written), a
+        \file{flowchart.png} if \JPlot\ is installed, generated plot configs, and any figures.
+\end{description}
+
+\section{Getting a flat table}
+\label{sec:out-convert}
+
+The \textsc{hdf5} database can hold rich, nested observables, but for analysis you usually want a
+flat table. \cli{-{}-convert} (Chapter~\ref{ch:cli}) writes a \textsc{csv} snapshot---even while the
+scan is still running:
+
+\begin{shellbox}
+Jarvis bin/my_scan.yaml --convert
+\end{shellbox}
+
+\noindent How nested observables become columns is set by the schema's flatten mode---one of
+\yamlkey{scalar}, \yamlkey{json}, \yamlkey{split}, or \yamlkey{drop}---so you keep structured data
+in \textsc{hdf5} while exporting a convenient table (Chapter~\ref{ch:io-types}).
+
+\section{Summary}
+\label{sec:out-summary}
+
+Analyse \file{DATABASE/} (\textsc{hdf5} $+$ \textsc{csv} $+$ schema); per-sample files live
+(archived) under \file{SAMPLE/}; logs and the flowchart live in \file{logs/} and \file{images/};
+and \file{run\_summary.*} reports how the run went---the subject of the next chapter.

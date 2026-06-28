@@ -1,0 +1,66 @@
+\chapter{Experimental Samplers}
+\label{ch:experimental}
+
+\newthought{This chapter documents work in progress.} \sampler{RLTPMCMC} is an experimental
+sampler that uses reinforcement learning to drive parallel tempering. It is included for the
+curious and for early adopters; its interface and behaviour may change between releases.
+
+\begin{jwarn}
+\textbf{Experimental.} \sampler{RLTPMCMC} is not a stable, production sampler. Expect its keys and
+defaults to evolve, and validate results carefully against an established method before relying on
+them.
+\end{jwarn}
+
+\section{RLTPMCMC}
+\label{sec:s-rltpmcmc}
+
+\paragraph{How it works} \sampler{RLTPMCMC} starts from parallel tempering (Chapter~\ref{ch:mcmc-2}):
+several chains run at different temperatures and periodically swap states. The new idea is that a
+\emph{reinforcement-learning agent}---a \textsc{ppo} policy---watches the run and adaptively adjusts
+the tempering controls (the temperature ladder and per-chain proposal scales) to maximise a
+\emph{reward} built from exploration metrics such as effective sample size, temperature
+``round trips'', and swap success. In effect, the sampler learns how to temper itself as it goes,
+instead of using a fixed, hand-tuned ladder.
+
+\paragraph{Format} The \yamlkey{Bounds} extend the tempering keys with a temperature ladder, and
+four optional blocks tune the learning agent:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{Bounds}] \yamlkey{num\_chains}, \yamlkey{num\_iters}, \yamlkey{exchange\_interval},
+        \yamlkey{proposal\_scales}, and \yamlkey{temperature\_ladder}.
+  \item[\yamlkey{Control}] the controller (\code{none} or \code{ppo}), adaptation mode, decision
+        interval, burn-in, and proposal/temperature limits.
+  \item[\yamlkey{Reward}] weights for the reward terms (effective sample size, round trips, swaps,
+        discovery).
+  \item[\yamlkey{PPO}] the learning hyper-parameters (rollout size, epochs, learning rate, network
+        sizes, backend).
+  \item[\yamlkey{Diagnostics}] logging windows and intervals for the agent.
+\end{description}
+
+\begin{yamlwin}
+Sampling:
+  Method: "RLTPMCMC"
+  Variables: [ ... ]
+  Bounds:
+    num_chains: 8
+    num_iters: 5000
+    exchange_interval: 20
+    proposal_scales: [0.05, 0.1, 0.2, 0.4, 0.8, 1.2, 1.6, 2.0]
+    temperature_ladder: [1.0, 1.5, 2.3, 3.6, 5.5, 8.4, 13.0, 20.0]
+  Control:
+    controller: ppo
+    adaptation_mode: train
+    burnin_iters: 500
+  Reward:
+    ess_weight: 1.0
+    round_trip_weight: 0.5
+    swap_weight: 0.5
+  LogLikelihood:
+    - {name: "LogL", expression: "..."}
+\end{yamlwin}
+
+\begin{jtip}
+To run \sampler{RLTPMCMC} as plain parallel tempering (no learning), set
+\yamlkey{Control.controller} to \code{none}---a useful baseline to compare the learned controller
+against.
+\end{jtip}

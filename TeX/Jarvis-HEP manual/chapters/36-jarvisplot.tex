@@ -1,0 +1,64 @@
+\chapter{Integration: Jarvis-PLOT}
+\label{ch:jarvisplot}
+
+\newthought{\JPlot\ turns scan output into figures.} It is a separate, optional tool, but \Jarvis\
+is built to hand off to it smoothly: one command turns your task card into a plotting
+configuration you can render. This chapter covers that hand-off; \JPlot\ has its own
+documentation for the full plotting language.
+
+\section{What Jarvis-PLOT is}
+\label{sec:plot-what}
+
+With \JPlot\ you do not write plotting code---you \emph{describe a figure in \textsc{yaml}} and the
+\cmd{jplot} command loads the data, runs any transforms, and renders the image. If you know
+Matplotlib, the model is familiar: pick a \code{method} (\code{scatter}, \code{contourf},
+\ldots) and pass styling, but declaratively. Install it separately (Chapter~\ref{ch:installation}):
+
+\begin{shellbox}
+python3 -m pip install -U JarvisPLOT
+\end{shellbox}
+
+\section{The hand-off from a scan}
+\label{sec:plot-handoff}
+
+\Jarvis\ does not draw posterior figures itself; it \emph{generates a \JPlot\ configuration} from
+your task card. Run the scan, then ask \Jarvis\ for a plot config with \cli{-{}-plot}
+(Chapter~\ref{ch:cli}), and render it with \cmd{jplot}:
+
+\begin{shellbox}
+Jarvis bin/my_scan.yaml --plot
+jplot images/my_scan/my_scan.yaml
+\end{shellbox}
+
+\noindent \cli{-{}-plot} writes a starter \textsc{yaml} into \file{images/<scan>/}; you then edit
+that file to choose figures, columns, and styling, and re-run \cmd{jplot} to redraw. Because the
+config points at the run's \textsc{csv}/\textsc{hdf5} (Chapter~\ref{ch:outputs}), you can also
+snapshot a still-running scan with \cli{-{}-convert} and plot the partial results.
+
+\begin{jtip}
+\cmd{jplot -{}-parse-data} inspects the run's \textsc{csv}/\textsc{hdf5}, sanitises column names,
+and writes the discovered columns back into the plotting \textsc{yaml}---a quick way to see exactly
+which observables are available to plot.
+\end{jtip}
+
+\section{The workflow flowchart}
+\label{sec:plot-flowchart}
+
+\JPlot\ also renders the workflow flowchart. \Jarvis\ always writes the semantic
+\file{images/<scan>/flowchart.json}; if \JPlot\ is installed, \Jarvis\ asks it to render
+\file{flowchart.png} (Chapter~\ref{ch:workflow-model}). \cli{-{}-skip-draw-flowchart} skips the
+picture while still exporting the \textsc{json}.
+
+\section{Where the boundary is}
+\label{sec:plot-boundary}
+
+\Jarvis\ owns the data and the semantic config; \JPlot\ owns layout, rendering, and styling. So
+this manual stops at the hand-off: for the plotting \textsc{yaml} schema, figure types, transforms,
+and the gallery, see the \JPlot\ documentation.
+
+\section{Summary}
+\label{sec:plot-summary}
+
+Run a scan, generate a config with \cli{-{}-plot}, and render with \cmd{jplot}; \JPlot\ also draws
+the workflow \file{flowchart.png}. \Jarvis\ produces the data and the starting config; \JPlot\
+produces the figures.

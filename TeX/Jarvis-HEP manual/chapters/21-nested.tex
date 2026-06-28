@@ -1,0 +1,76 @@
+\chapter{Nested Samplers}
+\label{ch:nested}
+
+\newthought{Nested sampling} computes the Bayesian \emph{evidence} (the marginal likelihood) and
+produces posterior samples as a by-product. It is the tool of choice when you need model
+comparison or robust handling of multiple modes. \Jarvis\ offers two implementations,
+\sampler{Dynesty} and \sampler{MultiNest}, which share the same configuration.
+
+\section{The shared idea}
+\label{sec:nested-idea}
+
+Nested sampling\cite{Skilling:2006gxv} keeps a fixed set of \yamlkey{nlive} ``live points'' drawn
+from the prior. At each step it removes the live point with the \emph{lowest} likelihood---recording
+it as a posterior sample weighted by the shrinking prior volume it represented---and replaces it
+with a fresh point of \emph{higher} likelihood. Repeating this marches the live set inward through
+nested shells of increasing likelihood, accumulating the evidence integral along the way. Because
+the live set can split across separated peaks, the method handles multi-modal problems naturally.
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[More live points] $\Rightarrow$ more accurate evidence and finer posterior, but more
+        evaluations. \yamlkey{nlive} is the main accuracy/cost dial.
+\end{description}
+
+\section{Shared format}
+\label{sec:nested-format}
+
+Both samplers use the same \yamlkey{Bounds} keys:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{nlive}] the number of live points (accuracy vs.\ cost).
+  \item[\yamlkey{rseed}] random seed for reproducibility.
+  \item[\yamlkey{run\_nested}] run controls, such as \yamlkey{maxcall} (a cap on likelihood calls)
+        and \yamlkey{print\_progress} (live progress output).
+\end{description}
+
+\begin{yamlwin}
+Sampling:
+  Method: "Dynesty"
+  Variables: [ ... ]
+  Bounds:
+    nlive: 500
+    rseed: 42
+    run_nested:
+      maxcall: 200000
+      print_progress: true
+  LogLikelihood:
+    - {name: "LogL", expression: "..."}
+\end{yamlwin}
+
+\section{Dynesty}
+\label{sec:s-dynesty}
+
+\paragraph{How it differs} \sampler{Dynesty}\cite{Speagle:2019ivv} is a pure-Python dynamic
+nested sampler: it can allocate live points adaptively during the run, putting more effort into the
+posterior (or the evidence) depending on what you care about. It is a flexible default for
+moderate dimensions.
+
+\begin{jnote}
+\sampler{Dynesty} ships in the optional \code{legacy} dependency set. If it is not already present,
+install it before selecting this method (see Chapter~\ref{ch:installation}).
+\end{jnote}
+
+\section{MultiNest}
+\label{sec:s-multinest}
+
+\paragraph{How it differs} \sampler{MultiNest}\cite{Feroz:2008xx} draws new live points using
+\emph{ellipsoidal decomposition}: it wraps the current live set in one or more ellipsoids and
+samples within them. This is particularly effective for strongly multi-modal posteriors and
+curving degeneracies. It relies on the external MultiNest library being installed.
+
+\section{Reading the output}
+\label{sec:nested-output}
+
+Beyond the usual sample table, the key things to check are the reported evidence and its stability,
+and the live-point behaviour over the run. The evidence is what enables model comparison: the
+difference in log-evidence between two models is the log Bayes factor.

@@ -1,0 +1,147 @@
+\chapter{Symbolic Expressions and Markers}
+\label{ch:symbols}
+
+\newthought{Many places in a task card} take a small math \emph{expression} rather than a plain
+number---likelihood terms, derived quantities, selection conditions, and input mappings. This
+chapter lists the symbols you can use in those expressions, and the path markers that keep your
+file paths portable.
+
+\section{Where expressions are used}
+\label{sec:expr-where}
+
+You will write expressions in:
+
+\begin{itemize}
+  \item \yamlkey{Sampling.LogLikelihood} (Chapter~\ref{ch:loglikelihood});
+  \item \yamlkey{Sampling.selection} (the accept/reject condition);
+  \item calculator input actions (Chapter~\ref{ch:calculators});
+  \item \yamlkey{Operas} module inputs (Chapter~\ref{ch:operas}).
+\end{itemize}
+
+\section{Built-in constants}
+\label{sec:expr-constants}
+
+Three constants are always available:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\code{Pi}] the number $\pi$.
+  \item[\code{E}] Euler's number $e$.
+  \item[\code{Inf}] infinity.
+\end{description}
+
+\noindent For example, the expression \expr{x * Pi} multiplies the variable \yamlkey{x} by $\pi$.
+
+\section{Built-in functions}
+\label{sec:expr-functions}
+
+The most useful built-ins are the likelihood helpers and the common math functions
+(Table~\ref{tab:builtins}).
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.56\linewidth}@{}}
+    \toprule
+    \textbf{Function} & \textbf{Meaning} \\
+    \midrule
+    \expr{LogGauss(x, mean, err)} & log of a Gaussian --- the usual likelihood term \\
+    \expr{Gauss(x, mean, err)}, \expr{Normal(x, mean, err)} & the Gaussian itself \\
+    \code{sqrt}, \code{log}, \code{exp} & square root, natural log, exponential \\
+    \code{sin}, \code{cos}, \code{tan} & trigonometric functions \\
+    \code{Abs}, \code{Min}, \code{Max} & absolute value, minimum, maximum \\
+    \bottomrule
+  \end{tabular}
+  \caption{Common built-in functions.}
+  \label{tab:builtins}
+\end{table}
+
+\noindent Hyperbolic and inverse-trigonometric functions from \code{sympy} are available too. A
+typical likelihood term reads \expr{LogGauss(mh, 125.09, 3.0)}.
+
+\section{Your own and Operas functions}
+\label{sec:expr-user}
+
+Two more sources of functions become available when you configure them:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{Utils} functions] Interpolation tables and helpers you declare yourself
+        (Chapter~\ref{ch:utils}). For instance a tabulated limit curve \expr{XenonSD2019(mN1)}.
+  \item[\yamlkey{Operas} functions] Operators exposed through \yamlkey{Operas.Functions}, when
+        \Operas\ is installed (Chapter~\ref{ch:operas}).
+\end{description}
+
+\section{What an expression can read}
+\label{sec:expr-symbols}
+
+Inside any expression you may use:
+
+\begin{itemize}
+  \item the names of your scan variables (e.g. \code{m0}, \code{tanb});
+  \item observables produced by earlier workflow modules (e.g. \code{mh}, \code{Omega\_h2});
+  \item the built-in constants and functions above;
+  \item your \yamlkey{Utils} functions and any whitelisted \yamlkey{Operas} functions.
+\end{itemize}
+
+\begin{jwarn}
+A name is only usable \emph{after} it exists. If an expression reads an observable, the module
+that produces it must run earlier in the workflow.
+\end{jwarn}
+
+\section{Selection conditions}
+\label{sec:expr-selection}
+
+A \yamlkey{selection} is a true/false expression used to accept or reject a point before the
+heavy work runs:
+
+\begin{yamlwin}
+Sampling:
+  selection: "(M1 > 0) & (TanBETA < 50)"
+\end{yamlwin}
+
+\noindent Use \code{\&} for ``and'' and \code{|} for ``or''. The expression must evaluate to a
+strict boolean (true or false).
+
+\section{Path markers}
+\label{sec:expr-markers}
+
+Path markers are not math, but they belong to the same authoring vocabulary. The one you will use
+constantly is \marker{\&J}.
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\marker{\&J}] the project (task) root. If your card is \file{PROJECT/bin/task.yaml}, then
+        \marker{\&J} resolves to \file{PROJECT/}. Use it for every project-local path, e.g.
+        \code{save\_dir: "\&J/outputs"} or \code{source: "\&J/deps/program"}.
+\end{description}
+
+\noindent A leading \code{\textasciitilde} is expanded to your home directory. Plain relative
+paths resolve from the project root, while \code{./} and \code{../} resolve relative to the
+\textsc{yaml} file's own directory.
+
+\begin{jnote}
+\marker{\&J} is the only path marker the runtime resolves. For anything a scan would otherwise
+read from outside the project, keep a copy under the project (for example \marker{\&J/deps/...})
+and reference that---exactly what the built-in quick-starts do.
+\end{jnote}
+
+\section{Placeholders inside commands}
+\label{sec:expr-placeholders}
+
+Calculator and library commands accept a second kind of substitution: \emph{placeholders} written
+with \code{\$\{...\}}, which expand to config values in scope.
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\code{\$\{path\}}, \code{\$\{source\}}] the calculator's runtime path and source path.
+  \item[\code{\$\{...\}}] any other configuration value in scope.
+  \item[\token{@PackID}] a per-instance id, giving each parallel sample its own working directory
+        (Chapter~\ref{ch:core-concepts}).
+\end{description}
+
+\noindent For example: \code{installation: ["cp -r \$\{source\}/* \$\{path\}"]}.
+
+\section{Practical advice}
+\label{sec:expr-advice}
+
+\begin{itemize}
+  \item Start simple and build one observable at a time.
+  \item Prefer clear names over clever shorthand.
+  \item If an expression depends on a module output, make sure that module runs first.
+\end{itemize}

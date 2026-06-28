@@ -1,0 +1,93 @@
+\chapter{Project Management CLI}
+\label{ch:project-cli}
+
+\newthought{The \cmd{Jarvis project} commands} manage standalone projects: creating a new one,
+packaging one to share or archive, and pulling ready-made projects from the official library.
+
+\section{Overview}
+\label{sec:proj-overview}
+
+\begin{shellbox}
+Jarvis project create <name>     # scaffold a new local project
+Jarvis project pack [path]       # package a local project
+Jarvis project browse            # list official projects
+Jarvis project fetch <name>      # download an official project
+Jarvis project info <name>       # show an official project's details
+\end{shellbox}
+
+\noindent \cmd{create} and \cmd{pack} work on \emph{your} local projects; \cmd{browse},
+\cmd{fetch}, and \cmd{info} work on the \emph{official} Jarvis project library.
+
+\section{Creating a project}
+\label{sec:proj-create}
+
+\cmd{create} scaffolds a ready-to-run project---the same layout shown in
+Chapter~\ref{ch:quickstart}, with \file{bin/}, \file{data/}, \file{deps/}, the two marker files,
+and the quick-start cards:
+
+\begin{shellbox}
+Jarvis project create MyScan
+cd MyScan
+\end{shellbox}
+
+\section{Packaging a project}
+\label{sec:proj-pack}
+
+\cmd{pack} bundles a project for sharing, reproduction, or archival. The mode flag chooses how
+much to include:
+
+\begin{shellbox}
+Jarvis project pack [path] [--share | --repro | --full] [--man]
+Jarvis project pack <pack_manifest.yaml>
+\end{shellbox}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\cli{-{}-share}] (default) a lighter result-sharing package.
+  \item[\cli{-{}-repro}] an unpack-and-rerun package, for reproducing the scan.
+  \item[\cli{-{}-full}] a complete archival package.
+  \item[\cli{-{}-man}] write a \emph{manifest} (e.g. \file{pack\_20260614\_001.yaml}) describing what
+        would be packed, without creating the archive.
+\end{description}
+
+\noindent Use \file{.} for the current directory. If no mode is given, \cli{-{}-share} is used.
+Passing a manifest \textsc{yaml} as the argument packs according to its \yamlkey{project\_root},
+\yamlkey{output}, \yamlkey{include}, and \yamlkey{exclude} fields:
+
+\begin{shellbox}
+Jarvis project pack . --repro
+Jarvis project pack . --full --man      # write a manifest only
+Jarvis project pack pack_20260614_001.yaml
+\end{shellbox}
+
+\begin{jtip}
+Generate a manifest with \cli{-{}-man} first, edit its \yamlkey{include}/\yamlkey{exclude} lists to
+trim large files, then pack from that manifest---a reliable way to control exactly what ships.
+\end{jtip}
+
+\section{The official project library}
+\label{sec:proj-library}
+
+Three commands work with the curated, verified project library:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\cmd{browse}] list the available official projects.
+  \item[\cmd{info \textnormal{\textit{name}}}] show one project's metadata and description.
+  \item[\cmd{fetch \textnormal{\textit{name}}}] download a project into a local directory, ready to
+        run.
+\end{description}
+
+\begin{shellbox}
+Jarvis project browse
+Jarvis project info Example_Bridson
+Jarvis project fetch Example_Bridson
+\end{shellbox}
+
+\noindent Fetching an example is the fastest way to see a complete, working card for a particular
+sampler or workflow.
+
+\section{Summary}
+\label{sec:proj-summary}
+
+\cmd{create} starts a project, \cmd{pack} (with \cli{-{}-share}/\cli{-{}-repro}/\cli{-{}-full})
+bundles it, and \cmd{browse}/\cmd{info}/\cmd{fetch} bring in official examples. For the
+reproducibility trade-offs between the pack modes, see Chapter~\ref{ch:reproducibility}.

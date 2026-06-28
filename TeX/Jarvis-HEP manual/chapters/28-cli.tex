@@ -1,0 +1,117 @@
+\chapter{Command-Line Interface}
+\label{ch:cli}
+
+\newthought{Everything you do with \Jarvis} goes through one command, \cmd{Jarvis}. This chapter is
+the reference for its options---running a scan, converting and plotting results, monitoring a live
+run, and checking a card before you commit to it.
+
+\section{Two entry points}
+\label{sec:cli-entry}
+
+\cmd{Jarvis} has exactly two forms:
+
+\begin{shellbox}
+Jarvis <file.yaml> [options]      # run (or act on) a scan
+Jarvis project <command> [args]   # manage standalone projects
+\end{shellbox}
+
+\noindent The first runs a task card; the second manages projects and is covered in
+Chapter~\ref{ch:project-cli}. This chapter is about the first.
+
+\section{Running a scan}
+\label{sec:cli-run}
+
+With no options, \cmd{Jarvis} runs the scan described by the card:
+
+\begin{shellbox}
+Jarvis bin/my_scan.yaml
+\end{shellbox}
+
+\section{The options}
+\label{sec:cli-options}
+
+Table~\ref{tab:cli} lists every option. They fall into general flags, workflow utilities that act
+on a run, and run-mode switches.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.60\linewidth}@{}}
+    \toprule
+    \textbf{Option} & \textbf{What it does} \\
+    \midrule
+    \cli{-h}, \cli{-{}-help}    & show usage and exit \\
+    \cli{-v}, \cli{-{}-version} & print the banner and installed version \\
+    \cli{-{}-refs}             & print full reference information \\
+    \cli{-d}, \cli{-{}-debug}   & lower the log level to \code{debug} (verbose) \\
+    \cli{-{}-resume}           & resume from the latest checkpoint without prompting (Ch.~\ref{ch:checkpoint}) \\
+    \cli{-{}-convert}          & convert the live \textsc{hdf5} database to \textsc{csv} \\
+    \cli{-{}-plot}             & generate a \JPlot\ configuration from the card \\
+    \cli{-{}-monitor}          & open a real-time resource monitor for a running scan \\
+    \cli{-{}-check-modules}    & test-run a few samples to validate calculators/modules \\
+    \cli{-{}-benchmark [s]}    & run a throughput benchmark (default 30\,s) \\
+    \cli{-{}-skip-library-installation} & skip the \yamlkey{LibDeps} install step \\
+    \cli{-{}-skip-draw-flowchart} & skip the \textsc{png} flowchart (still writes \file{flowchart.json}) \\
+    \bottomrule
+  \end{tabular}
+  \caption{The \cmd{Jarvis} command-line options.}
+  \label{tab:cli}
+\end{table}
+
+\section{Utilities that act on a run}
+\label{sec:cli-utilities}
+
+Three options operate on an \emph{existing} run rather than starting a fresh scan---typically in a
+second terminal while a long scan is going:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\cli{-{}-convert}] Snapshot the current \textsc{hdf5} database into \textsc{csv} so you can
+        inspect partial results (or feed \JPlot) without stopping the scan.
+  \item[\cli{-{}-plot}] Write a \JPlot\ \textsc{yaml} for the run; render it with \cmd{jplot}
+        (Chapter~\ref{ch:jarvisplot}).
+  \item[\cli{-{}-monitor}] Open a live resource monitor that refreshes every few seconds; press
+        \code{q} to quit.
+\end{description}
+
+\begin{jwarn}
+\cli{-{}-convert} and \cli{-{}-monitor} work on a \emph{live or finished} run's data. In
+particular, \cli{-{}-monitor} attaches to the running process, so start it while the scan is
+running---the process is gone once the scan ends.
+\end{jwarn}
+
+\section{Checking a card before a full run}
+\label{sec:cli-check}
+
+\cli{-{}-check-modules} runs a small test scan (a handful of samples) so you can confirm your
+calculators install, run, and produce the expected observables---before launching millions of
+points:
+
+\begin{shellbox}
+Jarvis bin/my_scan.yaml --check-modules
+\end{shellbox}
+
+\noindent It writes its per-sample artifacts under \file{outputs/<scan>/SAMPLE/tests/} (the
+\file{DATABASE/} path is shared with a normal run), so a check never pollutes real results.
+
+\section{Measuring throughput}
+\label{sec:cli-benchmark}
+
+\cli{-{}-benchmark} runs the machinery in a throughput mode for a fixed number of seconds (default
+30) and reports points-per-second---useful for tuning workers and comparing machines
+(Chapter~\ref{ch:performance}):
+
+\begin{shellbox}
+Jarvis bin/my_scan.yaml --benchmark 60
+\end{shellbox}
+
+\noindent As well as printing the rate, it writes a \file{benchmark.json} with the measured
+\code{samples\_per\_sec}, the wall time, and the submitted/completed/failed counts---a reproducible
+record you can compare across machines or settings.
+
+\section{Where to go next}
+\label{sec:cli-next}
+
+\begin{itemize}
+  \item Project scaffolding and packaging: Chapter~\ref{ch:project-cli}.
+  \item Resuming an interrupted scan: Chapter~\ref{ch:checkpoint}.
+  \item What the run produced: Chapter~\ref{ch:outputs}.
+\end{itemize}

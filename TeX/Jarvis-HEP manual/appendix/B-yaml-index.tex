@@ -1,0 +1,65 @@
+\chapter{Complete YAML Key Index}
+\label{app:yaml-index}
+
+\newthought{Every task-card key in one place}, grouped by block, with the chapter that documents
+it. Sampler-specific \yamlkey{Bounds} keys are summarised in Appendix~\ref{app:sampler-table}.
+
+\footnotesize
+\setlength{\LTpre}{0.6\baselineskip}\setlength{\LTpost}{0.6\baselineskip}
+\begin{longtable}{@{}p{0.30\linewidth}p{0.52\linewidth}p{0.10\linewidth}@{}}
+\toprule
+\textbf{Key} & \textbf{Meaning} & \textbf{Ch.} \\
+\midrule
+\endhead
+\multicolumn{3}{@{}l}{\textbf{\yamlkey{Scan}}}\\
+\quad\yamlkey{name}            & run name (becomes the output folder)           & \ref{ch:scan-block} \\
+\quad\yamlkey{save\_dir}       & where output folders are created               & \ref{ch:scan-block} \\
+\quad\yamlkey{sample\_directory} & \yamlkey{limit}, \yamlkey{width}, \yamlkey{archive\_samples} & \ref{ch:scan-block} \\
+\addlinespace
+\multicolumn{3}{@{}l}{\textbf{\yamlkey{Sampling}}}\\
+\quad\yamlkey{Method}         & sampler name                                    & \ref{ch:sampling-block} \\
+\quad\yamlkey{Variables}      & scan parameters (\yamlkey{name}, \yamlkey{distribution}) & \ref{ch:variables} \\
+\quad\yamlkey{distribution.type} & \yamlkey{Flat}/\yamlkey{Log}/\yamlkey{Normal}/\yamlkey{Log-Normal}/\yamlkey{Logit} & \ref{ch:variables} \\
+\quad\yamlkey{Bounds}         & sampler-specific dials                          & \ref{app:sampler-table} \\
+\quad\yamlkey{LogLikelihood}  & named scoring terms (\yamlkey{name}, \yamlkey{expression}) & \ref{ch:loglikelihood} \\
+\quad\yamlkey{selection}      & boolean accept/reject expression                & \ref{ch:symbols} \\
+\quad\yamlkey{Nuisance}       & inner nuisance step (\sampler{Profile1D})       & \ref{ch:nuisance} \\
+\addlinespace
+\multicolumn{3}{@{}l}{\textbf{\yamlkey{EnvReqs}}}\\
+\quad\yamlkey{OS}             & accepted operating systems                      & \ref{ch:envreqs} \\
+\quad\yamlkey{Python}         & \yamlkey{version} and \yamlkey{Dependencies}    & \ref{ch:envreqs} \\
+\quad\yamlkey{Check\_default\_dependencies} & merge a shared default env card    & \ref{ch:envreqs} \\
+\quad\yamlkey{CERN\_ROOT}     & optional \textsc{root} requirement              & \ref{ch:envreqs} \\
+\addlinespace
+\multicolumn{3}{@{}l}{\textbf{\yamlkey{Calculators}}}\\
+\quad\yamlkey{make\_paraller} & worker count (legacy spelling)                  & \ref{ch:calculators} \\
+\quad\yamlkey{Modules}        & \yamlkey{name}, \yamlkey{required\_modules}, \yamlkey{clone\_shadow}, \yamlkey{path}, \yamlkey{source} & \ref{ch:calculators} \\
+\quad\yamlkey{installation} / \yamlkey{initialization} & prepare / reset commands    & \ref{ch:calculators} \\
+\quad\yamlkey{execution}      & \yamlkey{path}, \yamlkey{commands}, \yamlkey{input}, \yamlkey{output} & \ref{ch:calculators} \\
+\quad\yamlkey{timeout}        & total seconds per sample execution              & \ref{ch:calculators} \\
+\quad(I/O) \yamlkey{type}/\yamlkey{actions}/\yamlkey{save} & JSON/SLHA/xSLHA, Dump/Replace & \ref{ch:io-types} \\
+\addlinespace
+\multicolumn{3}{@{}l}{\textbf{\yamlkey{Operas}}}\\
+\quad\yamlkey{make\_paraller} & worker count                                    & \ref{ch:operas} \\
+\quad\yamlkey{Functions}      & expose operators to expressions                 & \ref{ch:operas} \\
+\quad\yamlkey{Modules}        & \yamlkey{operator}, \yamlkey{call\_mode}, \yamlkey{input}, \yamlkey{kwargs}, \yamlkey{output} & \ref{ch:operas} \\
+\addlinespace
+\multicolumn{3}{@{}l}{\textbf{\yamlkey{LibDeps}}}\\
+\quad\yamlkey{path}, \yamlkey{make\_paraller} & shared root and build parallelism & \ref{ch:libdeps} \\
+\quad\yamlkey{Modules}        & \yamlkey{name}, \yamlkey{required\_modules}, \yamlkey{installed}, \yamlkey{installation} & \ref{ch:libdeps} \\
+\addlinespace
+\multicolumn{3}{@{}l}{\textbf{\yamlkey{Utils}}}\\
+\quad\yamlkey{interpolations\_1D} & table-based functions (\textsc{csv} or inline) & \ref{ch:utils} \\
+\addlinespace
+\multicolumn{3}{@{}l}{\textbf{\yamlkey{Runtime}} (optional)}\\
+\quad\yamlkey{mode}           & \code{auto}/\code{thread}/\code{process} (auto = thread today) & \ref{ch:runtime-block} \\
+\quad\yamlkey{writer}         & \code{auto}/\code{thread}/\code{process} \textsc{hdf5} writer  & \ref{ch:runtime-block} \\
+\quad\yamlkey{workers}        & process-worker count (\code{0} = auto)         & \ref{ch:runtime-block} \\
+\quad\yamlkey{batch\_size}    & points per batch (default \code{256}; \code{1} = v1) & \ref{ch:runtime-block} \\
+\quad\yamlkey{writer\_record\_batch\_size} & process writer: records per flush (\code{100}) & \ref{ch:runtime-block} \\
+\quad\yamlkey{writer\_record\_flush\_interval} & process writer: max seconds between flushes (\code{5.0}) & \ref{ch:runtime-block} \\
+\quad\yamlkey{sample\_artifacts} & \code{auto}/\code{always}/\code{never}         & \ref{ch:runtime-block} \\
+\quad\yamlkey{Subprocess}     & external-command scheduler knobs                & \ref{ch:runtime-block} \\
+\bottomrule
+\end{longtable}
+\normalsize

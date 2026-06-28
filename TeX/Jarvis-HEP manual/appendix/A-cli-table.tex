@@ -1,0 +1,61 @@
+\chapter{CLI Flag Reference}
+\label{app:cli-table}
+
+\newthought{A one-page lookup} for the \cmd{Jarvis} command. For the full discussion see
+Chapter~\ref{ch:cli} (scan options) and Chapter~\ref{ch:project-cli} (project commands).
+
+\section{Scan options}
+\label{sec:app-cli-scan}
+
+\begin{shellbox}
+Jarvis <file.yaml> [options]
+\end{shellbox}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.58\linewidth}@{}}
+    \toprule
+    \textbf{Option} & \textbf{Effect} \\
+    \midrule
+    \cli{-h}, \cli{-{}-help}    & show usage and exit \\
+    \cli{-v}, \cli{-{}-version} & print banner and installed version \\
+    \cli{-{}-refs}             & print full reference information \\
+    \cli{-d}, \cli{-{}-debug}   & verbose (\code{debug}-level) logging \\
+    \cli{-{}-resume}           & resume from the latest checkpoint, no prompt \\
+    \cli{-{}-convert}          & convert the \textsc{hdf5} database to \textsc{csv} \\
+    \cli{-{}-plot}             & generate a \JPlot\ config from the card \\
+    \cli{-{}-monitor}          & real-time resource monitor (live run) \\
+    \cli{-{}-check-modules}    & test-run a few samples to validate modules \\
+    \cli{-{}-benchmark [s]}    & throughput benchmark (default 30\,s) \\
+    \cli{-{}-skip-library-installation} & skip the \yamlkey{LibDeps} install step \\
+    \cli{-{}-skip-draw-flowchart} & skip the \textsc{png} flowchart (keeps \file{flowchart.json}) \\
+    \bottomrule
+  \end{tabular}
+  \caption{Scan-mode options.}
+  \label{tab:app-cli-scan}
+\end{table}
+
+\section{Project commands}
+\label{sec:app-cli-project}
+
+\begin{shellbox}
+Jarvis project <command> [arguments]
+\end{shellbox}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.55\linewidth}@{}}
+    \toprule
+    \textbf{Command} & \textbf{Effect} \\
+    \midrule
+    \cmd{create} \textit{name}    & scaffold a new local project \\
+    \cmd{pack} \textit{[path]} \cli{-{}-share}\,$|$\,\cli{-{}-repro}\,$|$\,\cli{-{}-full} \cli{[-{}-man]} & package a project (default \cli{-{}-share}) \\
+    \cmd{pack} \textit{manifest.yaml} & package from a manifest \\
+    \cmd{browse}                  & list official projects \\
+    \cmd{info} \textit{name}      & show an official project's details \\
+    \cmd{fetch} \textit{name}     & download an official project \\
+    \bottomrule
+  \end{tabular}
+  \caption{\cmd{Jarvis project} commands.}
+  \label{tab:app-cli-project}
+\end{table}
