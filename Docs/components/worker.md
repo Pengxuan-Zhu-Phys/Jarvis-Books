@@ -3,9 +3,8 @@
 **Role**: the long-lived process that does all real work. Pulls one Sample at a time from
 Redis, runs its workflow (same-layer calculators concurrent), and hands the result to the
 Archiver. Holds calculator instances and Opera functions for its whole lifetime.
-**Status**: **D1.1 implemented** (opera + likelihood MVP on `jarvis2`); **D1.2 partially
-implemented** (calculator steps in-process, local `pack_id`); D2.1+ (free-pool, layer
-concurrency, clone_shadow) not yet built.
+**Status**: **D1.1 + D1.2 implemented** on `jarvis2` (opera + calculator + likelihood
+single-Worker path); D2.1+ (Redis free-pool, layer concurrency, clone_shadow) not yet built.
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §4 (Locked
 decision); discussions `worker_design.md` (primary), `Jarvis_HEP_High_Concurrency_Design_Blueprint.md`.
 **Reuses V1**: `CalculatorModule` (`jarvishep/Module/calculator.py`), `AsyncSubprocessScheduler`
@@ -163,9 +162,12 @@ time — concurrency is **within** the Sample only (invariant #6).
 5. **Factory read-only** — `_collect_latest_status` issues zero Redis writes on idle ticks.
 
 `tests/test_worker_calculator.py` (D1.2):
-4. **Calculator parity** — 1 Worker on `tests/parity_project` (`--check-modules` scale) →
+1. **Calculator parity** — 1 Worker on `tests/parity_project` (`--check-modules` scale) →
    DATABASE + SAMPLE trees equal to the V1 golden.
-5. **Token resolution** — `@Sdir`/`@PackID` resolve under the per-Sample save dir.
+2. **Token resolution** — `@Sdir` resolves per-Sample save dir; `pack_id` traceable in result.
+3. **Held calculators** — `CalculatorModule.from_config_list` + `preload_templates()` at Worker
+   startup; `execute(sample_info)` per calculator step.
+4. **Failure path** — unknown calculator module submits `Failed` result.
 
 `tests/test_worker_pool.py` / `test_layer_concurrency.py` (D2):
 6. **Free-pool cap** — a heavy calculator never exceeds `make_paraller` across 2+ Workers
