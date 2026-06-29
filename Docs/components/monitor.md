@@ -3,7 +3,8 @@
 **Role**: a read-only, independent view of a running scan. Reads the Factory's
 `op_count`-driven snapshot (or Redis directly) and renders Sampler / Factory / Workers /
 Calculators / Samples / Resources at up to 60 Hz. Also the source of `run_summary`.
-**Status**: design — plan WP-D5.2 (depends on D5.1 snapshot).
+**Status**: **D5.2 implemented** on `jarvis2` — `SnapshotReader` + `--monitor` CLI + frozen
+`run_summary` writer; Textual TUI remains optional future work.
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §6;
 discussion `factory_design.md` §6/§8, Blueprint §6 (independent monitor process).
 **Reuses V1**: the run-summary contract (`docs/specs/RUN_SUMMARY_METRICS.md`, frozen) and,
@@ -38,10 +39,10 @@ class MonitorView:
     samples: dict        # running/completed/failed
     resources: dict      # cpu/mem/fd (sampled locally)
 
-class Dashboard:                            # Textual app (thin UI over SnapshotReader)
-    def compose(self): ...
-    def on_mount(self): self.set_interval(1/10, self.refresh_view)
-    def refresh_view(self): ...
+def format_monitor_view(view: MonitorView) -> str: ...   # text snapshot (D5.2 MVP)
+def attach_reader(*, factory=None, redis=None) -> SnapshotReader: ...
+
+# Optional future: Textual Dashboard at 10 FPS (not shipped in D5.2)
 ```
 
 ---

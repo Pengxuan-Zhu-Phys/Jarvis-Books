@@ -2,10 +2,10 @@
 
 **Role**: Worker-process manager + Redis initializer + read-only status snapshot provider +
 monitor center. It does **not** execute tasks, hold calculators, or own Sample objects.
-**Status**: **D1.1 implemented** on `jarvis2` — lifecycle (spawn/stop) + `op_count`-gated
-monitor snapshot (~120 Hz updater, 60 Hz-safe `get_monitor_snapshot`) are live;
-watchdog/respawn (D6.1) and `get_run_metrics` (D5.2) are not yet implemented. Sections below
-mark each remaining gap.
+**Status**: **D1.1 + D5.1 implemented** on `jarvis2` — lifecycle (spawn/stop) + `op_count`-gated
+monitor snapshot (~120 Hz updater, 60 Hz-safe `get_monitor_snapshot`) + `get_run_metrics` (D5.2)
+are live; watchdog/respawn (D6.1) is not yet implemented. Sections below mark each remaining
+gap.
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §6;
 discussion `factory_design.md` (primary), Blueprint §6 (independent monitor).
 **Reuses V1**: replaces the singleton thread-pool `WorkerFactory` (`jarvishep/factory.py`),
@@ -51,6 +51,8 @@ class TaskFactory:
         self._last_op_counts: dict[str, int] = {}
         self._updater_thread: threading.Thread | None = None
         self._running = False
+        self._run_started_at: float | None = None
+        self._peak_workers_alive = 0
         self._logger = get_jarvis_logger("factory")
 ```
 
@@ -78,6 +80,7 @@ singleton; `reset_instance()` is a test helper).
 | `stop_all_workers` | `(*, graceful=True, join_timeout=30.0) -> None` | `graceful`: `SIGTERM` (via `request_worker_shutdown`) + join; then force-`terminate()` + short join for any survivors; clears the list. |
 | `request_worker_shutdown` | `() -> None` | Send `SIGTERM` to each live Worker pid (finish current Sample, then exit). |
 | `get_monitor_snapshot` | `() -> dict` | In-memory `deepcopy(self._snapshot)` under the lock; no Redis call. |
+| `get_run_metrics` | `() -> dict` | Project `submitted`/`ok`/`failed` + worker counts for `run_summary` (D5.2). |
 | `start_monitor` | `(*, update_hz=120.0) -> None` | Launch `_start_snapshot_updater` (idempotent if already alive). |
 | `_start_snapshot_updater` | `(*, update_hz=120.0) -> None` | Background daemon loop at ~100–120 Hz; replaces `_snapshot` under the lock. |
 | `_collect_latest_status` | `() -> dict` | Build one snapshot: local Worker rows + `op_count`-gated Redis sections (see §4). |
@@ -90,7 +93,7 @@ singleton; `reset_instance()` is a test helper).
 | Method | WP | Status |
 |--------|----|--------|
 | `start_watchdog` / `_respawn_worker` | D6.1 | not present — heartbeat-staleness + respawn + in-flight re-queue. |
-| `get_run_metrics` | D5.2 | not present — run_summary projection. |
+
 
 ---
 
@@ -187,7 +190,7 @@ def _collect_latest_status(self) -> dict:
 - **Independent monitor process** *(design goal)*: the snapshot is reconstructable purely from
   Redis, so `Jarvis2 --monitor --pid N` can attach from another process/host reading the same
   keys (Blueprint §6) — the in-memory snapshot is an optimization, not the only source. (The
-  `--monitor` reader itself is D5.2.)
+  `--monitor` reader is D5.2 — see [monitor.md](monitor.md).)
 
 ---
 
@@ -200,18 +203,19 @@ def _collect_latest_status(self) -> dict:
 - **Worker** receives the picklable config + connection settings from `start_workers`; everything
   else flows through Redis (§3a, §5).
 - **Monitor / dashboard** reads `get_monitor_snapshot()` (or Redis directly).
-- **run_summary** *(D5.2)* will read `get_run_metrics()` at shutdown — not implemented yet.
+- **run_summary** *(D5.2)* reads `get_run_metrics()` via `Jarvis2Core.write_run_summary()` at
+  shutdown (optional `shutdown(write_run_summary=True)`).
 
 ---
 
 ## 7. Tests
 
-**Current (D1.1):** lifecycle + `op_count`-gated snapshot coverage under `fakeredis` + real spawn —
-`start_workers(n)` spawns live processes; `start_monitor` populates `_snapshot`;
-`get_monitor_snapshot()` is a pure in-memory read; `shutdown` joins all Workers (no orphan),
-stops the monitor thread, and closes Redis.
+**Current (D1.1 + D5.1):** lifecycle + `op_count`-gated snapshot coverage under `fakeredis` + real
+spawn — `start_workers(n)` spawns live processes; `start_monitor` populates `_snapshot`;
+`get_monitor_snapshot()` is a pure in-memory read; `get_run_metrics()` projects sample stats;
+`shutdown` joins all Workers (no orphan), stops the monitor thread, and closes Redis.
 
-**Covered in D1.1 tests (`tests/test_worker_mvp.py`):**
+**Covered in D1.1 tests (`tests/test_worker_mvp.py`) + D5.1 (`tests/test_monitor_snapshot.py`):**
 1. **op_count gating** — idle ticks skip `HGETALL`; subsystem refresh follows `op_count` bump.
 2. **Snapshot latency** — `get_monitor_snapshot()` is pure memory; 60 Hz loop over it does not
    touch the server.
