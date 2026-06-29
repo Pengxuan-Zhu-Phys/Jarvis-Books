@@ -2,10 +2,9 @@
 
 **Role**: Worker-process manager + Redis initializer + read-only status snapshot provider +
 monitor center. It does **not** execute tasks, hold calculators, or own Sample objects.
-**Status**: **D1.1 + D5.1 implemented** on `jarvis2` — lifecycle (spawn/stop) + `op_count`-gated
-monitor snapshot (~120 Hz updater, 60 Hz-safe `get_monitor_snapshot`) + `get_run_metrics` (D5.2)
-are live; watchdog/respawn (D6.1) is not yet implemented. Sections below mark each remaining
-gap.
+**Status**: **D1.1 + D5 + D6.1 implemented** on `jarvis2` — lifecycle (spawn/stop) +
+`op_count`-gated monitor snapshot (~120 Hz updater, 60 Hz-safe `get_monitor_snapshot`) +
+`get_run_metrics` (D5.2) and watchdog/respawn (D6.1) are live.
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §6;
 discussion `factory_design.md` (primary), Blueprint §6 (independent monitor).
 **Reuses V1**: replaces the singleton thread-pool `WorkerFactory` (`jarvishep/factory.py`),
@@ -27,8 +26,8 @@ keeping its run-metrics shape where the contract requires.
    default ~120 Hz) keeps an in-memory `_snapshot` fresh via **`op_count`-gated** incremental
    fetches — idle subsystems cost one `GET` per kind plus always-cheap `LLEN` queue reads;
    `get_monitor_snapshot()` is an in-memory `deepcopy` (60 Hz-safe, no Redis on the read path).
-4. **Watchdog** *(D6.1 — not implemented)*: detect stale Worker heartbeats; sweep held slots;
-   re-queue in-flight Samples; respawn.
+4. **Watchdog** *(D6.1 — implemented)*: detect stale/dead Worker heartbeats; sweep held calc
+   slots; re-queue in-flight Samples (bounded retries); respawn a replacement Worker.
 
 Read/write separation: during a normal run, **Workers and the Sampler are the only writers**;
 the Factory only reads. This keeps it off the hot path entirely.
@@ -92,7 +91,7 @@ singleton; `reset_instance()` is a test helper).
 
 | Method | WP | Status |
 |--------|----|--------|
-| `start_watchdog` / `_respawn_worker` | D6.1 | not present — heartbeat-staleness + respawn + in-flight re-queue. |
+| `start_watchdog` / `_handle_worker_failure` | D6.1 | implemented — heartbeat-staleness + respawn + in-flight re-queue. |
 
 
 ---
@@ -182,9 +181,9 @@ def _collect_latest_status(self) -> dict:
   live Worker (`request_worker_shutdown`), joins them (force-`terminate()` after the grace
   period), then **closes the Redis client** and drops the handle. A Worker that receives
   `SIGTERM` finishes its current Sample before exiting (signal handler flips `_is_running`).
-- **Worker death** *(D6.1 — not implemented)*: there is currently **no watchdog/respawn**. A
-  Worker that dies mid-Sample is simply gone; recovery (stale-heartbeat detection, slot sweep,
-  in-flight re-queue, respawn) lands in D6.1.
+- **Worker death** *(D6.1 — implemented)*: the watchdog detects process exit or stale
+  `last_heartbeat` while `busy`/`starting`, sweeps `held_calc_packs`, re-queues the in-flight
+  task (up to `Runtime.Watchdog.max_sample_retries`), and respawns a replacement Worker.
 - **Redis loss**: the monitor updater logs the exception and continues the loop; it never crashes
   the control process. Workers/Sampler surface the hard error on their own path.
 - **Independent monitor process** *(design goal)*: the snapshot is reconstructable purely from
@@ -198,7 +197,7 @@ def _collect_latest_status(self) -> dict:
 
 - **`Jarvis2Core.init_factory`** (see [core.md](core.md)) creates/obtains the singleton, reuses
   the core's Redis client (or `init_redis()`), then `start_workers(Runtime.workers)` +
-  `start_monitor(update_hz=120.0)`. *(No `start_watchdog` yet — D6.1.)*
+  `start_monitor(update_hz=120.0)` + `start_watchdog()` from `Runtime.Watchdog`.
 - **Sampler** writes tasks to Redis directly (Factory does not relay).
 - **Worker** receives the picklable config + connection settings from `start_workers`; everything
   else flows through Redis (§3a, §5).
