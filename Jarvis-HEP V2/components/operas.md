@@ -8,8 +8,8 @@
 [worker.md](worker.md), [module_base.md](module_base.md).
 **Reuses V1**: none by import. Operator catalog reuses the standalone **Jarvis-Operas** package.
 
-> **As-built:** `operator` resolves via **Jarvis-Operas registry first**, then importlib dotted
-> path. Upgrading Operas can add catalog operators without a HEP release. Optional extra:
+> **As-built:** `operator` resolves via **importlib first**, then the Jarvis-Operas registry.
+> Upgrading Operas can add catalog operators without a HEP release. Optional extra:
 > `pip install 'jarvishep2[operas]'`.
 
 ---
@@ -48,7 +48,7 @@ Lightweight Operas executor with Worker-side preload.
 
 | Function | Behavior |
 |----------|----------|
-| `resolve_operator(path, call_mode=…)` | Jarvis-Operas registry → importlib; raise `ValueError` if neither works. |
+| `resolve_operator(path, call_mode=…)` | importlib → Jarvis-Operas registry; raise `ValueError` if neither works. |
 | `_resolve_dotted_callable(path)` | import a dotted callable. |
 | `_try_jarvis_operas_registry` / `_wrap_operas_registry_operator` | optional Operas integration. |
 | `_resolve_entry(data, entry)` | dotted lookup into a mapping. |

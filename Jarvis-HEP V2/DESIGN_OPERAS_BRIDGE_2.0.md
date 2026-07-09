@@ -37,15 +37,17 @@ The catalog of physics/helper operators lives in **Jarvis-Operas** (`helper.eggb
 ```
 operator string
     │
-    ├─1─ if jarvis_operas importable AND registry.resolve_name(operator) succeeds
-    │       → wrap registry.call / registry.acall
+    ├─1─ try importlib dotted callable (fast; no Operas bootstrap)
     │
-    ├─2─ else try importlib dotted callable
+    ├─2─ else if jarvis_operas importable AND registry.resolve_name(operator) succeeds
+    │       → wrap registry.call / registry.acall
     │
     └─3─ else raise ValueError with both paths explained
 ```
 
-**Why Operas first:** names like `helper.eggbox` look like dotted imports but are **not** Python modules under that path. Trying importlib first would raise confusing `ModuleNotFoundError`.
+**Why importlib first:** Worker preload of local operators (e.g. `jarvishep2.testing…`) must not
+pay the cost of bootstrapping the full Operas catalog. Catalog names like `helper.eggbox2d`
+fail importlib quickly (`ModuleNotFoundError`) and then resolve via the registry.
 
 ---
 

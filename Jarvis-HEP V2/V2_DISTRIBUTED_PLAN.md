@@ -122,7 +122,7 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D9.5 | `Jarvis2Core` cleanup: golden verification → tests/, check_modules column inference   | D9        | D8.2             | todo                                   |            | Review §4.2 (F6); fixes YAML_REFERENCE A.7. After D8. |
 | D9.6 | `Sample` single source of truth (`info` becomes projection)                           | D9        | D9.1, D9.3       | todo                                   |            | Review §4.2 (F4). Highest risk; last. |
 | D9.7 | `FixedSetSampler` template base + absorb `stateless_batch` helpers                    | D9        | —                | todo                                   |            | Review §4.2 (F9); resolves YAML_REFERENCE A.11 `length` inconsistency. |
-| D9.8 | Smells sweep (import cycle, Archiver `from_config`, dead imports, ABC)               | D9        | —                | todo                                   |            | Review §4.2 (F11–F13). |
+| D9.8 | Smells sweep (import cycle, Archiver `from_config`, dead imports, ABC)               | D9        | —                | **done**                               | 2026-07-10 | `parse_registered_executables` owned by command_parser; Archiver `from_config`/`has_pending`; factory/worker_config import cleanup; `CheckpointedSampler.at_safe_barrier` ABC. |
 
 Parallelism note: D0.1 / D0.2 / D0.3 are independent and may proceed in any order. D3.3 is
 independent of the rest of D3. D8.3 is independent of D8.1/D8.2 and may land first; the
