@@ -20,7 +20,8 @@ Docs/
 ├── V2_DISTRIBUTED_PLAN.md          ← execution playbook (milestones D0–D9)
 ├── DESIGN_PORTAL_IO_2.0.md         ← Jarvis-Portal calculator IO bridge (formats without HEP releases)
 ├── YAML_REFERENCE_2.0.md           ← as-built task-YAML reference (every key, defaults, gaps)
-├── YAML_EXAMPLE_ADAPTIVE_LEVEL_SET.md ← skeleton YAML for AdaptiveLevelSet (placeholders only)
+├── YAML-Example/                   ← public YAML recipes (per method)
+│   └── ADAPTIVE_LEVEL_SET.md       ← AdaptiveLevelSet: full Sampling block + key tables
 ├── CODE_REVIEW_2.0.md              ← functional-completeness review (scope gaps, tests, risks)
 ├── DEVELOPMENT_REVIEW_2026-07-10.md ← current development status, bugs, priorities, next phases
 ├── DESIGN_PRINCIPLES_REVIEW_2.0.md ← SOLID/DRY/pattern review + D9 refactor work packages
