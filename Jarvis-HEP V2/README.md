@@ -20,7 +20,9 @@ Docs/
 ├── V2_DISTRIBUTED_PLAN.md          ← execution playbook (milestones D0–D9)
 ├── DESIGN_PORTAL_IO_2.0.md         ← Jarvis-Portal calculator IO bridge (formats without HEP releases)
 ├── YAML_REFERENCE_2.0.md           ← as-built task-YAML reference (every key, defaults, gaps)
+├── YAML_EXAMPLE_ADAPTIVE_LEVEL_SET.md ← skeleton YAML for AdaptiveLevelSet (placeholders only)
 ├── CODE_REVIEW_2.0.md              ← functional-completeness review (scope gaps, tests, risks)
+├── DEVELOPMENT_REVIEW_2026-07-10.md ← current development status, bugs, priorities, next phases
 ├── DESIGN_PRINCIPLES_REVIEW_2.0.md ← SOLID/DRY/pattern review + D9 refactor work packages
 ├── DESIGN_AGENT_BRIDGE_2.0.md      ← V2 ↔ Jarvis-Agent bridge: Agent API + native hep_* tools
 ├── Jarvis-Agent_Design_Document.md ← the upper orchestration layer (local MLX-LM agent)
@@ -31,6 +33,12 @@ Docs/
 ```
 
 ## Read in this order
+
+> **Current status (2026-07-10):** start with
+> [`DEVELOPMENT_REVIEW_2026-07-10.md`](DEVELOPMENT_REVIEW_2026-07-10.md). It reviews HEAD
+> `63f012f`, records the 236-collected (235 passed, 1 flowchart-export skip) baseline, D8/D9
+> progress, current bugs, and the recommended execution order. `CODE_REVIEW_2.0.md` remains the
+> historical `d0de31a` baseline.
 
 1. [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md) — **single source of truth.** The
    full architecture, the three binding decisions (Redis-first, slow-regime-first, worker =
