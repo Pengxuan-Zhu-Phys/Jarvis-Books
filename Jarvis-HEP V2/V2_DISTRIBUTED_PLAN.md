@@ -1,7 +1,7 @@
 # V2 Distributed Runtime — Development Plan (Agent Execution Playbook)
 
-Last updated: 2026-06-29 (D0–D7 closed — distributed runtime acceptance gates green;
-`Jarvis2` full run CLI remains the post-plan integration milestone — see `components/cli.md`).
+Last updated: 2026-07-10 (D0–D7 closed; D8 Agent Bridge 0/4; D9 has 6 done + 2 partial.
+Current review and next priorities: `DEVELOPMENT_REVIEW_2026-07-10.md`).
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -78,7 +78,8 @@ user-visible behavior.
 | **D6** | Resume + failure handling | heartbeats, dead-Worker respawn, in-flight re-queue, RNG spawning, distributed checkpoint |
 | **D7** | Acceptance | slow-regime gates: worker scaling, archive latency, 256-Worker chaos, parity |
 | **D8** | Agent Bridge (machine-readable control surface for Jarvis-Agent) | additive `--json` verbs (`--validate`/`--results`/`--status`/`--version-json`), `run_state.json` lifecycle file, SIGINT/SIGTERM graceful-stop contract; frozen human CLI untouched. Design: [`DESIGN_AGENT_BRIDGE_2.0.md`](DESIGN_AGENT_BRIDGE_2.0.md) |
-| **D9** | Architecture Hardening (behavior-preserving refactors) | token resolution single-owner, dead async twins removed, `CalculatorModule`/`TaskFactory`/`Jarvis2Core` de-godded, sampler/IO registries (extension points for MCMC + SLHA), `Sample.info` single source of truth. All WPs keep 207 tests + golden parity green. Design + WP details: [`DESIGN_PRINCIPLES_REVIEW_2.0.md`](DESIGN_PRINCIPLES_REVIEW_2.0.md) §4 |
+| **D9** | Architecture Hardening (behavior-preserving refactors) | token resolution single-owner, dead async twins removed, `CalculatorModule`/`TaskFactory`/`Jarvis2Core` de-godded, sampler/IO registries (extension points for MCMC + SLHA), `Sample.info` single source of truth. Current baseline: 236 collected (235 passed, 1 flowchart-export skip) + golden parity; D9.4/D9.6 remain partial. Design + WP details: [`DESIGN_PRINCIPLES_REVIEW_2.0.md`](DESIGN_PRINCIPLES_REVIEW_2.0.md) §4 |
+| **D10** | Adaptive Level-Set Sampler (first feedback-driven sampler, 2 ≤ d ≤ 5) | opt-in `hep:feedback` result channel (zero cost when off), `AdaptiveLevelSetSampler`: low-discrepancy gen-0 → crossing detection on a neighbor graph (exact Delaunay ridges d≤3 / approximate kNN d=4–5) → barrier-synchronized edge refinement → `levelset.json`; registered `stateless=False`; deterministic across worker counts; checkpoint at generation barriers; d≥6 rejected. Design: [`components/adaptive_voronoi_contour.md`](components/adaptive_voronoi_contour.md) |
 
 ---
 
@@ -123,6 +124,12 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D9.6 | `Sample` single source of truth (`info` becomes projection)                           | D9        | D9.1, D9.3       | **partial**                            | 2026-07-10 | `merge_observables` / `set_status` / `record_pack_id` write APIs; Worker uses them. Full `info` projection deferred. |
 | D9.7 | `FixedSetSampler` template base + absorb `stateless_batch` helpers                    | D9        | —                | **done**                               | 2026-07-10 | Bridson/Random/Grid share FixedSetSampler; batch flush on base. |
 | D9.8 | Smells sweep (import cycle, Archiver `from_config`, dead imports, ABC)               | D9        | —                | **done**                               | 2026-07-10 | `parse_registered_executables` on command_parser; Archiver `from_config`/`has_pending`; ABC barrier. |
+
+| D10.1 | `hep:feedback` channel: `publish_feedback`/`pull_feedback`, worker flag, drain-on-resume | D10       | —                | **done**                               | 2026-07-11 | `FEEDBACK_QUEUE`, worker `publish_feedback` opt-in (auto-on for AdaptiveLevelSet). |
+| D10.2 | Sampler core (d=2 flagship): generation loop, `NeighborGraph` + `DelaunayGraph`, crossing detection, deterministic edge-refinement budget; `core.run_adaptive` dispatch for `stateless=False` | D10       | D10.1            | **done**                               | 2026-07-11 | `adaptive_level_set.py`; `core.run_adaptive_scan`; registered `stateless=False`. |
+| D10.3 | Finalize + outputs (d=2): polyline chaining, `levelset.json`, PLOT overlay hook       | D10       | D10.2            | **partial**                            | 2026-07-11 | `levelset.json` + polylines_u; PLOT overlay hook deferred. |
+| D10.4 | Determinism + checkpoint/resume + core test suite (§9.1–9.8); YAML_REFERENCE §6.9 entry | D10       | D10.2            | **partial**                            | 2026-07-11 | Tests: circle 2D, seed reproducibility, kNN vs Delaunay, feedback unit, d=5 Sobol smoke; full Hausdorff efficiency gate / YAML_REFERENCE deferred. |
+| D10.5 | Dimension extension d=3–5: `KNNGraph` proximity mode, Sobol gen-0 (d=5; Bridson grid is ~344 MB at d=5 — C10), d=3 crossing cloud, slice projections, §9.9–9.10 tests | D10       | D10.2            | **partial**                            | 2026-07-11 | KNNGraph + Sobol d=5 gen-0 + slice_projections in finalize; dedicated d=3/d=4 fixture tests deferred. |
 
 Parallelism note: D0.1 / D0.2 / D0.3 are independent and may proceed in any order. D3.3 is
 independent of the rest of D3. D8.3 is independent of D8.1/D8.2 and may land first; the

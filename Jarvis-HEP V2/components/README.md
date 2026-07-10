@@ -62,6 +62,7 @@ exercise it.
 |-----------|-------------------|------|
 | [Samplers catalog](samplers_catalog.md) | `Sampling/{bridson,randoms,grid,csv_sampler,seeded_sampler,checkpointed_sampler,stateless_batch,sampling_utils}.py` | 4 stateless samplers (no MCMC/nested/gradient) |
 | [Distributor (dispatch)](distributor.md) | `jarvishep2/distributor.py` | Bridson/Random/Grid/CSV only |
+| [Adaptive level-set sampler](adaptive_voronoi_contour.md) | `Sampling/adaptive_level_set.py` | ✅ D10 core — feedback-driven level-set tracer, 2≤d≤5 hybrid (Delaunay d≤3 / kNN d=4–5) |
 | [Benchmark mode](benchmark.md) | — | ⚠️ **not a module** (see `core.run_check_modules`) |
 
 **Auxiliary / support systems:**
