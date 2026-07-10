@@ -1,5 +1,9 @@
 # Jarvis-HEP V2 代码评审报告（CODE_REVIEW_2.0）
 
+> **历史基线提示（2026-07-10）：** 本文评审的是旧提交 `d0de31a`，其中“仅 JSON I/O”、
+> 207/210 tests、旧模块结构等结论已经部分失效。当前状态、Bug 与改进路线请以
+> [`DEVELOPMENT_REVIEW_2026-07-10.md`](DEVELOPMENT_REVIEW_2026-07-10.md) 为准。
+
 > 评审对象：`jarvishep2`（独立包，`2.0.0.dev0`），分支 `jarvis2`，最新提交 `d0de31a`。
 > 评审方式：对 `jarvishep2/` 全量源码（50 个模块、约 75 个类）的静态通读 + 结构清单核对，
 > 配合 `tests/`（26 个测试文件、约 210 个 `test_` 函数）。本次评审同时把
