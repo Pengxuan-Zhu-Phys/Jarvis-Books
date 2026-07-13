@@ -9,8 +9,10 @@
 **Reuses V1**: none by import. Operator catalog reuses the standalone **Jarvis-Operas** package.
 
 > **As-built:** `operator` resolves via **importlib first**, then the Jarvis-Operas registry.
-> Upgrading Operas can add catalog operators without a HEP release. Optional extra:
-> `pip install 'jarvishep2[operas]'`.
+> Upgrading Operas can add catalog operators without a HEP release. **Jarvis-Operas is a core
+> dependency** of `jarvishep2` (D12.0); the `[operas]` extra is only a deprecated install alias.
+> Expression-function discovery is gated on formula fields only (`expression` / `selection` /
+> `target_expression`), not calculator `cmd` / path strings.
 
 ---
 

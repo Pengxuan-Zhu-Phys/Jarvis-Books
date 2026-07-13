@@ -41,16 +41,11 @@
 
 ## 3. 提交前应修复的问题（按严重度排序）
 
-### 3.1 Operas 误触发：正则扫描范围过宽（中高）
+### 3.1 Operas 误触发：正则扫描范围过宽（中高） — **已修 (D12.0)**
 
-`operas_functions.expression_uses_operas_function` 用 `\b\w+(\.\w+)+\s*\(` 在**整个配置子树**上递归匹配：
+`operas_functions.expression_uses_operas_function` 曾用 `\b\w+(\.\w+)+\s*\(` 在**整个配置子树**上递归匹配，把 calculator `cmd` 也当成公式。
 
-- `Sampling/sampler.py` 的 `set_config` 扫 `self.config` 全量；
-- `worker.py` 的 `_init_runtime` 扫 `opera_modules + calculator_modules + likelihood_expressions` 全量——**包含 calculator 的 `cmd` 字符串**。
-
-后果：calculator 命令里的任何点号调用（如 `python3 -c "numpy.savetxt(...)"`、`awk 'BEGIN{...}' f.txt` 中的 `xxx.yyy(`、shell 函数）都会令 `build_operas_expression_context(required=True)` 抛 `ImportError`，即使任务根本不用 Operas 表达式。**修复建议**：只扫描真正的表达式字段（`Operas.Modules[].input[].expression`、`LogLikelihood[].expression`、`selection`、Portal Dump `variables[].expression`），不要扫 `cmd`/`path`/`installation` 等命令与路径字段。
-
-> **用户决议（2026-07-14）**：Jarvis-Operas 升级为 V2 **核心依赖**（从 `[operas]` extra 移入 `pyproject.toml` 主依赖），装 V2 即自动安装。最坏后果（ImportError 起不来）随之消失，本项严重度降为**顺手修**。扫描收窄仍保留在 D12.0：误判会触发不必要的 entry-point 发现（启动开销），且"任务是否使用 Operas 表达式"的判断本身应当准确。同步改动：README 插件表、INSTALL.md 安装说明中 Operas 不再是 extra。
+> **落地（2026-07-14 / D12.0）**：(1) `Jarvis-Operas` 已进 `pyproject.toml` **核心依赖**；`[operas]` extra 仅兼容别名。(2) 扫描只在调用方传入的公式字符串，或映射键 `expression` / `selection` / `target_expression` 下做匹配；嵌套容器递归时默认不把裸字符串当公式。README / INSTALL / `components/operas.md` 已同步。
 
 ### 3.2 registry 快照绕过 `registry.call` 的调用协议（中）
 
