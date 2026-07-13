@@ -2,15 +2,15 @@
 
 **Role**: lightweight, multiprocess-safe logging in two layers — top-level process logs and
 per-Sample detailed logs — over the standard library (no loguru).
-**Status**: **As-built** top layer + core sample file/buffer @ `jarvis2` `d0de31a`
-(`logging/toplevel.py` 220 + `sample_logger.py` 251 + `log_kv.py` 56). **Target gap**: V1's
+**Status**: **As-built** @ `jarvis2` **D12.2** — V1 visual formatter (`·•·` / `Ϡ`), scan-scoped
+main log path, logo banner; QueueListener architecture unchanged (D0.3). Remaining gaps: V1
 check-modules console mirroring and calculator command-block ownership (this doc §3–§4) are not
-yet landed in V2 `sample_logger.py` / `Sample.sample_console`.
-**Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §9; discussion
-`jarvis_hep_logging_design.md`.
-**Reuses V1**: none by import — the per-Sample sink/replay is a **fresh reimplementation** keeping
-the V1 sample-log file format verbatim. The console + command-block contract below is the V1
-surface finalized 2026-07-09 and is the V2 target.
+yet fully landed in V2 `sample_logger.py` / `Sample.sample_console`.
+**Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §9;
+[`../PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](../PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md) §5.1.
+**Reuses V1**: none by import — top-level rendering and per-Sample sink/replay are **fresh
+reimplementations** of the V1 visual contract. Logo template lives at `jarvishep2/card/logo`
+with `jarvishep2/versioning.py`.
 
 ---
 
@@ -40,20 +40,23 @@ Module state: `_state` dict (configured/listener/log_queue/log_path), `JARVIS_HE
 ### Classes
 | Class | Base | Purpose / key methods |
 |-------|------|-----------------------|
-| `JarvisContextFormatter` | `logging.Formatter` | `format()` appends bound context as sorted `key=value`. |
-| `JarvisLoggerAdapter` | `logging.LoggerAdapter` | `process()` merges bound `extra` into the record; `bind(**ctx)` returns a new adapter with merged context. |
-| `_JarvisColoredFormatter` | `colorlog.ColoredFormatter` | (defined inside `_make_console_handler`) color console + context suffix; used only when `colorlog` is importable. |
+| `JarvisContextFormatter` | `logging.Formatter` | V1 visual layout: `\n·•· {module}\n\t-> {MM-DD HH:mm:ss.SSS} - [LEVEL] >>>\n{message}` (+ trailing `key=value` context). `raw=True` → message passthrough. `Ϡ` bullet when module is `Jarvis-HEP.hdf5-Writter`. Optional ANSI colorize on TTY. |
+| `JarvisLoggerAdapter` | `logging.LoggerAdapter` | `process()` merges bound `extra`; remaps V1 `module=` onto non-reserved `jarvis_module` (stdlib forbids overwriting `LogRecord.module`). `bind(**ctx)` returns a new adapter. |
 
 ### Functions
 | Function | Behavior |
 |----------|----------|
-| `format_record_context(record) -> str` | render non-standard record fields as sorted `key=value` (skips `_`-prefixed and stdlib keys). |
+| `format_record_context(record) -> str` | render non-standard record fields as sorted `key=value` (skips reserved / presentation keys). |
 | `_resolve_level(level) -> int` | name/int → logging level (default INFO). |
-| `_make_console_handler(*, level) -> Handler` | `StreamHandler(stderr)`; color via `colorlog` if present, else `JarvisContextFormatter`. |
-| `_make_file_handler(*, log_path, level, max_bytes, backup_count) -> RotatingFileHandler` | rotating file sink with context formatter. |
-| `setup_jarvis_logging(*, level="INFO", console=True, role="jarvis", log_dir="logs", max_bytes=100MiB, backup_count=7, use_queue=True) -> str` | configure the `jarvis_hep` domain **once per process**: console + rotating file at `logs/jarvis_<role>_<pid>.log`, optionally behind a `QueueHandler`+`QueueListener`; idempotent (shuts down first); registers `atexit`; returns the log path. |
+| `_make_console_handler(*, level) -> Handler` | `StreamHandler(stderr)` + V1 formatter with colorize. |
+| `_make_file_handler(*, log_path, level, max_bytes, backup_count) -> RotatingFileHandler` | rotating file sink; default max **5 MiB** (V1 rotation). |
+| `setup_jarvis_logging(*, level="INFO", console=True, role="jarvis", log_dir="logs", log_path=None, max_bytes=5MiB, backup_count=7, use_queue=True) -> str` | configure the `jarvis_hep` domain **once per process**: console + rotating file; `log_path` if set else `logs/jarvis_<role>_<pid>.log`; QueueHandler+QueueListener when `use_queue`; returns the log path. |
 | `shutdown_jarvis_logging() -> None` | stop the queue listener, drain, reset `_state`. |
-| `get_jarvis_logger(name="jarvis") -> JarvisLoggerAdapter` | qualified adapter under the `jarvis_hep` domain. |
+| `get_jarvis_logger(name="jarvis") -> JarvisLoggerAdapter` | qualified adapter under the `jarvis_hep` domain, bound with `jarvis_module=name`. |
+
+**Control-process layout (D12.2):** `Jarvis2Core.init_logger` writes
+`<task_root>/logs/<scan>/<scan>.log`, prints the logo banner via `render_logo_with_version()`,
+and binds `module=Jarvis-HEP`.
 
 ---
 
