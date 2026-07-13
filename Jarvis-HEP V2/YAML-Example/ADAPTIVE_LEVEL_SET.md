@@ -7,8 +7,9 @@ Public-facing task-YAML example for **`Sampling.Method: AdaptiveLevelSet`**
 - **Design**: [`components/adaptive_voronoi_contour.md`](../components/adaptive_voronoi_contour.md)
 - **Full key inventory** (all methods): [`YAML_REFERENCE_2.0.md`](../YAML_REFERENCE_2.0.md)
 
-Other top-level blocks (`Runtime`, `Calculators`, `Operas`, …) are placeholders only.
-**`Sampling` is fully specified** below for documentation use.
+Other top-level blocks (`EnvReqs`, `Calculators`, `Operas`, …) are shown only as needed.
+**`Sampling` is fully specified** below for documentation use. Redis is an internal V2
+broker (local `127.0.0.1:6379`); it is not configured in task YAML.
 
 ---
 
@@ -21,13 +22,13 @@ Scan:
   name: levelset-01
   # …
 
-Runtime:
-  mode: redis                    # distributed AdaptiveLevelSet requires redis
-  workers: 4                     # Worker count; also used as batch_size fallback
-  batch_size: 256                # submit-group size (sampler submit batches)
-  # sample_artifacts: auto
-  # redis: { host, port, db, … }
-  # …
+EnvReqs:
+  V2:
+    workers: 4                   # Worker count (default 0 → factory uses 1)
+    batch_size: 256              # submit-group size (sampler submit batches)
+  # Check_default_dependencies:  # optional V1-shaped defaults merge (§ YAML_REFERENCE §4.1)
+  #   required: true
+  #   default_yaml_path: "&J/deps/environment_default.yaml"
 
 Sampling:
   # ============================================================
@@ -76,10 +77,11 @@ Sampling:
 
     # ---- required ----------------------------------------------------------
     target_expression: "LogL"    # REQUIRED (non-empty string)
-                                 # sympy expression over *returned* observables
-                                 # (and variable names). Compiled like Likelihood:
-                                 # sympify + lambdify. Avoid free symbols named
-                                 # E / I / pi / gamma / … (sympy collisions).
+                                 # expression over *returned* observables
+                                 # (and variable names). Compiled via shared
+                                 # ExpressionContext (same as Likelihood).
+                                 # Avoid free symbols named E / I / pi / gamma / …
+                                 # (remaining sympy collision caveat).
     target_value: -2.9957        # REQUIRED (float); level-set f(obs) = target_value
                                  # e.g. 95% CL in ΔLogL units
 
@@ -185,14 +187,14 @@ Likelihood:
 | `slice_pairs` | no | list of `[name, name]` | all pairs | d≥4 projections in `levelset.json` |
 | `simplify_tolerance` | no | float | off | d=2 polish hook (parsed) |
 
-### Related runtime keys (not under `Sampling`, but affect this method)
+### Related scheduling keys (not under `Sampling`, but affect this method)
 
 | Key | Effect |
 |-----|--------|
-| `Runtime.mode: redis` | Required for distributed AdaptiveLevelSet |
-| `Runtime.workers` | Worker count; default for submit batch sizing |
-| `Runtime.batch_size` | Sampler submit-group size (default 256 after normalize) |
+| `EnvReqs.V2.workers` | Worker process count (factory uses 1 when ≤ 0) |
+| `EnvReqs.V2.batch_size` | Sampler submit-group size (default 256 after normalize) |
 
+Distributed AdaptiveLevelSet always uses the internal Redis runtime (local service required).
 Workers set `publish_feedback: true` automatically when `Method: AdaptiveLevelSet` (no YAML flag).
 
 ---
@@ -229,10 +231,10 @@ Typical `levelset.json` fields: `dim`, `mode`, `target_expression`, `target_valu
 project_name: circle-levelset
 Scan:
   name: circle-r2
-Runtime:
-  mode: redis
-  workers: 2
-  batch_size: 8
+EnvReqs:
+  V2:
+    workers: 2
+    batch_size: 8
 Sampling:
   Method: AdaptiveLevelSet
   Seed: 7

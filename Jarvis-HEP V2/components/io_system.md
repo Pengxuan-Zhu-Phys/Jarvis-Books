@@ -2,7 +2,7 @@
 
 **Role**: the calculator **Layer-1 I/O** — write a calculator's input file and read its output file.
 Per-Sample, per-Module file traffic inside the Worker.
-**Status**: **As-built** @ Portal integration (2026-07-10). Formats are delegated to **Jarvis-Portal**.
+**Status**: **As-built** @ `jarvis2` `0a5e85e` (Portal integration + Dump expressions via ExpressionContext).
 **Design refs**: [`../DESIGN_PORTAL_IO_2.0.md`](../DESIGN_PORTAL_IO_2.0.md),
 [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §5;
 [calculator.md](calculator.md), [paths_tokens.md](paths_tokens.md).
@@ -22,7 +22,7 @@ Per-Sample, per-Module file traffic inside the Worker.
 | `get_io_registry()` | Process-local cached Portal registry (`create_entry_point_registry`). |
 | `reset_io_registry_for_tests()` | Drop cache (tests only). |
 | `available_io_formats(direction=None)` | List registered format names. |
-| `evaluate_io_expression(expression, values)` | HEP-owned sympy eval (`Pi`/`pi`, numeric coerce). Passed into Portal as `IOContext.evaluate_expression`. |
+| `evaluate_io_expression(expression, values)` | shared `ExpressionContext` evaluation (`Pi`/`pi`/`PI`, standard functions, numeric-string coercion); passed into Portal as `IOContext.evaluate_expression` |
 | `build_io_context(...)` | Map sample/module/pack fields → `jarvis_portal.IOContext`. |
 | `write_io_input` / `write_io_input_sync` | Resolve format → `adapter.write_input`. |
 | `read_io_output` / `read_io_output_sync` | Resolve format → `adapter.read_output`. |
@@ -78,6 +78,8 @@ Unknown or empty `type` raises. Sync path uses `asyncio.run` when no event loop 
 ## 4. Concurrency / failure semantics
 
 - Registry is process-local; each spawn Worker builds once on first use.
+- Calculator Dump expressions share a process-local compiled-expression cache; the first use
+  compiles, subsequent Samples and Calculator modules reuse the callable.
 - No silent skip of non-JSON types.
 - Missing Portal package → `ImportError` with install hint.
 - Adapter/file errors propagate to fail the Sample (Worker continues).

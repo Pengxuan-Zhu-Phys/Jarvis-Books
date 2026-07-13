@@ -17,13 +17,20 @@ calculators run concurrently inside a Sample) → async NAS Archiver → HDF5/CS
 Docs/
 ├── README.md                       ← you are here (master index)
 ├── DESIGN_2.0_DISTRIBUTED.md       ← architecture, single source of truth
-├── V2_DISTRIBUTED_PLAN.md          ← execution playbook (milestones D0–D9)
+├── V2_DISTRIBUTED_PLAN.md          ← execution playbook — **open work only** (D8, D11, D12 + partials)
+├── PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md ← prototype closeout review + D12 (Calculator/UX parity) design
+├── archive/                        ← completed WPs moved out of the plan (full ledger notes + WP details)
+│   └── V2_PLAN_ARCHIVE_2026-07-14.md ← D0–D7 all, D9/D10/D11 done rows; frozen history, read on demand only
 ├── DESIGN_PORTAL_IO_2.0.md         ← Jarvis-Portal calculator IO bridge (formats without HEP releases)
 ├── YAML_REFERENCE_2.0.md           ← as-built task-YAML reference (every key, defaults, gaps)
 ├── YAML-Example/                   ← public YAML recipes (per method)
 │   └── ADAPTIVE_LEVEL_SET.md       ← AdaptiveLevelSet: full Sampling block + key tables
 ├── CODE_REVIEW_2.0.md              ← functional-completeness review (scope gaps, tests, risks)
 ├── DEVELOPMENT_REVIEW_2026-07-10.md ← current development status, bugs, priorities, next phases
+├── USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md ← current UI + PLOT/Portal/Operas review
+├── EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md ← first unmodified V1 YAML full-run gate
+├── V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md ← complete 38-function Expression Core migration
+├── OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md ← external registered function discovery
 ├── DESIGN_PRINCIPLES_REVIEW_2.0.md ← SOLID/DRY/pattern review + D9 refactor work packages
 ├── DESIGN_AGENT_BRIDGE_2.0.md      ← V2 ↔ Jarvis-Agent bridge: Agent API + native hep_* tools
 ├── Jarvis-Agent_Design_Document.md ← the upper orchestration layer (local MLX-LM agent)
@@ -35,19 +42,24 @@ Docs/
 
 ## Read in this order
 
-> **Current status (2026-07-10):** start with
-> [`DEVELOPMENT_REVIEW_2026-07-10.md`](DEVELOPMENT_REVIEW_2026-07-10.md). It reviews HEAD
-> `63f012f`, records the 236-collected (235 passed, 1 flowchart-export skip) baseline, D8/D9
-> progress, current bugs, and the recommended execution order. `CODE_REVIEW_2.0.md` remains the
-> historical `d0de31a` baseline.
+> **Current status (2026-07-14):** prototype phase closed — start with
+> [`PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md)
+> (next theme: **D12** Calculator V1 parity + UX). Code baseline `jarvis2` **`0a5e85e`**
+> (283 passed / 1 skipped): shared `ExpressionContext`, full V1 lightweight function core,
+> Operas dynamic discovery, `EnvReqs.V2` scheduling surface (top-level `Runtime` rejected),
+> AdaptiveLevelSet D10 core. Acceptance trail:
+> [`EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md`](EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md)
+> (first unmodified V1-style Bridson+Operas full run). UI gaps:
+> [`USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md`](USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md).
+> Open work only in [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md); completed WPs in
+> `archive/`. `DEVELOPMENT_REVIEW_2026-07-10.md` / `CODE_REVIEW_2.0.md` are historical.
 
 1. [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md) — **single source of truth.** The
    full architecture, the three binding decisions (Redis-first, slow-regime-first, worker =
    long-lived process), §0.1 the single-runtime-path rule, §11 what is reused from V1, §12 what
    is retired, §13 the consolidated open questions.
-2. [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md) — **the execution playbook.** Milestones
-   D0–D7, work packages with file paths, acceptance gates, progress ledger. Start here to pick
-   up the next task.
+2. [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md) — **the execution playbook (open work only).**
+   D8 / D9 partials / D10 polish / D11 / D12. Completed ledger history is in `archive/`.
 3. [`components/`](components/) — **per-class design docs** (one file per class: Sample,
    RedisQueue, Logger, UMapper, Workflow, Worker, Calculator, Factory, Sampler, Archiver, Core,
    the module/IO backends, the samplers, and the V1-style helper subsystems — CLI, expression

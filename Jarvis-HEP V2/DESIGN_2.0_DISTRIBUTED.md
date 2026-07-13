@@ -231,6 +231,9 @@ and managed by TaskFactory. Design source: `discussions/worker_design.md`.
 - an **Opera function cache** (`importlib` once at startup),
 - a **per-Worker `AsyncSubprocessScheduler`** (`jarvishep/async_subprocess.py`, reused as-is)
   for same-layer calculator concurrency.
+- process-local **`ExpressionContext` caches**: Operas inputs and Likelihood terms compile at
+  Worker initialization; Calculator/Portal Dump expressions compile on first use. Every later
+  Sample evaluates immutable `CompiledExpression` objects.
 
 **Main loop** (one Sample at a time):
 
@@ -273,6 +276,22 @@ Blueprint's semaphore + `pack_id` model. `pack_id` is preserved for traceability
 - `CalculatorModule.preload_templates()` — load templates once at Worker startup.
 - `CalculatorModule.execute(sample_info)` — thin synchronous convenience entry reusing the
   existing `run_command` async machinery.
+
+### 4.1 Shared expression runtime
+
+All small YAML formulas use `jarvishep2.expression.ExpressionContext`; no component owns a
+second `sympify`/`lambdify` implementation. `ExpressionContext.compile(text, symbols=...)`
+returns an immutable `CompiledExpression` containing its sorted dependencies and numerical
+callable. The context cache key is expression text plus the explicit symbol contract.
+
+The same standard namespace applies to Operas inputs, Likelihood, Calculator/Portal Dump
+variables, sampler `selection`, and AdaptiveLevelSet targets. It contains the complete frozen
+V1 lightweight surface: 38 log/exponential, trigonometric, hyperbolic, general-math, and
+Gaussian/Heaviside functions plus `Pi/E/Inf` (and V2 `pi/PI` aliases). Domain wrappers retain
+their public errors and result coercion. The authoritative inventory is
+[`V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md`](V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md).
+Contexts and compiled callables are process-local runtime state: they are never placed in Redis
+or checkpoints and are rebuilt from YAML/config after `spawn` or resume.
 
 ---
 

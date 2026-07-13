@@ -7,17 +7,20 @@ identifies where the level-set passes, and refinement batches are spent **only**
 crossings until the level-set is resolved to a preset precision. The neighbor graph is
 **exact Delaunay adjacency for d ≤ 3** (the Bridson–Voronoi flagship) and an **approximate
 kNN graph for d = 4–5** (the pragmatic "details reasonable, not perfect" regime).
-**Status**: ✅ **Implemented** on `jarvis2` (2026-07-11) — `jarvishep2/Sampling/adaptive_level_set.py`,
+**Status**: ✅ **Implemented** on `jarvis2` @ `0a5e85e` / earlier D10 landing — `adaptive_level_set.py`,
 `hep:feedback` channel, `Distributor` registration `AdaptiveLevelSet` (`stateless=False`).
-Milestone **D10** (D10.1–D10.5 core paths).
+Target expressions use shared `ExpressionContext`. YAML inventory: §6.9 of
+[`YAML_REFERENCE_2.0.md`](../YAML_REFERENCE_2.0.md) and
+[`YAML-Example/ADAPTIVE_LEVEL_SET.md`](../YAML-Example/ADAPTIVE_LEVEL_SET.md).
+Milestone **D10** (D10.1–D10.5 core paths; 10.3–10.5 partial polish remains).
 **Origin**: maintainer's Bridson + Voronoi adaptive-contour idea, elaborated in two external
 drafts (2026-07-11: 2-D detailed design; same day: dimension-hybrid extension) and
 **corrected here against the as-built runtime** — the deltas from those drafts are listed in
 §2 and are binding.
 **Design refs**: [sampler.md](sampler.md), [samplers_catalog.md](samplers_catalog.md),
 [checkpoint.md](checkpoint.md), [distributor.md](distributor.md),
-[redis_queue.md](redis_queue.md), [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md)
-§3/§11, [`../YAML_REFERENCE_2.0.md`](../YAML_REFERENCE_2.0.md) (key conventions).
+[redis_queue.md](redis_queue.md), [expression.md](expression.md),
+[`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §3/§11.
 **Related but distinct**: Jarvis-PLOT's `likelihood_report` (PLOT bridge) does *post-hoc*
 Voronoi cell analysis of a finished scan; this sampler puts the same geometric idea *in the
 proposal loop* — the two share intuition, not code.
@@ -63,7 +66,7 @@ drafts.
 | # | Draft said | As-built reality / correction |
 |---|---|---|
 | C1 | Active cells found by reading `points[v].f` for `v in voronoi.regions[i]` | **Bug.** `regions[i]` indexes into `voronoi.vertices` (geometric Voronoi vertices) — those carry no `f`; `f` lives on the input **sites**. Use **`voronoi.ridge_points`** (pairs of neighboring site indices, = Delaunay edges): a ridge `(i, j)` is *crossing* iff `(f_i − t)·(f_j − t) ≤ 0`. See §4.3 |
-| C2 | `ExpressionEngine(...).compile(...)` | No `ExpressionEngine` exists ([expression.md](expression.md)). Compile the target expression exactly like `likelihood.py` does: `sp.sympify(expr, locals=…)` + `lambdify(free_symbols, …, modules=[NUMERIC_MODULES, "numpy"])`. Inherits the A.6 symbol-collision caveat (avoid observables named `E/I/pi/gamma/…`) |
+| C2 | `ExpressionContext.compile(...)` | Implemented through the shared runtime ([expression.md](expression.md)); target is a `CompiledExpression`, rebuilt from config on resume. Inherits the remaining A.6 undeclared-symbol collision caveat. |
 | C3 | `UMapper.from_config(...)`, `self._umapper.map` + inverse | No `UMapper` class; use `Sampling/variables.load_variables` + `sampling_utils.map_u_to_physical` for the sampler-side u→x it needs (exporting physical coords, `selection`). No inverse mapping is required — all geometry stays in u-space |
 | C4 | `Bridson(radius=…).generate_batch(n)` | No such class API. Reuse the **module-level `Bridson_sampling(dims, radius, k, hypersphere_sample)`** function from `Sampling/bridson.py` for generation-0 (d ≤ 4); refinement candidates are drawn per-edge (§4.4), not via a local Bridson instance |
 | C5 | `__init__(self, config)` | V2 samplers are no-arg constructed by a `Distributor` factory and configured via `set_config(config)` |

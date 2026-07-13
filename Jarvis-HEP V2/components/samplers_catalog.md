@@ -2,7 +2,7 @@
 
 **Role**: the concrete sampling algorithms. Each proposes `u_coords` (or replays rows), builds
 light task dicts, and submits them to Redis via the [sampler base](sampler.md).
-**Status**: **As-built** @ `jarvis2` `d0de31a`.
+**Status**: **As-built** @ `jarvis2` `0a5e85e` (expression/selection cache; EnvReqs.V2 batch_size).
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §11;
 [sampler.md](sampler.md), [checkpoint.md](checkpoint.md).
 **Reuses V1**: none by import.
@@ -30,7 +30,9 @@ Each subclass implements the same contract: `set_config` → `propose_next` →
 `run_distributed` → `repropose_unfinished` (resume) → `at_safe_barrier` →
 `export_runtime_state` / `import_runtime_state`. Helper module `stateless_batch.py` provides
 `deterministic_sampler_uuid`, `flush_batch`, `run_stateless_distributed`; `sampling_utils.py`
-provides `evaluate_selection` + the `map_*` helpers.
+provides `evaluate_selection` + the `map_*` helpers. Its process-local `ExpressionContext`
+lazily compiles and caches selections by `(expression, available variable names)`; candidate
+checks then perform only a `CompiledExpression` numerical call.
 
 ---
 
@@ -88,10 +90,11 @@ function `deterministic_uuid(*, master, sample_index)`.
 ## 7. Determinism / submission
 
 - Every sampler mints **deterministic uuids** (sha256 of `prefix:seed:index`) so resume + replay
-  are stable. `batch_size` (from `Runtime.batch_size`/workers) controls Redis pipelining only —
+  are stable. `batch_size` (from `EnvReqs.V2.batch_size` / workers) controls Redis pipelining only —
   execution is one Sample per Worker.
-- Selection cuts use [`evaluate_selection`](expression.md); `u → x` uses
-  [`Variable`](parameters_variables.md) via the `map_*` helpers.
+- Selection cuts use [`evaluate_selection`](expression.md). A given expression/variable-name
+  set is `sympify`/`lambdify` compiled once per control process and reused across candidates;
+  `u → x` uses [`Variable`](parameters_variables.md) via the `map_*` helpers.
 
 ---
 
@@ -106,8 +109,8 @@ function `deterministic_uuid(*, master, sample_index)`.
 
 ## 9. Tests
 
-`tests/test_samplers_catalog.py` (14): per-sampler propose/uuid determinism, selection filtering,
-distributed submission counts, export/import round-trip. Resume is covered by
+`tests/test_samplers_catalog.py`: per-sampler propose/uuid determinism, selection filtering,
+selection compile-count caching, distributed submission counts, export/import round-trip. Resume is covered by
 `tests/test_distributed_resume.py` (8).
 
 ---

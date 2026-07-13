@@ -2,14 +2,15 @@
 
 **Role**: compile and evaluate the configured `LogLikelihood` expression(s) for a Sample from its
 observables. Runs **inside the Worker** as the terminal step of the execution plan.
-**Status**: **As-built** @ `jarvis2` `d0de31a`. `likelihood.py` 81 lines.
+**Status**: **As-built** @ `jarvis2` `0a5e85e` (shared ExpressionContext).
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §4, §11;
 [worker.md](worker.md).
 **Reuses V1**: none by import (uses `inner_func.NUMERIC_MODULES`).
 
 > **As-built drift:** moved from `Module/likelihood.py` → top-level `likelihood.py`; **standalone
-> class `LogLikelihoodEvaluator`** (no `Module` ABC). Expressions are compiled with sympy
-> `lambdify`. No `set_likelihood`/`loglike`/MCMC-feedback hooks (no MCMC in V2).
+> class `LogLikelihoodEvaluator`** (no `Module` ABC). Expressions use the shared
+> `ExpressionContext` / `CompiledExpression` runtime. No
+> `set_likelihood`/`loglike`/MCMC-feedback hooks (no MCMC in V2).
 
 ---
 
@@ -17,10 +18,11 @@ observables. Runs **inside the Worker** as the terminal step of the execution pl
 
 Compile + evaluate configured LogLikelihood expressions.
 
-**Attributes:** `_compiled: list[tuple[name, var_names, num_expr]]` — each configured expression
-sympified + `lambdify`-compiled at construction, using a fixed symbol set
-(`x,y,z,shift,calc_z,LogL,LogL_Z`) and the `inner_func.NUMERIC_MODULES` namespace
-(`sin/cos/exp/log/sqrt/LogGauss`).
+**Attributes:** `_context: ExpressionContext`; `_compiled:
+list[tuple[name, CompiledExpression]]`. Each configured expression is compiled through the
+shared standard language at construction with the known symbol contract
+(`x,y,z,shift,calc_z,LogL,LogL_Z`). The context exposes the complete 38-name V1 lightweight
+function catalog documented in [expression.md](expression.md).
 
 | Method | Behavior |
 |--------|----------|
@@ -54,7 +56,8 @@ The likelihood step is the terminal `ExecutionStep(type="likelihood")` produced 
 ## 4. Interfaces / collaborators
 
 - **Worker._run_likelihood** ([worker.md](worker.md)) → `calculate(sample.info)`.
-- **inner_func** ([expression.md](expression.md)) supplies the numeric namespace (`LogGauss`, …).
+- **ExpressionContext** ([expression.md](expression.md)) supplies compilation, dependency
+  binding, constants, and the numeric namespace (`LogGauss`, …).
 - **Sample** ([sample.md](sample.md)) reads observables, receives `likelihood`.
 
 ---

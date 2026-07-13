@@ -1,8 +1,8 @@
 # DESIGN — Jarvis-Portal IO Integration (V2)
 
-**Status**: approved for implementation  
+**Status**: **implemented for exposed registry formats**; HEP format exposure remains D11.3
 **Milestone**: D9.2 (IO half) / Portal integration  
-**Date**: 2026-07-10  
+**Date**: 2026-07-10 · as-built review 2026-07-13
 **Scope**: wire `jarvishep2` calculator Layer-1 I/O through **Jarvis-Portal** so new formats ship by upgrading Portal only.
 
 ---
@@ -133,7 +133,10 @@ Missing / empty `type` → `ValueError`. Unknown type → `UnsupportedIOTypeErro
 
 ### 4.4 `io_json.py`
 
-Keep as a **thin local helper** only if still useful for pure unit tests; calculator production path **must not** import it. Preferred: expression helper moves into `io_portal`, and `io_json` becomes a deprecated shim that re-exports evaluation helpers or is deleted after tests migrate.
+Keep as a **thin local helper** only if still useful for pure unit tests; calculator production
+path **must not** import it. As built, `io_json.py` was deleted and expression ownership moved
+to the shared `jarvishep2.expression.ExpressionContext`; `io_portal` retains only the Portal
+callback wrapper and Calculator-specific numeric-string coercion.
 
 Decision for this WP: **calculator uses only `io_portal`**. `io_json.py` remains for one release as a private fallback utility (not called from calculator) *or* is removed if nothing imports it — prefer removal once tests use portal.
 
@@ -234,3 +237,16 @@ HEP only needs a new release if the **adapter contract** (`write_input` / `read_
 - Optional: CLI `Jarvis2 formats` listing `get_io_registry().available_formats()`.
 - When Portal exposes SLHA/xSLHA: add HEP integration example under `tests/parity_project` without changing bridge code.
 - PLOT / Operas plugin bridges (same pattern, separate designs).
+
+## 12. As-built integration status (2026-07-13)
+
+- Calculator production I/O goes through `jarvishep2.io_portal`; JSON hardcoding is no longer
+  the execution path.
+- Dump-variable formulas use the same process-local `ExpressionContext` /
+  `CompiledExpression` runtime as Operas, Likelihood, Selection, and AdaptiveLevelSet.
+- Installed `Jarvis-HEP-Portal 1.3.0` exposes `CSV`, `DAT`, `JSON`, `TSV`, and `Wolfram` for
+  discovery. Real CSV/JSON bridge and calculator tests pass.
+- Portal contains SLHA/xSLHA adapter code, but those adapters are not in the current exposed
+  builtin/entry-point set. This is a Portal exposure/package gap; V2 should not reimplement them.
+- V2 still lacks the V1-equivalent `portal formats` discovery command. D11.3 adds a thin CLI
+  proxy plus a real SLHA fixture after Portal exposure lands.

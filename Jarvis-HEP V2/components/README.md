@@ -5,12 +5,12 @@ structure**: which classes are defined, every member function (signature + behav
 instance attributes, inter-component interfaces, drift from the original design, and the tests that
 exercise it.
 
-> **As-built @ `jarvis2` `d0de31a`.** These docs were refreshed from a full code review of the
-> shipped `jarvishep2/` package (50 modules / ~75 classes / 26 test files). They supersede the
-> design-era specs that these files used to contain. The architecture rationale still lives in
-> [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md); the milestone plan in
-> [`../V2_DISTRIBUTED_PLAN.md`](../V2_DISTRIBUTED_PLAN.md). For the full design↔code drift list and
-> per-component completeness, see **[`../CODE_REVIEW_2.0.md`](../CODE_REVIEW_2.0.md)**.
+> **As-built baseline:** originally pinned at `d0de31a`; components touched by Portal / Operas /
+> Expression / EnvReqs / ALS work are stamped at **`0a5e85e`** (2026-07-14, 283 passed / 1 skipped).
+> Architecture rationale: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md). Open work:
+> [`../V2_DISTRIBUTED_PLAN.md`](../V2_DISTRIBUTED_PLAN.md). Historical completeness review:
+> [`../CODE_REVIEW_2.0.md`](../CODE_REVIEW_2.0.md). Prototype closeout + D12:
+> [`../PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](../PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md).
 
 > **No `ModuleManager`** — module config is a picklable blueprint ([config_schema.md](config_schema.md)),
 > execution is the [Worker](worker.md). **No shared `Module` ABC** — `CalculatorModule` and
@@ -69,7 +69,7 @@ exercise it.
 
 | Component | Shipped module(s) | Note |
 |-----------|-------------------|------|
-| [Expression helpers (字母运算)](expression.md) | `inner_func.py`, `Sampling/sampling_utils.py` | no `ExpressionEngine` |
+| [Shared expression runtime (字母运算)](expression.md) | `expression.py`, `inner_func.py` | `ExpressionContext` + immutable `CompiledExpression`; all YAML expression consumers |
 | [CLI parsing (命令行解析)](cli.md) | `jarvishep2/client.py` | plain argparse (no `card/argparser.json`) |
 | [Config loader & normalization](config_schema.md) | `task_config.py`, `runtime_config.py`, `worker_config.py` | no jsonschema / env checks |
 | [Paths & runtime tokens](paths_tokens.md) | `jarvishep2/base.py` | functions, no `Base` class |
