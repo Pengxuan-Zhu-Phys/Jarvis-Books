@@ -82,12 +82,28 @@
 
 现状：`Module/calculator.py` + `calculator_spec.py` + `runtime_preparer.py` 已具备 Spec 解析、clone_shadow 安装、`@SampleID/@Sdir/@PackID` token、env_setup 捕获、Portal IO 读写、超时 deadline。**缺的不是执行机制，是 V1 YAML 形态与用户可感知细节。**
 
-### 4.1 YAML 形态差异（对照 `Jarvis-Examples/Eggbox/bin/Example_Bridson_process.yaml`）
+### 4.0 命名约定（绑定）
+
+Eggbox 卡片文件名里的 `process` / `thread` **不是** runtime 模式，也不是 V1/V2 的产品开关
+（V1 始终是 `ThreadPoolExecutor` + `AsyncSubprocessScheduler`；V2 始终是 Redis + spawn Worker；
+`Runtime.mode: process|thread` 从未切换执行路径，现已从卡片删除）。
+
+| 口语（文档与 WP 用这个） | 历史文件名（保留，避免打断路径） | 实际含义 |
+|---|---|---|
+| **Eggbox Calculator 卡片** | `bin/Example_Bridson_process.yaml`（及 denser 的 `Example_Bridson_thread.yaml`、`Example_Bridson.yaml`） | 走 **`Calculators`** 外部程序 + Portal IO（JSON） |
+| **Eggbox Operas 卡片** | `bin/Example_Bridson_Operas.yaml` | 走 **`Operas`** 进程内算子（已验收，见 `EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_…`） |
+
+D12.1 主线 = **Calculator 卡片**路径；与 Operas 卡片对照时只说 “Calculator vs Operas”，不要说
+“process 版 vs thread 版”。
+
+### 4.1 YAML 形态差异（对照 Eggbox Calculator 卡片）
+
+对照文件：`Jarvis-Examples/Eggbox/bin/Example_Bridson_process.yaml`。
 
 | V1 形态 | V2 现状 | 影响 |
 |---|---|---|
-| `installation`/`initialization`/`execution.commands` 是**字符串列表**（`- "cp -r ${source}/* ${path}"`） | `CalculatorSpec.from_config` 只收 `isinstance(item, Mapping)` 的项，**字符串被静默丢弃** | **V1 卡片装载后安装/执行命令为空**，且无任何报错。这是 Calculator 阶段第一优先级：字符串项应规范化为 `{cmd: <str>, cwd: <execution.path>}`，或在解析期显式报错。 |
-| `${source}`/`${path}` YAML 内变量插值 | 无 | V1 卡片的安装命令无法解析；建议在 Spec 解析期做替换（值来自同模块的 `source`/`path` 字段）。 |
+| `installation`/`initialization`/`execution.commands` 是**字符串列表**（`- "cp -r ${source}/* ${path}"`） | `CalculatorSpec.from_config` 只收 `isinstance(item, Mapping)` 的项，**字符串被静默丢弃** | **Calculator 卡片装载后安装/执行命令为空**，且无任何报错。这是 Calculator 阶段第一优先级：字符串项应规范化为 `{cmd: <str>, cwd: <execution.path>}`，或在解析期显式报错。 |
+| `${source}`/`${path}` YAML 内变量插值 | 无 | 安装命令无法解析；建议在 Spec 解析期做替换（值来自同模块的 `source`/`path` 字段）。 |
 | 模块级 `selection`（按参数点跳过模块） | 无 | 工作流语义缺失；`workflow.py` 的执行计划需支持条件步。 |
 | `required_modules` 参与 layer 推导 | 已支持（D2.2） | 已对齐。 |
 | `Calculators.make_paraller` / 顶层 `path` | 未消费 | 至少要接受并忽略 + 警告，不能报 unknown key。 |
@@ -96,7 +112,12 @@
 
 ### 4.2 验收标准（建议）
 
-以 Jarvis-Examples 的 `Eggbox/bin/Example_Bridson_process.yaml`（process 计算器版，而非 Operas 版）**原样跑通**为 Calculator 阶段的 exit criterion：不改用户 YAML 一个字（`EnvReqs.V2` 允许作为新增块出现），DATABASE 与 V1 golden 对齐，sample log 逐条样式对齐（§5.1）。
+以 **Eggbox Calculator 卡片**
+`Jarvis-Examples/Eggbox/bin/Example_Bridson_process.yaml`（`Calculators` 外部程序路径，
+**不是** Operas 卡片）**原样跑通**为 Calculator 阶段的 exit criterion：
+`Jarvis2 bin/Example_Bridson_process.yaml` 一字不改（调度默认已由
+`deps/environment_default.yaml` 的 `EnvReqs.V2` 提供；卡片内无顶层 `Runtime`），
+DATABASE 与 V1 golden 对齐，sample log 逐条样式对齐（§5.1 / D12.2）。
 
 ### 4.3 EnvReqs 归口（用户新决策，2026-07-14）
 
@@ -158,8 +179,8 @@ D12 各 WP 已登记进 `V2_DISTRIBUTED_PLAN.md` Progress Ledger。执行顺序�
 **D12.0（依赖 + 表达式扫描小修）→ D12.2（日志格式定型）→ D12.1（Calculator 对齐 + 验收）**，
 其后才是 D12.3 flowchart / D12.4 EnvReqs 扩展 / D12.5–D12.6 project+examples（可与 D11.2 CLI 穿插）。
 D12.2 必须先于 D12.1 **验收**：sample-log golden 依赖日志格式；日志不定型 golden 会返工。
-D12.1 实现可与 D12.2 部分重叠，但 **Eggbox process 卡片 golden 对齐** 以 D12.2 落地为前提。
-Eggbox process 用 JSON IO，可先验收；声明"Calculator 完整对齐"还要等 **D11.3**（SLHA/xSLHA）。
+D12.1 实现可与 D12.2 部分重叠，但 **Eggbox Calculator 卡片 golden 对齐** 以 D12.2 落地为前提。
+该卡片用 JSON IO，可先验收；声明"Calculator 完整对齐"还要等 **D11.3**（SLHA/xSLHA）。
 
 ---
 
@@ -178,5 +199,7 @@ Eggbox process 用 JSON IO，可先验收；声明"Calculator 完整对齐"还�
 3. **D12.2 日志**：V1 样式 Formatter + logo banner + 文件布局；保留 QueueListener 架构。**先定型**。
 4. **D12.1 Calculator（本阶段主线）**：先修 `CalculatorSpec` 字符串命令静默丢弃（§4.1 第一行），再做
    `${source}/${path}` 插值、模块级 `selection`、`make_paraller`/`modes`/顶层 `path` 容忍；
-   验收 = `Jarvis-Examples/Eggbox/bin/Example_Bridson_process.yaml` **一字不改**跑通 + DATABASE/sample-log golden 对齐。
+   验收 = **Eggbox Calculator 卡片**（文件
+   `Jarvis-Examples/Eggbox/bin/Example_Bridson_process.yaml`，历史名保留）**一字不改**跑通 +
+   DATABASE/sample-log golden 对齐。勿与 Operas 卡片或 “process/thread 运行时” 混称。
 5. **D12.3–D12.6**：按 §5 各节设计执行；D12.6 需要在 Jarvis-Examples 仓库先落 catalog JSON（跨仓库改动，需用户确认后再动 Jarvis-Examples）。
