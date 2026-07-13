@@ -154,7 +154,12 @@ V1 有 `Jarvis project create/pack/browse/fetch/info`（`project_scaffold.py`、
 | Jarvis-Examples 接口 | **D12.6**（新） | catalog 移仓 + schema 版本化 |
 | Calculator V1 对齐 | **D12.1**（新，本阶段主线） | §4；依赖 D11.3 SLHA 暴露 |
 
-D12 各 WP 已登记进 `V2_DISTRIBUTED_PLAN.md` Progress Ledger。执行顺序建议：**D12.1 → D12.2 →（D11.2 CLI）→ D12.5/D12.6 → D12.3 → D12.4 可穿插**。D12.2 放前面是因为 Calculator 验收要求 sample log 样式对齐，日志格式不先定，golden 对比要返工。
+D12 各 WP 已登记进 `V2_DISTRIBUTED_PLAN.md` Progress Ledger。执行顺序（绑定）：
+**D12.0（依赖 + 表达式扫描小修）→ D12.2（日志格式定型）→ D12.1（Calculator 对齐 + 验收）**，
+其后才是 D12.3 flowchart / D12.4 EnvReqs 扩展 / D12.5–D12.6 project+examples（可与 D11.2 CLI 穿插）。
+D12.2 必须先于 D12.1 **验收**：sample-log golden 依赖日志格式；日志不定型 golden 会返工。
+D12.1 实现可与 D12.2 部分重叠，但 **Eggbox process 卡片 golden 对齐** 以 D12.2 落地为前提。
+Eggbox process 用 JSON IO，可先验收；声明"Calculator 完整对齐"还要等 **D11.3**（SLHA/xSLHA）。
 
 ---
 
@@ -169,6 +174,9 @@ D12 各 WP 已登记进 `V2_DISTRIBUTED_PLAN.md` Progress Ledger。执行顺序�
 ## 7. 给执行 Agent 的行动清单（浓缩）
 
 1. **提交前**：修 §3.1（表达式扫描收窄到表达式字段）；§3.2 至少加 TODO + 测试标注已知限制。
-2. **D12.1 Calculator**：先修 CalculatorSpec 字符串命令丢弃（§4.1 第一行），再做 `${source}/${path}` 插值、模块级 `selection`、`make_paraller` 容忍；验收 = Eggbox process 卡片原样跑通 + golden 对齐。
-3. **D12.2 日志**：V1 样式 Formatter + logo banner + 文件布局；保留 QueueListener 架构。
-4. **D12.3–D12.6**：按 §5 各节设计执行；D12.6 需要在 Jarvis-Examples 仓库先落 catalog JSON（跨仓库改动，需用户确认后再动 Jarvis-Examples）。
+2. **D12.0**：Operas 升核心依赖 + 表达式扫描仅扫 expression 字段（不扫 calculator `cmd`/paths）。
+3. **D12.2 日志**：V1 样式 Formatter + logo banner + 文件布局；保留 QueueListener 架构。**先定型**。
+4. **D12.1 Calculator（本阶段主线）**：先修 `CalculatorSpec` 字符串命令静默丢弃（§4.1 第一行），再做
+   `${source}/${path}` 插值、模块级 `selection`、`make_paraller`/`modes`/顶层 `path` 容忍；
+   验收 = `Jarvis-Examples/Eggbox/bin/Example_Bridson_process.yaml` **一字不改**跑通 + DATABASE/sample-log golden 对齐。
+5. **D12.3–D12.6**：按 §5 各节设计执行；D12.6 需要在 Jarvis-Examples 仓库先落 catalog JSON（跨仓库改动，需用户确认后再动 Jarvis-Examples）。
