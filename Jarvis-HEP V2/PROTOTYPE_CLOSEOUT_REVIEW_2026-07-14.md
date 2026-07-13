@@ -129,10 +129,10 @@ DATABASE 与 V1 golden 对齐，sample log 逐条样式对齐（§5.1 / D12.2）
 
 ## 5. 下一阶段主题二：用户体验对齐（"用户体验不出来和 V1 有啥不一样"）
 
-### 5.1 Core 日志系统（缺口属实）
+### 5.1 Core 日志系统 — **顶层渲染已落地 (D12.2)**
 
-- V1：loguru，双 sink（文件 rotation 5 MB + stdout colorize），格式 `\n·•· <cyan>{module}</cyan>\n\t-> <green>MM-DD HH:mm:ss.SSS</green> - [LEVEL] >>>\n{message}`，hdf5-Writer 用 `Ϡ` 前缀，`raw` extra 直通，启动打 logo banner，`--debug` 控制台阈值切换；另有独立 sampler log 与逐 sample log 文件。
-- V2：stdlib logging + QueueListener，格式 `%(asctime)s LEVEL name | message` 加 `key=value` 上下文，colorlog 可选。架构（D0.3 两层、队列化、spawn 安全）**保留**，但**渲染层要换成 V1 视觉格式**：实现一个 V1 样式 Formatter（`·•·`/`Ϡ` 前缀、module 高亮、时间样式、raw 直通），文件与控制台共用；logo banner 在 `init_logger` 后打印；`jarvis_{role}_{pid}.log` 命名改回 V1 的 `<scan>/jarvis.log` 布局。Sample log 侧 `BufferedSampleLogger` 已存在，需要按 V1 的 per-sample 文件布局落盘核对一遍格式。
+- V1：loguru，双 sink（文件 rotation 5 MB + stdout colorize），`·•·` / `Ϡ` 格式，`raw` 直通，logo banner，独立 sampler / sample log。
+- V2（D12.2）：stdlib + QueueListener **架构保留**；`JarvisContextFormatter` 已换 V1 视觉（`·•·`/`Ϡ`、`MM-DD HH:mm:ss.SSS`、raw、TTY 着色）；`jarvis_module` 绑定（避免覆盖 `LogRecord.module`）；控制进程日志 `<task_root>/logs/<scan>/<scan>.log` + `render_logo_with_version()`；Worker 仍可用 `jarvis_{role}_{pid}.log`。Sample log 格式本已对齐 V1。残留：`--debug` 控制台级别切换、sampler 独立 log 文件、check-modules console mirror 等可后续补齐。
 
 ### 5.2 Flowchart（缺口属实）
 
