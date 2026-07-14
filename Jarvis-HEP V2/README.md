@@ -49,9 +49,9 @@ Docs/
 > `Jarvis-Redis:<scan>` + `setproctitle` process titles, SIGINT clean shutdown.
 > Live gate: Eggbox Bridson ~8k samples drains to full archive. Start with
 > [`PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md) + open
-> ledger in [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). Still open: D8 Agent API /
-> `run_state.json`, D11 CLI/Portal/PLOT closure, D12.3–D12.6 (flowchart, redis override, project
-> tools, catalog). UI gaps:
+> ledger in [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). **D8 Agent Bridge is parked**
+> (interactive SIGINT stop already enough). Active open work: **D11** CLI/Portal/PLOT,
+> **D12.3–D12.6** (flowchart, redis override, project tools, catalog). UI gaps:
 > [`USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md`](USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md).
 > Acceptance trail:
 > [`EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md`](EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md).
@@ -61,7 +61,7 @@ Docs/
    long-lived process), §0.1 the single-runtime-path rule, §11 what is reused from V1, §12 what
    is retired, §13 the consolidated open questions.
 2. [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md) — **the execution playbook (open work only).**
-   D8 / D9 partials / D10 polish / D11 / D12. Completed ledger history is in `archive/`.
+   Prefer **D11 / D12**; **D8 Agent Bridge parked**. Completed ledger history is in `archive/`.
 3. [`components/`](components/) — **per-class design docs** (one file per class: Sample,
    RedisQueue, Logger, UMapper, Workflow, Worker, Calculator, Factory, Sampler, Archiver, Core,
    the module/IO backends, the samplers, and the V1-style helper subsystems — CLI, expression
@@ -69,14 +69,8 @@ Docs/
    data/schema, concurrency/failure semantics, and tests + verification logic. Start at
    [`components/README.md`](components/README.md); use
    [`components/V1_TO_V2_MAP.md`](components/V1_TO_V2_MAP.md) as the migration checklist.
-4. [`DESIGN_AGENT_BRIDGE_2.0.md`](DESIGN_AGENT_BRIDGE_2.0.md) — the **V2 ↔ Jarvis-Agent
-   bridge**: the machine-readable Agent API V2 exposes (JSON verbs, `run_state.json`, stop
-   contract) and the native `hep_*` tool family on the agent side. Authoritative for the wire
-   contract; executed by plan milestone D8 (V2) + M4.5 (Jarvis-Agent repo).
-5. [`Jarvis-Agent_Design_Document.md`](Jarvis-Agent_Design_Document.md) — the **upper
-   orchestration layer**: a local, macOS/MLX-LM agent that drives V2 (goal understanding, scan
-   setup, monitoring). Sits *on top of* the V2 runtime; read the runtime docs first. The
-   agent's living design baseline is `Jarvis-Agent/docs/DESIGN.md` in the agent repo.
+4. [`DESIGN_AGENT_BRIDGE_2.0.md`](DESIGN_AGENT_BRIDGE_2.0.md) / [`Jarvis-Agent_Design_Document.md`](Jarvis-Agent_Design_Document.md)
+   — Agent layer docs **kept for later**; not current execution priority.
 
 ## Hard rules (from the plan §1)
 

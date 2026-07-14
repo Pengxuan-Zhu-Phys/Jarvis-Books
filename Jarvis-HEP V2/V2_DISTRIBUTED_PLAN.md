@@ -3,6 +3,10 @@
 Last updated: 2026-07-14 (evening). Branch `jarvis2` tip **`64d7486`**.
 D12.0–D12.2 + SAMPLE-bucket/direct-handoff/process-Archiver/managed-Redis/signal
 cleanup landed. Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
+**Priority note (maintainer):** **D8 Agent Bridge is parked** — do not pick D8.1/D8.2/D8.4
+(or remaining D8.3 agent-facing pieces) until unblocked. Prefer **D11** (CLI/UX/integration)
+and remaining **D12** (flowchart / EnvReqs redis override / project tools). Control-process
+SIGINT shutdown already shipped; that is enough for interactive use.
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -107,12 +111,12 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | WP   | Title                                                                                  | Milestone | Depends on       | Status                                 | Date       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ---- | -------------------------------------------------------------------------------------- | --------- | ---------------- | -------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 
-| D8.1 | Agent API facade: JSON envelope + `--validate`/`--results` + `--version-json`        | D8        | —                | todo                                   |            | Design: `DESIGN_AGENT_BRIDGE_2.0.md` §4. NEW `jarvishep2/api.py`. |
-| D8.2 | `run_state.json` writer + `--status --json` / `--monitor-json`                        | D8        | D8.1             | todo                                   |            | Bridge §5. NEW `jarvishep2/run_state.py`; heartbeat thread in core. |
-| D8.3 | Control-process graceful stop (SIGINT/SIGTERM → checkpoint → clean exit)              | D8        | —                | **partial**                            | 2026-07-14 | **Landed in `64d7486`:** control SIGINT/SIGTERM → `KeyboardInterrupt` → `run()` `finally` → idempotent `shutdown()` (Archiver, Workers, control lock, **always** stop managed Redis); SIGTSTP/Ctrl+Z ignored with warning; CLI exit 130. **Still open vs Bridge §6:** no `run_state.json` interrupted status (D8.2), no forced mid-scan checkpoint on stop, no formal stop-ack contract. |
-| D8.4 | Strict-validate diagnostics (silent-coercion warnings, dead keys, unknown keys)       | D8        | D8.1             | todo                                   |            | Bridge §4.2; findings from `YAML_REFERENCE_2.0.md` Appendix A. |
+| D8.1 | Agent API facade: JSON envelope + `--validate`/`--results` + `--version-json`        | D8        | —                | **deferred**                           | 2026-07-14 | **Parked (maintainer):** Agent bridge not in current priority. Design remains `DESIGN_AGENT_BRIDGE_2.0.md` §4. |
+| D8.2 | `run_state.json` writer + `--status --json` / `--monitor-json`                        | D8        | D8.1             | **deferred**                           | 2026-07-14 | **Parked** with D8.1. |
+| D8.3 | Control-process graceful stop (SIGINT/SIGTERM → checkpoint → clean exit)              | D8        | —                | **partial** (enough for now)           | 2026-07-14 | **Interactive stop shipped in `64d7486`** (SIGINT/SIGTERM/Ctrl+Z policy + managed Redis cleanup). Remaining Bridge §6 items (checkpoint-on-stop, run_state interrupted, agent stop-ack) **parked with D8**. |
+| D8.4 | Strict-validate diagnostics (silent-coercion warnings, dead keys, unknown keys)       | D8        | D8.1             | **deferred**                           | 2026-07-14 | **Parked** with D8.1. |
 
-| D9.4 | `TaskFactory` de-singleton + internal MonitorLoop/Watchdog split + honest metrics     | D9        | D8.3             | **partial**                            | 2026-07-10 | Core owns explicit `TaskFactory`; `get_instance` deprecated shell; honest `None` metrics. MonitorLoop/Watchdog class split deferred. |
+| D9.4 | `TaskFactory` de-singleton + internal MonitorLoop/Watchdog split + honest metrics     | D9        | —                | **partial**                            | 2026-07-10 | Core owns explicit `TaskFactory`; `get_instance` deprecated shell; honest `None` metrics. MonitorLoop/Watchdog class split deferred. (D8.3 dependency dropped — interactive stop already landed; Agent D8 parked.) |
 | D9.6 | `Sample` single source of truth (`info` becomes projection)                           | D9        | D9.1, D9.3       | **partial**                            | 2026-07-10 | `merge_observables` / `set_status` / `record_pack_id` write APIs; Worker uses them. Full `info` projection deferred. |
 
 | D10.3 | Finalize + outputs (d=2): polyline chaining, `levelset.json`, PLOT overlay hook       | D10       | D10.2            | **partial**                            | 2026-07-11 | `levelset.json` + polylines_u; PLOT overlay hook deferred. |
@@ -134,12 +138,12 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D12.6 | Jarvis-Examples-owned official catalog (schema-versioned remote index)                  | D12       | D12.5            | todo                                   |            | Review §5.4: move catalog JSON into Jarvis-Examples repo; HEP keeps only index URL + schema version + fetch logic; local cache fallback replaces packaged copy; cross-repo change needs user go-ahead on Jarvis-Examples. |
 | D12.8 | SAMPLE buckets + direct handoff + process Archiver + process titles                     | D12       | D12.1            | **done**                               | 2026-07-14 | Commit **`64d7486`**. Defaults: `Cleanup.strategy=direct` (staging optional), `Archiver.mode=process` + `pack_buckets=true`, `Scan/EnvReqs.V2.sample_directory` limit=200. Redis bucket meta (`active`/`completed`/`archived`/`sealed`); **pack only when `archived>=assigned`** (fixes early-tar prune race). Managed `Jarvis-Redis:<scan>` + `setproctitle` (`Jarvis2*`). Tests: `test_sample_bucket.py`, `test_redis_server.py`. Live Eggbox Bridson ~8k samples drains cleanly. |
 
-Parallelism note: D0.1 / D0.2 / D0.3 are independent and may proceed in any order. D3.3 is
-independent of the rest of D3. D8.3 is independent of D8.1/D8.2 and may land first; the
-agent-side milestone M4.5 (Jarvis-Agent repo) depends on D8.1–D8.3. D9.1/D9.2/D9.7/D9.8
-have no file overlap with D8 and may run in parallel with it; D9.4/D9.5 touch
-`core.py`/`client.py` and must wait for D8.1–D8.3; D9.6 goes last. D11.1/D11.2 should be
-implemented together with D8's JSON/control surface so the CLI is not redesigned twice.
+**Next pick order (current):** D11.1 → D11.2 → D12.4 remainder / D12.3 → D11.3–D11.5 → D12.5–D12.6.
+**Do not start D8.1/D8.2/D8.4** until the maintainer unparks Agent work.
+
+Parallelism note: D11.1 has no dependency on parked D8 (Agent JSON can consume `RunOutcome`
+later). D9.4/D9.6 may proceed without D8. Agent-side M4.5 (Jarvis-Agent repo) stays blocked
+on parked D8.
 
 ---
 
