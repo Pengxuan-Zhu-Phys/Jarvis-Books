@@ -41,20 +41,22 @@ Factory/Workers → Archiver → checkpoint, drives the scan, and tears everythi
 | `_preload_resume_checkpoint(*, resume=False, fresh=False)` | decide resume vs fresh; load + validate the checkpoint payload. |
 | `apply_resume_checkpoint(worker_config=None)` | drain stale tasks, import sampler state, set repropose hint. |
 | `save_runtime_checkpoint(*, reason="")` | build + atomically save the checkpoint payload (sampler state + archiver persistence). |
-| `init_redis(*, client=None)` | build the control Redis client (falls back to `make_fakeredis_queue` when no config). |
+| `init_redis(*, client=None)` | ensure managed `Jarvis-Redis:<scan>` if port free, else connect existing; build control client. |
 | `init_command_parser()` | Phase-1 `build_command_parser`. |
 | `_command_parser_payload` / `_apply_command_parser_to_worker_config` | make the parser picklable + apply Phase-1 to calculator configs. |
 | `build_worker_config(**overrides)` | picklable Worker blueprint with Phase-1 resolution applied. |
 | `init_factory(worker_config=None)` | obtain the factory, reuse core Redis, `start_workers(Runtime.workers)` + monitor + watchdog (no-op unless redis runtime). |
-| `init_archiver(db_path=None)` | start `SimpleArchiver` (thread) or `ArchiverProcess` (process) per `Calculators.Archiver.mode`; restore persistence on resume. |
+| `init_archiver(db_path=None)` | start Archiver; **default `mode=process`** (`ArchiverProcess`); thread mode still supported. |
 | `_restore_archiver_persistence` / `_archiver_records_written` | resume acked-uuids / read record counter. |
 | `set_sampler(sampler)` | attach sampler, wire Redis, import resume state if resuming. |
 | `start_runtime_checkpoint()` | enable the checkpoint heartbeat (save callback). |
 | `submit_samples(samples)` | push a group via the sampler. |
-| `wait_for_results(expected, *, timeout=30, poll_interval=0.1)` | poll the archiver record count. |
+| `wait_for_results(expected, …)` | poll Archiver `records_written`; progress shows ok/running/archive_q/archived; stall error if workers done but rows frozen. |
+| `_init_sample_buckets` / `_finalize_sample_buckets` | Redis SAMPLE bucket meta; seal open bucket at end-of-run. |
+| `_install_control_signal_handlers` | SIGINT/SIGTERM → clean shutdown; SIGTSTP/Ctrl+Z ignored. |
 | `get_monitor_snapshot()` / `monitor_once()` | factory snapshot / formatted monitor view. |
 | `write_run_summary(output_dir=None)` | build + write the run summary. |
-| `shutdown(*, wait=True, write_run_summary=False)` | stop checkpointing, stop archiver, optional run_summary, factory shutdown, close Redis. |
+| `shutdown(*, wait=True, write_run_summary=False)` | idempotent: stop sampler checkpoint, Archiver, factory/Workers, control lock, **always stop managed Redis**. |
 
 ---
 
@@ -75,9 +77,20 @@ See [cli.md](cli.md) for the full CLI surface.
 
 ## 3. Shutdown ordering
 
-`shutdown_checkpointing` → stop Archiver (drain + finalize HDF5) → optional run_summary →
-`factory.shutdown(wait)` (stops Workers + closes Redis) → drop handles. The `run()` wrapper always
-calls `shutdown` in `finally`, so even a failed/early-exit run tears down cleanly.
+`run()` installs signal handlers, then always calls `shutdown` in `finally` (including
+KeyboardInterrupt from Ctrl+C).
+
+Order inside `shutdown` (idempotent):
+
+1. sampler `shutdown_checkpointing` (skip heavy finalize on interrupt)
+2. optional `_finalize_sample_buckets` (seal open bucket) when not interrupting
+3. stop Archiver (process join timeout shorter on interrupt)
+4. optional `run_summary`
+5. release Redis control lock
+6. `factory.shutdown` (Workers)
+7. **always** stop managed `Jarvis-Redis:<scan>` if this process started it (`atexit` backup)
+
+Prefer **Ctrl+C**, not Ctrl+Z (suspend freezes Workers and leaves Redis half-alive).
 
 ---
 

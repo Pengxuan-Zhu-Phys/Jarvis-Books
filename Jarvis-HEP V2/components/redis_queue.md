@@ -2,8 +2,7 @@
 
 **Role**: the single cross-process broker. Task queue, calculator free-pools, status hashes,
 results, and `op_count` change counters — all through one thin, tested access layer.
-**Status**: **As-built** @ `jarvis2` `d0de31a`. `redis_queue.py` 540 lines + `calculator_pools.py`
-47 lines.
+**Status**: **As-built** @ `jarvis2` **`64d7486`**.
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §7; discussions
 `factory_design.md` §4/§5, `worker_design.md` §8.
 **Reuses V1**: none (new). Replaces the in-process queues/locks of the V1 thread runtime.
@@ -21,14 +20,21 @@ results, and `op_count` change counters — all through one thin, tested access 
 
 ```python
 TASK_QUEUE     = "hep:task_queue"          # List   Sampler rpush / Worker blpop
-CALC_FREE      = "calc:free:{name}"        # List   slot pool (token "ready")
-CALC_BUSY_PACKS= "calc:busy:{name}"        # Hash   pack_id -> "active"
+CALC_FREE      = "calc:free:{name}"        # List   exclusive PackID slots ("001"…"N")
+CALC_BUSY_PACKS= "calc:busy:{name}"        # Hash   pack_id -> "running"
 RESULTS        = "hep:results:{uuid}"      # Hash   optional direct result handoff
 ARCHIVE_QUEUE  = "hep:archive_queue"       # List   Worker → Archiver
+FEEDBACK_QUEUE = "hep:feedback"            # List   adaptive samplers (D10)
 WORKER_STATUS  = "hep:worker:status:{id}"  # Hash   heartbeat fields
 CALC_STATUS    = "hep:calculator:status"   # Hash   "<name>:free":n / "<name>:busy":n
 SAMPLE_STATS   = "hep:sample:stats"        # Hash   running/completed/failed
 OP_COUNT       = "hep:{kind}:op_count"     # Str    kind ∈ {worker,calculator,sample,task}
+CONTROL_LOCK   = "hep:control:lock"        # Str    single control-process lease
+# SAMPLE buckets (V1 sample_directory parity)
+BUCKET_META    = "hep:sample:bucket:meta"  # Hash   current/count/limit/width/sample_root/pack
+BUCKET_STATE   = "hep:sample:bucket:state:{id}"  # Hash active/completed/assigned/archived/sealed/packing/packed
+BUCKET_READY   = "hep:sample:bucket:ready" # List   sealed buckets ready to tar
+BUCKET_LOCK    = "hep:sample:bucket:lock"  # short mutex for allocate/finish/note
 ```
 
 Validation sets: `_VALID_OP_KINDS`, `_VALID_SAMPLE_ARTIFACTS` (auto/always/never),
@@ -62,6 +68,13 @@ Redis broker for tasks, calculator pools, results, and monitor counters.
 | `release_calc` | `(name, pack_id) -> None` | validate pack_id ownership, push slot back, flip counters, bump op_count; raises on unknown pack_id. |
 | `submit_result` | `(info) -> None` | validate, `rpush(ARCHIVE_QUEUE)`, update `SAMPLE_STATS` (completed/failed/running), bump sample op_count. |
 | `pull_result` | `(timeout=1) -> dict\|None` | `blpop(ARCHIVE_QUEUE)` for the Archiver. |
+| `init_sample_buckets` | `(sample_root, limit, width, …)` | reset bucket meta for a run. |
+| `allocate_sample_bucket` | `() -> dict\|None` | assign `SAMPLE/<bucket>/`, active++/assigned++; may seal previous bucket. |
+| `finish_sample_bucket` | `(bucket_id) -> bool` | Worker finished sample (active--, completed++); pack only if also fully archived. |
+| `note_sample_archived` | `(bucket_id) -> bool` | Archiver wrote DATABASE row (archived++); may enqueue pack. |
+| `seal_current_sample_bucket` | `() -> bool` | end-of-run seal of open bucket. |
+| `pull_ready_bucket` / `mark_bucket_packed` | pack lifecycle for Archiver. |
+| `acquire_control_lock` / `release_control_lock` / `reset_run_ephemeral_keys` | multi-instance isolation. |
 | `heartbeat` | `(worker_id, **fields) -> None` | `hset(WORKER_STATUS)` (encodes non-scalars to JSON, derives `last_heartbeat`), bump worker op_count. |
 | `get_op_count` | `(kind) -> int` | read one op_count (validates kind). |
 | `get_all_op_counts` | `() -> dict` | all four op_counts in one pipeline. |

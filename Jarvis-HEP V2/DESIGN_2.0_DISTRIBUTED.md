@@ -301,42 +301,56 @@ The discussion drew a hard line (Discussion §2, §3) between two I/O layers:
 
 - **Layer 1 — inside the Worker/Sample.** A calculator chain's own file traffic
   (`input.json → run → output.json`) is **per-Sample, per-Module, synchronous**, and must
-  complete *for the whole chain* before the Sample is done. The Sample owns its work
-  directory exclusively during execution. **Unchanged from v1.**
-- **Layer 2 — the Archiver.** After all calculators finish and LogL is computed, the final
-  products are persisted **in bulk**. This is *not* part of the calculator chain.
+  complete *for the whole chain* before the Sample is done. Work cwd is usually the
+  calculator **`path`** (often with `@PackID`); `@Sdir` binds I/O to the sample save dir
+  when configured. **Unchanged from v1.**
+- **Layer 2 — the Archiver.** After calculators finish and LogL is computed, products
+  needed for persistence are finalized **off the critical path**. This is *not* part of
+  the calculator chain.
 
-**Archiver flow** (NAS-optimized):
+**As-built Layer-2 flow** (defaults as of `64d7486`; staging is optional, not required):
 
-1. Worker does a fast `mv work_dir → staging/` (metadata-only, ~instant on same volume).
-2. Worker hands `(info_dict, product list, staging path)` to the Archiver.
-3. Archiver (own process(es)) batches ≈200 Samples and: async/`move`s products into
-   `outputs/<scan>/SAMPLE/<uuid>/`, writes `DATABASE/` (HDF5/CSV), does `xlha/slha`
-   formatting, then deletes staging.
+1. On pull, Worker allocates a Redis SAMPLE **bucket** → materialize under
+   `SAMPLE/<bucket_id>/<uuid>/` (V1 `sample_directory` parity; default limit 200).
+2. Calculator work stays on `@PackID` (or `@Sdir` when requested). Portal `save: true`
+   copies products into the sample dir.
+3. Worker **`submit_result`** → `hep:archive_queue`, then **`finish_sample_bucket`**
+   (active--). **Default handoff is `direct`** — no `staging/` hop.
+4. Archiver (default **`mode: process`**) batches DATABASE writes (`SimpleHDF5Writer`).
+5. Redis tracks per-bucket `assigned` / `completed` / **`archived`**. A bucket is packed
+   to `SAMPLE/<bucket>.tar.gz` **only when** `sealed && active==0 && archived>=assigned`
+   (never pack before DATABASE rows are written — early prune was a production hang).
+6. Optional **`Cleanup.strategy: mv_to_staging`** restores the old Worker→staging→SAMPLE
+   hop when a heavy/out-of-process path needs a buffer.
 
-**Config (new, optional):**
+**Config (optional; EnvReqs.V2 / Calculators / Scan):**
 
 ```yaml
-Calculators:
-  Archiver:
-    batch_size: 200
-    async_io: true
-    strategy: "move"          # move|copy
-    format: "xlha"
-    nas_optimize: true
-    delete_after_archive: true
-  Cleanup:
-    strategy: "mv_to_staging"
-    staging_dir: "&J/outputs/${Scan:name}/staging"
+EnvReqs:
+  V2:
+    sample_directory: { enabled: true, limit: 200, width: 6, pack: true }
+    cleanup: { strategy: direct }          # or mv_to_staging
+    archiver:
+      mode: process                        # default process (thread still supported)
+      handoff: direct
+      pack_buckets: true
+      batch_size: 200
+      flush_interval_sec: 1.0
+      delete_after_archive: true
 
-Runtime:
+Calculators:
+  Archiver: { ... }                        # same keys; task overrides EnvReqs.V2
+  Cleanup: { strategy: direct, staging_dir: null }
+
+Runtime:                                   # internal only after load_task_yaml
   FileOperation:
-    delete_method: "shutil"   # shutil (default, cross-platform) | rm (mass-delete, Unix)
+    delete_method: "shutil"                # shutil | rm
 ```
 
 `delete_method` is the only piece of `command_execution_design.md` adopted now; a general
-command backend is deferred. Final SAMPLE/DATABASE layout stays byte-identical to v1
-(frozen output contract) — the Archiver is a *transport* change, not a *format* change.
+command backend is deferred. Final DATABASE contract is frozen (JSON rows in HDF5);
+SAMPLE layout is V1-compatible **bucket dirs + optional tar.gz**, not only flat
+`SAMPLE/<uuid>/`.
 
 ---
 

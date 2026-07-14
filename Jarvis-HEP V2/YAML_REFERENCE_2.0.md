@@ -109,12 +109,29 @@ EnvReqs:
     required: true
     default_yaml_path: "&J/deps/environment_default.yaml"
 
-# ---- V2 scheduling -------------------------------------------------------
+# ---- V2 scheduling + SAMPLE/archive policy --------------------------------
 # `worker` is accepted as a singular alias; use `workers` in new YAML.
+# Nested sample_directory / cleanup / archiver may also live under EnvReqs.V2
+# (merged from default_yaml) and are applied into Scan / Calculators.*.
 EnvReqs:
   V2:
     workers: 4                   # int >= 0; default 0 (factory uses 1 when <= 0)
     batch_size: 256               # int > 0; default 256, sampler submit-group size
+    sample_directory:            # optional; also Scan.sample_directory
+      enabled: true
+      limit: 200
+      width: 6
+      pack: true
+      start_bucket: 1
+    cleanup:
+      strategy: direct           # direct (default) | mv_to_staging
+    archiver:
+      mode: process              # process (default) | thread
+      handoff: direct
+      pack_buckets: true
+      batch_size: 200
+      flush_interval_sec: 1.0
+      delete_after_archive: true
 
 # ---- sampling (required for a runnable task) --------------------------------
 Sampling:
@@ -182,14 +199,16 @@ Calculators:
     EggBox: 4                    # Redis calc:free:<name>; floor 1
                                  # fallback per-module `make_paraller`, else 1
   Archiver:
-    mode: thread                 # thread | process (default thread)
+    mode: process                # process (default) | thread
+    handoff: direct              # direct (default) | staging
+    pack_buckets: true           # tar SAMPLE/<bucket> after archived==assigned
     batch_size: 200              # default 200, must be > 0
     flush_interval_sec: 1.0      # default 1.0, floor 0.05
-    strategy: move               # move | copy (default move)
+    strategy: move               # move | copy (default move) — used if staging hop on
     delete_after_archive: true   # default true
   Cleanup:
-    strategy: mv_to_staging      # mv_to_staging | direct (default mv_to_staging)
-    staging_dir: null            # default <task_result_dir>/staging
+    strategy: direct             # direct (default) | mv_to_staging
+    staging_dir: null            # only for mv_to_staging; default <task_result_dir>/staging
   Modules:
     - name: EggBox               # REQUIRED (nameless entries are dropped)
       required_modules: []       # dependency names -> execution layers (same layer = concurrent)
@@ -202,9 +221,14 @@ Calculators:
       # make_paraller: 2         # per-module pool fallback (sic — V1 typo, see A.4)
       env_setup:
         - source: "&J/External/rivet_env.sh"   # sourced once per Worker, env cached
-      installation:              # clone_shadow install commands (once per pack)
+      installation:              # clone_shadow install commands (once per Worker per pack)
         - cmd: "cp -r ${source}/* ${path}/"    # ${source}/${path} tokens available
           cwd: "${path}"
+      # NOTE: PackIDs are stable slots (001…N) whose directories persist across
+      # samples, Workers, and runs. Each NEW Worker re-runs installation on an
+      # already-populated pack directory, so installation commands MUST be
+      # idempotent (plain overwrite-copy like the above is fine; V1 cards
+      # already assume this).
       initialization:            # post-install commands (once per pack)
         - cmd: "./configure"
           cwd: "${path}"
@@ -272,6 +296,9 @@ detail (error types, aliases, code citations).
 |---|---|---|---|
 | `EnvReqs.V2.workers` / `worker` | [5](#5-envreqsv2-runtime-settings) | no | `0` |
 | `EnvReqs.V2.batch_size` | [5](#5-envreqsv2-runtime-settings) | no | `256` |
+| `EnvReqs.V2.sample_directory` | [5.1](#51-sample_directory-also-scansample_directory) | no | limit 200 / pack true |
+| `EnvReqs.V2.cleanup` | [9.3](#93-calculatorscleanup) | no | `direct` |
+| `EnvReqs.V2.archiver` | [9.2](#92-calculatorsarchiver) | no | process + pack |
 
 ### 3.2 `Sampling`
 
@@ -401,23 +428,39 @@ load time.
 
 ## 5. `EnvReqs.V2` runtime settings
 
-The public V2 YAML surface deliberately contains only these two scheduling controls. The
-executor internally uses Redis, derives the sample-artifact policy, and enables its Worker
-recovery watchdog; none of those are task-YAML settings.
+Public V2 scheduling + SAMPLE/archive policy knobs (also mergeable from
+`EnvReqs.Check_default_dependencies.default_yaml_path`). Nested maps are applied into
+`Scan.sample_directory` / `Calculators.Cleanup` / `Calculators.Archiver` (task values win).
 
 | Key | Values | Default | Notes |
 |---|---|---|---|
 | `workers` | int ≥ 0 | `0` | number of Worker processes; the factory uses one Worker when the value is ≤ 0 |
 | `worker` | int ≥ 0 | — | singular compatibility alias for `workers`; do not specify both |
 | `batch_size` | int > 0 | `256` | number of samples submitted in one scheduler group |
+| `sample_directory` | mapping | see §5.1 | SAMPLE bucket layout + tar packing (V1 parity) |
+| `cleanup` | mapping | `{strategy: direct}` | handoff policy; see §9.3 |
+| `archiver` | mapping | process + pack | Layer-2 policy; see §9.2 |
 
-For a one-off task override, put the same shape in its own YAML:
+### 5.1 `sample_directory` (also `Scan.sample_directory`)
+
+| Key | Values | Default | Notes |
+|---|---|---|---|
+| `enabled` | bool | `true` | Redis bucket allocator on pull |
+| `limit` | int ≥ 1 | `200` | samples per `SAMPLE/<bucket>/` |
+| `width` | int ≥ 1 | `6` | zero-pad width (`000001`) |
+| `pack` | bool | `true` | emit `<bucket>.tar.gz` after archive |
+| `start_bucket` | int ≥ 1 | `1` | first bucket id |
+
+Layout: `SAMPLE/000001/<uuid>/…` → (after pack) `SAMPLE/000001.tar.gz`.
 
 ```yaml
 EnvReqs:
   V2:
     workers: 4
     batch_size: 128
+    sample_directory: { limit: 200, pack: true }
+    cleanup: { strategy: direct }
+    archiver: { mode: process, pack_buckets: true }
 ```
 
 Top-level `Runtime` is rejected by the YAML loader. It remains an internal normalized object
@@ -756,24 +799,27 @@ coerced with floor 1. When absent, per-module `make_paraller` (default 1) is use
 
 ### 9.2 `Calculators.Archiver`
 
-Controls Layer-2 persistence (staging → `SAMPLE/<uuid>/` + `DATABASE/`).
+Controls Layer-2 persistence (`DATABASE/` writes + optional SAMPLE bucket tar).
 
 | Key | Values | Default | Notes |
 |---|---|---|---|
-| `mode` | `thread` \| `process` | `thread` | in-process thread vs a dedicated spawned Archiver process |
-| `batch_size` | int > 0 | `200` | Samples buffered before a batch flush |
+| `mode` | `thread` \| `process` | **`process`** | dedicated Archiver process (default) vs control-process thread |
+| `handoff` | `direct` \| `staging` | **`direct`** | mirrors Cleanup; staging hop only when set |
+| `pack_buckets` | bool | **`true`** | pack sealed SAMPLE buckets after `archived>=assigned` |
+| `batch_size` | int > 0 | `200` | Samples buffered before a DATABASE batch flush |
 | `flush_interval_sec` | float ≥ 0.05 | `1.0` | time-based flush trigger for partial batches |
-| `strategy` | `move` \| `copy` | `move` | staging → SAMPLE transfer method |
-| `delete_after_archive` | bool | `true` | delete the staging directory once archived |
+| `strategy` | `move` \| `copy` | `move` | transfer method when a staging hop is used |
+| `delete_after_archive` | bool | `true` | delete staging residue when staging hop is used |
 
 ### 9.3 `Calculators.Cleanup`
 
-Controls how a finished Sample's working directory hands off to the Archiver.
+Controls optional staging handoff. **Default is direct** (products already under
+`SAMPLE/<bucket>/<uuid>/`).
 
 | Key | Values | Default | Notes |
 |---|---|---|---|
-| `strategy` | `mv_to_staging` \| `direct` | `mv_to_staging` | `direct` skips the staging hop |
-| `staging_dir` | path | `<task_result_dir>/staging` | *not* the design-doc default sketch — see Appendix A.8 |
+| `strategy` | `direct` \| `mv_to_staging` | **`direct`** | `mv_to_staging` enables the optional buffer hop |
+| `staging_dir` | path | `<task_result_dir>/staging` | only used when strategy is `mv_to_staging` |
 
 ### 9.4 `Calculators.Modules[]` — one external calculator
 

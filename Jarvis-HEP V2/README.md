@@ -42,17 +42,19 @@ Docs/
 
 ## Read in this order
 
-> **Current status (2026-07-14):** prototype phase closed — start with
-> [`PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md)
-> (next theme: **D12** Calculator V1 parity + UX). Code baseline `jarvis2` **`0a5e85e`**
-> (283 passed / 1 skipped): shared `ExpressionContext`, full V1 lightweight function core,
-> Operas dynamic discovery, `EnvReqs.V2` scheduling surface (top-level `Runtime` rejected),
-> AdaptiveLevelSet D10 core. Acceptance trail:
-> [`EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md`](EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md)
-> (first unmodified V1-style Bridson+Operas full run). UI gaps:
+> **Current status (2026-07-14 evening):** code baseline `jarvis2` **`64d7486`**.
+> Prototype closed; **D12.0–D12.2 done** (Operas core dep, Calculator V1-YAML parity on JSON path,
+> V1-style logging). **D12.8 done:** SAMPLE buckets (limit 200) + tar-after-archive, default
+> **direct handoff** (staging optional), default **process Archiver**, managed
+> `Jarvis-Redis:<scan>` + `setproctitle` process titles, SIGINT clean shutdown.
+> Live gate: Eggbox Bridson ~8k samples drains to full archive. Start with
+> [`PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md) + open
+> ledger in [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). Still open: D8 Agent API /
+> `run_state.json`, D11 CLI/Portal/PLOT closure, D12.3–D12.6 (flowchart, redis override, project
+> tools, catalog). UI gaps:
 > [`USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md`](USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md).
-> Open work only in [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md); completed WPs in
-> `archive/`. `DEVELOPMENT_REVIEW_2026-07-10.md` / `CODE_REVIEW_2.0.md` are historical.
+> Acceptance trail:
+> [`EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md`](EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md).
 
 1. [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md) — **single source of truth.** The
    full architecture, the three binding decisions (Redis-first, slow-regime-first, worker =

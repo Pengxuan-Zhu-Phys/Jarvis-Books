@@ -1,9 +1,8 @@
 # V2 Distributed Runtime — Development Plan (Agent Execution Playbook)
 
-Last updated: 2026-07-14 (prototype closed; D12 order 0→2→1; D12.1 wording =
-**Eggbox Calculator card**, not process/thread runtime. Archive:
-`archive/V2_PLAN_ARCHIVE_2026-07-14.md`. Code baseline `jarvis2` `0a5e85e`; 283 passed /
-1 skipped).
+Last updated: 2026-07-14 (evening). Branch `jarvis2` tip **`64d7486`**.
+D12.0–D12.2 + SAMPLE-bucket/direct-handoff/process-Archiver/managed-Redis/signal
+cleanup landed. Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -82,7 +81,7 @@ user-visible behavior.
 | **D1** | Single-Worker Redis MVP | one Worker pulls from Redis and runs opera + calculator scans; DATABASE parity vs V1 golden fixtures |
 | **D2** | Multi-Worker + calculator reuse + concurrency | N Workers, held calculator instances, Redis free-pool, clone_shadow, layer-internal concurrency; scales with workers |
 | **D3** | Command & environment resolution | `registered_executables`, two-phase `CommandParser`, `env_setup` cache, `delete_method` |
-| **D4** | Async Archiver | staging mv + Archiver process, batched NAS persistence; output parity gate |
+| **D4** | Async Archiver | Layer-2 persistence: default **direct** SAMPLE handoff (staging optional), process Archiver, Redis SAMPLE buckets + tar-after-archive; output parity gate |
 | **D5** | Monitoring | `op_count`-driven 60 Hz snapshot + `--monitor` dashboard + run_summary from Redis |
 | **D6** | Resume + failure handling | heartbeats, dead-Worker respawn, in-flight re-queue, RNG spawning, distributed checkpoint |
 | **D7** | Acceptance | slow-regime gates: worker scaling, archive latency, 256-Worker chaos, parity |
@@ -102,7 +101,7 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 > [`archive/V2_PLAN_ARCHIVE_2026-07-14.md`](archive/V2_PLAN_ARCHIVE_2026-07-14.md)
 > — D0.1–D0.5, D1.1–D1.2, D2.1–D2.3, D3.1–D3.3, D4.1–D4.2, D5.1–D5.2, D6.1–D6.2,
 > D7.1 (2026-06-28/29); D9.1–D9.3, D9.5, D9.7–D9.8 (2026-07-10); D10.1–D10.2
-> (2026-07-11); D11.4a–D11.4d (2026-07-13); plus the pre-V2 M0/M1 row. This table
+> (2026-07-11); D11.4a–D11.4d (2026-07-13); D12.7 (2026-07-14); plus the pre-V2 M0/M1 row. This table
 > keeps only open work: todo / in-progress / partial / blocked.
 
 | WP   | Title                                                                                  | Milestone | Depends on       | Status                                 | Date       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -110,7 +109,7 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 
 | D8.1 | Agent API facade: JSON envelope + `--validate`/`--results` + `--version-json`        | D8        | —                | todo                                   |            | Design: `DESIGN_AGENT_BRIDGE_2.0.md` §4. NEW `jarvishep2/api.py`. |
 | D8.2 | `run_state.json` writer + `--status --json` / `--monitor-json`                        | D8        | D8.1             | todo                                   |            | Bridge §5. NEW `jarvishep2/run_state.py`; heartbeat thread in core. |
-| D8.3 | Control-process graceful stop (SIGINT/SIGTERM → checkpoint → clean exit)              | D8        | —                | todo                                   |            | Bridge §6. Today only Workers handle signals; control process has none. |
+| D8.3 | Control-process graceful stop (SIGINT/SIGTERM → checkpoint → clean exit)              | D8        | —                | **partial**                            | 2026-07-14 | **Landed in `64d7486`:** control SIGINT/SIGTERM → `KeyboardInterrupt` → `run()` `finally` → idempotent `shutdown()` (Archiver, Workers, control lock, **always** stop managed Redis); SIGTSTP/Ctrl+Z ignored with warning; CLI exit 130. **Still open vs Bridge §6:** no `run_state.json` interrupted status (D8.2), no forced mid-scan checkpoint on stop, no formal stop-ack contract. |
 | D8.4 | Strict-validate diagnostics (silent-coercion warnings, dead keys, unknown keys)       | D8        | D8.1             | todo                                   |            | Bridge §4.2; findings from `YAML_REFERENCE_2.0.md` Appendix A. |
 
 | D9.4 | `TaskFactory` de-singleton + internal MonitorLoop/Watchdog split + honest metrics     | D9        | D8.3             | **partial**                            | 2026-07-10 | Core owns explicit `TaskFactory`; `get_instance` deprecated shell; honest `None` metrics. MonitorLoop/Watchdog class split deferred. |
@@ -127,12 +126,13 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D11.5 | Scan-driven PLOT scene + workflow graph + AdaptiveLevelSet overlay                      | D11       | D10.3, D11.2     | todo                                   |            | Current bridge is render-only. Preserve JarvisPLOT ownership of all rendering algorithms. |
 
 | D12.0 | Jarvis-Operas → core dependency + expression-scan scope fix                             | D12       | —                | **done**                               | 2026-07-14 | (a) `Jarvis-Operas>=1.3.0` is a core dep in `pyproject.toml`; `[operas]` extra kept as deprecated alias. README/INSTALL updated. (b) `expression_uses_operas_function` only treats bare strings as formula text at the call site or under `expression`/`selection`/`target_expression` keys — calculator `cmd`/install strings no longer force discovery. Tests: `test_operas_functions.py` gate cases. Argument-resolution layer remains D11.4. |
-| D12.1 | Calculator V1-YAML parity (string commands, `${source}/${path}`, module `selection`)    | D12       | D12.0, D12.2 (accept); D11.3 (SLHA complete) | todo                          |            | **Mainline.** Review §4.0/§4.1: name = **Eggbox Calculator card** (file `Example_Bridson_process.yaml` is historical only — not `Runtime.mode`). (1) string-list install/init/commands → `{cmd, cwd}`; (2) `${source}/${path}` at Spec parse; (3) module `selection` in workflow; (4) tolerate `make_paraller`/`modes`/top-level `path` (invariant 12). Accept = unmodified Calculator card + DATABASE/sample-log golden. JSON first; SLHA needs D11.3. |
-| D12.2 | Core logging V1 visual parity (formatter, banner, file layout)                          | D12       | D12.0            | **done**                               | 2026-07-14 | V1-style `JarvisContextFormatter` (`·•·`/`Ϡ`, `MM-DD HH:mm:ss.SSS`, raw passthrough, TTY color); `jarvis_module` bind (LogRecord-safe); logo via `versioning.py` + `card/logo`; control log at `<task_root>/logs/<scan>/<scan>.log`; QueueListener kept. Sample-layer format was already V1-parity. Tests: `test_logging_layers.py`. |
+| D12.1 | Calculator V1-YAML parity (string commands, `${source}/${path}`, module `selection`)    | D12       | D12.0, D12.2 (accept); D11.3 (SLHA complete) | **done** (JSON path)          | 2026-07-14 | Committed `15f8ef4` + later runtime fixes. Review §4.0/§4.1. String cmds, `${source}/${path}`, module `selection`, `make_paraller` pools. Live Eggbox Bridson calculator path OK. SLHA complete still needs D11.3. |
+| D12.2 | Core logging V1 visual parity (formatter, banner, file layout)                          | D12       | D12.0            | **done**                               | 2026-07-14 | `481fa97`. V1-style formatter/logo/scan log path. Tests: `test_logging_layers.py`. |
 | D12.3 | Workflow flowchart export + JarvisPLOT rendering                                        | D12       | D11.5            | todo                                   |            | Review §5.2: port V1 `export_flowchart_semantics` onto V2 execution plan; render via `plot_bridge`; `--skip-draw-flowchart` compat; un-skip golden test in `test_workflow_execution_plan.py`. |
-| D12.4 | `EnvReqs.V2` grouped settings (workers/factory/redis override)                          | D12       | —                | todo                                   |            | Review §4.3: extend whitelist to grouped schema incl. optional `redis.{host,port,db}` override over `INTERNAL_REDIS_CONFIG` default; tolerate V1 sibling keys (`Python`, `CERN_ROOT`); relax external Runtime-defaults strictness. |
+| D12.4 | `EnvReqs.V2` grouped settings (workers/factory/redis override)                          | D12       | —                | **partial**                            | 2026-07-14 | **Landed:** whitelist extended beyond `workers`/`batch_size` to `sample_directory`, `cleanup`, `archiver` (merged into `Scan` / `Calculators.*`); `jarvishep2/card/environment_default.yaml` + Examples Eggbox `deps/environment_default.yaml`. **Still open:** optional `redis.{host,port,db}` override over `INTERNAL_REDIS_CONFIG`; fuller grouped factory schema from Review §4.3. |
 | D12.5 | `Jarvis2 project` subcommands (create/pack/browse/fetch/info)                            | D12       | D11.2            | todo                                   |            | Review §5.3: port V1 `project_scaffold` / `project_packager` / `project_template` / `official_project_library`; same `jarvis.project.yaml` layout. |
 | D12.6 | Jarvis-Examples-owned official catalog (schema-versioned remote index)                  | D12       | D12.5            | todo                                   |            | Review §5.4: move catalog JSON into Jarvis-Examples repo; HEP keeps only index URL + schema version + fetch logic; local cache fallback replaces packaged copy; cross-repo change needs user go-ahead on Jarvis-Examples. |
+| D12.8 | SAMPLE buckets + direct handoff + process Archiver + process titles                     | D12       | D12.1            | **done**                               | 2026-07-14 | Commit **`64d7486`**. Defaults: `Cleanup.strategy=direct` (staging optional), `Archiver.mode=process` + `pack_buckets=true`, `Scan/EnvReqs.V2.sample_directory` limit=200. Redis bucket meta (`active`/`completed`/`archived`/`sealed`); **pack only when `archived>=assigned`** (fixes early-tar prune race). Managed `Jarvis-Redis:<scan>` + `setproctitle` (`Jarvis2*`). Tests: `test_sample_bucket.py`, `test_redis_server.py`. Live Eggbox Bridson ~8k samples drains cleanly. |
 
 Parallelism note: D0.1 / D0.2 / D0.3 are independent and may proceed in any order. D3.3 is
 independent of the rest of D3. D8.3 is independent of D8.1/D8.2 and may land first; the
@@ -208,20 +208,21 @@ done. **Rollback**: how it is disabled. **Out of scope**: excluded work.
 - **Goal**: a documented stop contract so an external supervisor (Jarvis-Agent, shell, CI)
   can interrupt a scan and always land on a resumable checkpoint.
 - **Design refs**: Bridge §6; `DESIGN_2.0_DISTRIBUTED.md` §10 (checkpoint model).
-- **Files**: `jarvishep2/core.py` (signal handlers + orderly teardown),
-  `jarvishep2/client.py` (exit code), NEW `tests/test_graceful_stop.py`.
-- **Steps**:
-  1. Install SIGINT/SIGTERM handlers in the control process (today only Workers have them):
-     stop proposing → force an immediate runtime checkpoint → stop Archiver (drain) → factory
-     shutdown → `run_state.status="interrupted"` (if D8.2 landed) → exit 0.
-  2. Target ≤30 s teardown on an idle queue; second signal escalates to immediate abort.
-  3. Document the process-group kill fallback (SIGKILL → no final write; resume from the
-     last periodic checkpoint).
-- **Accept**: SIGINT mid-scan on a parity project exits 0 with a valid checkpoint;
-  `--resume` completes the scan with output parity; test drives the full
-  stop→resume→parity loop under fakeredis TCP.
-- **Rollback**: revert commit (handlers additive).
-- **Out of scope**: pause/steering semantics; Worker-side signal behavior (already shipped).
+- **Files**: `jarvishep2/core.py`, `jarvishep2/client.py`, `jarvishep2/redis_server.py`,
+  NEW `tests/test_graceful_stop.py` (still open).
+- **Status: partial (`64d7486`)** — control handlers landed; agent/checkpoint contract incomplete.
+- **Done**:
+  1. SIGINT/SIGTERM → `KeyboardInterrupt` → `run()` `finally` → idempotent `shutdown()`.
+  2. Always stop managed Redis; refuse Ctrl+Z/SIGTSTP with a warning.
+  3. CLI exit **130** on interrupt.
+- **Remaining steps**:
+  1. Force an immediate runtime checkpoint on stop (before teardown).
+  2. `run_state.status="interrupted"` once D8.2 lands; formal stop-ack for agents.
+  3. Dedicated `tests/test_graceful_stop.py` (stop→resume→parity under fakeredis TCP).
+- **Accept (remaining)**: SIGINT mid-scan leaves a valid checkpoint and (with D8.2) run_state;
+  `--resume` completes with output parity.
+- **Rollback**: revert signal-handler commit.
+- **Out of scope**: pause/steering; Worker-side signals (already shipped).
 
 ### WP-D8.4 — Strict-validate diagnostics
 
