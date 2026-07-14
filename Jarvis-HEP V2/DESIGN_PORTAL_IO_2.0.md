@@ -1,6 +1,7 @@
 # DESIGN — Jarvis-Portal IO Integration (V2)
 
-**Status**: **implemented for exposed registry formats**; HEP format exposure remains D11.3
+**Status**: **implemented**. V2 surface exposes SLHA/xSLHA (Portal ≥1.4.0); V1 surface unchanged.
+HEP-v2 imports ``jarvis_portal.v2`` only (interface packages are version-split).
 **Milestone**: D9.2 (IO half) / Portal integration  
 **Date**: 2026-07-10 · as-built review 2026-07-13
 **Scope**: wire `jarvishep2` calculator Layer-1 I/O through **Jarvis-Portal** so new formats ship by upgrading Portal only.
