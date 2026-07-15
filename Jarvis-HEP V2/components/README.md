@@ -5,12 +5,13 @@ structure**: which classes are defined, every member function (signature + behav
 instance attributes, inter-component interfaces, drift from the original design, and the tests that
 exercise it.
 
-> **As-built baseline:** originally pinned at `d0de31a`; components touched by Portal / Operas /
-> Expression / EnvReqs / ALS work are stamped at **`0a5e85e`** (2026-07-14, 283 passed / 1 skipped).
-> Architecture rationale: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md). Open work:
-> [`../V2_DISTRIBUTED_PLAN.md`](../V2_DISTRIBUTED_PLAN.md). Historical completeness review:
-> [`../CODE_REVIEW_2.0.md`](../CODE_REVIEW_2.0.md). Prototype closeout + D12:
-> [`../PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](../PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md).
+> **As-built baseline:** runtime D0–D7 + D11/D12 UI; later stamps on docs that mention them:
+> FileOperation SAMPLE save (`399633b`), Archiver logger (`67d760d`), full CSV + scan performance
+> (`11c0489` / `4e562e0`) as of **2026-07-16**. Architecture:
+> [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md). Open work:
+> [`../V2_DISTRIBUTED_PLAN.md`](../V2_DISTRIBUTED_PLAN.md). Portal/IO:
+> [`../DESIGN_PORTAL_IO_2.0.md`](../DESIGN_PORTAL_IO_2.0.md). Monitor progress design:
+> [`../DESIGN_SAMPLE_PROGRESS_MONITOR.md`](../DESIGN_SAMPLE_PROGRESS_MONITOR.md).
 
 > **No `ModuleManager`** — module config is a picklable blueprint ([config_schema.md](config_schema.md)),
 > execution is the [Worker](worker.md). **No shared `Module` ABC** — `CalculatorModule` and
@@ -31,7 +32,7 @@ exercise it.
 | 7 | [CalculatorModule](calculator.md) | `jarvishep2/Module/calculator.py` | done |
 | 8 | [TaskFactory](factory.md) | `jarvishep2/factory.py` | done (+ watchdog) |
 | 9 | [Sampler base](sampler.md) | `jarvishep2/Sampling/sampler.py` | done (minimal) |
-| 10 | [DataRecorder / Archiver](datarecorder.md) | `jarvishep2/archiver.py`, `database.py`, `archive_handoff.py`, `file_ops.py` | done (JSON-rows HDF5) |
+| 10 | [DataRecorder / Archiver](datarecorder.md) | `jarvishep2/archiver.py`, `database.py`, `archive_handoff.py`, `file_ops.py`, `sample_bucket.py` | done (JSON-rows HDF5 + pack-after-archive + Archiver logger) |
 | 11 | [Core orchestrator](core.md) | `jarvishep2/core.py`, `client.py` | done |
 
 **Supporting:**
@@ -40,7 +41,7 @@ exercise it.
 |-----------|-------------------|--------|
 | [CommandParser](command_parser.md) | `jarvishep2/command_parser.py` | done |
 | [env_setup](env_setup.md) | `jarvishep2/env_setup.py` | done |
-| [Monitor / Dashboard](monitor.md) | `jarvishep2/dashboard.py`, `monitoring/run_summary.py` | done (text only) |
+| [Monitor / Dashboard](monitor.md) | `jarvishep2/dashboard.py`, `monitoring/run_summary.py` | done (text monitor + Scan Performance log) |
 | [Checkpoint / Resume](checkpoint.md) | `Sampling/runtime_checkpoint.py`, `Sampling/checkpointed_sampler.py` | done |
 | [LogLikelihood](likelihood.md) | `jarvishep2/likelihood.py` | done |
 | [Library / LibDeps](library.md) | `jarvishep2/library.py` | done (thin) |
@@ -51,7 +52,7 @@ exercise it.
 |-----------|-------------------|------|
 | [Module contract & spawn](module_base.md) | `operas.py`, `Module/calculator.py`, `mp_context.py` | no shared ABC |
 | [OperasModule](operas.md) | `jarvishep2/operas.py` | preload-per-Worker |
-| [I/O parameter system](io_system.md) | `jarvishep2/io_portal.py`, `file_ops.py` | **Portal registry** (JSON/CSV/TSV/DAT/Wolfram; new formats via Portal upgrade) |
+| [I/O parameter system](io_system.md) | `io_portal.py`, `file_ops.py`, `file_operation_service.py` | Portal formats + HEP FileOperation for `save:` |
 | [Subprocess scheduler](subprocess_scheduler.md) | `jarvishep2/async_subprocess.py` | per-Worker |
 | [Parameters & Variables](parameters_variables.md) | `Sampling/variables.py` | no `Module/parameters.py` |
 | [Nuisance handling](nuisance.md) | — | ⚠️ **stubbed only** |
@@ -73,11 +74,12 @@ exercise it.
 | [CLI parsing (命令行解析)](cli.md) | `jarvishep2/client.py` | plain argparse (no `card/argparser.json`) |
 | [Config loader & normalization](config_schema.md) | `task_config.py`, `runtime_config.py`, `worker_config.py` | no jsonschema / env checks |
 | [Paths & runtime tokens](paths_tokens.md) | `jarvishep2/base.py` | functions, no `Base` class |
-| [Project tools](project_tools.md) | — | ⚠️ **not ported** |
+| [Project tools](project_tools.md) | `jarvishep2/project_*.py` / CLI `Jarvis2 project` | done (D12.5/D12.6) |
 | [Utils / versioning / convert / plot](utils.md) | — | ⚠️ **not ported** |
 
 > **Folded-in glue:** `log_kv` → [logger](logger.md); `calculator_pools` → [redis_queue](redis_queue.md);
-> `archive_handoff` / `file_ops` / `database` / `io_json` → [datarecorder](datarecorder.md);
+> `archive_handoff` / `file_ops` / `database` → [datarecorder](datarecorder.md);
+> `file_operation_service` / `io_portal` → [io_system](io_system.md);
 > `run_summary` → [monitor](monitor.md); `mp_context` → [module_base](module_base.md);
 > `task_config` / `worker_config` → [config_schema](config_schema.md);
 > `stateless_batch` / `sampling_utils` / `checkpointed_sampler` → [samplers_catalog](samplers_catalog.md);

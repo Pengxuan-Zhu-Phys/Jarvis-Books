@@ -80,7 +80,7 @@ The unit of work: identity + `u_coords` cross Redis; everything else is Worker-l
 | `update_uuid` | `(new_uuid) -> None` | rewrite uuid in `observables` + `info`. |
 | `to_task_dict` | `() -> dict` | **Wire format** for `hep:task_queue`: uuid, u_coords→list, execution_plan, opera_params, sample_artifacts, priority, created_at. Raises if a forbidden key (`logger/handlers/params/info/observables`) is present (invariant #7/#8). |
 | `from_task_dict` | `@classmethod (data) -> Sample` | Reconstruct inside Worker; `u_coords`→ndarray, plan rebuilt; logger/paths **not** restored. |
-| `to_info_dict` | `() -> dict` | Result/monitor projection: status, params, observables, likelihood, plan, plus `timings` + selected `_INFO_PROJECTION_KEYS`; strips `logger`. |
+| `to_info_dict` | `() -> dict` | Result/monitor projection: status, params, **full** `observables` (params + module outputs + LogL + optional file-path keys), likelihood, plan, plus `timings` + selected `_INFO_PROJECTION_KEYS`; strips `logger`. Archiver persists this `observables` dict as one HDF5 JSON row. |
 | `bind_params` | `(mapper: UMapperProtocol\|None) -> None` | Idempotent `u → x`: `mapper.map(u_coords)` → `params`/`observables`/`info`; sets `_params_bound`. No-op if mapper is None. |
 | `set_config` | `(config) -> None` | Adopt `info`, normalize `sample_artifacts`, `create_info()`, combine nuisance card if present, eager-materialize when `should_eager_materialize`. |
 | `create_info` | `() -> None` | Build the V1-compat `info` bag: sample_dirs root, logger_name `Sample@<uuid>`, lazy `BufferedSampleLogger`, handlers `{}`, status `Init`. **Target:** pass `console=bool(info.get("sample_console"))` into the lazy logger. |

@@ -46,7 +46,7 @@ Factory/Workers → Archiver → checkpoint, drives the scan, and tears everythi
 | `_command_parser_payload` / `_apply_command_parser_to_worker_config` | make the parser picklable + apply Phase-1 to calculator configs. |
 | `build_worker_config(**overrides)` | picklable Worker blueprint with Phase-1 resolution applied. |
 | `init_factory(worker_config=None)` | obtain the factory, reuse core Redis, `start_workers(Runtime.workers)` + monitor + watchdog (no-op unless redis runtime). |
-| `init_archiver(db_path=None)` | start Archiver; **default `mode=process`** (`ArchiverProcess`); thread mode still supported. |
+| `init_archiver(db_path=None)` | start Archiver; **default `mode=process`** (`ArchiverProcess` + `logs/<scan>/jarvis_archiver.log`); thread mode still supported. |
 | `_restore_archiver_persistence` / `_archiver_records_written` | resume acked-uuids / read record counter. |
 | `set_sampler(sampler)` | attach sampler, wire Redis, import resume state if resuming. |
 | `start_runtime_checkpoint()` | enable the checkpoint heartbeat (save callback). |
@@ -55,7 +55,7 @@ Factory/Workers → Archiver → checkpoint, drives the scan, and tears everythi
 | `_init_sample_buckets` / `_finalize_sample_buckets` | Redis SAMPLE bucket meta; seal open bucket at end-of-run. |
 | `_install_control_signal_handlers` | SIGINT/SIGTERM → clean shutdown; SIGTSTP/Ctrl+Z ignored. |
 | `get_monitor_snapshot()` / `monitor_once()` | factory snapshot / formatted monitor view. |
-| `write_run_summary(output_dir=None)` | build + write the run summary. |
+| `write_run_summary(output_dir=None)` | `build_run_summary` → log **[Scan Performance]** (`samples_per_sec`, `avg_sample_sec`, …) → write `run_summary.{json,csv,txt}`. |
 | `shutdown(*, wait=True, write_run_summary=False)` | idempotent: stop sampler checkpoint, Archiver, factory/Workers, control lock, **always stop managed Redis**. |
 
 ---

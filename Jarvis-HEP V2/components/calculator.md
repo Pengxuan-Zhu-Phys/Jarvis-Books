@@ -3,14 +3,16 @@
 **Role**: run one external calculator for one Sample. **Held long-term by a Worker** (one instance
 per type), templates pre-loaded, executed through the Worker's `AsyncSubprocessScheduler`, and
 concurrency-capped by the Redis free-pool.
-**Status**: **As-built** @ `jarvis2` `d0de31a`. `Module/calculator.py` 485 lines.
-**Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §4, §8.
+**Status**: **As-built** @ `jarvis2` **`399633b`**+ (HEP FileOperation save after Portal R/W).
+**Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §4, §8;
+[`../DESIGN_PORTAL_IO_2.0.md`](../DESIGN_PORTAL_IO_2.0.md).
 **Reuses V1**: none by import.
 
 > **As-built drift:** the design said `CalculatorModule(Module)` extends a V1 base. **Shipped as a
 > standalone class** (no `Module` ABC — see [module_base.md](module_base.md)). `execute` takes a
-> `runtime_prepared` flag; install is `ensure_shadow_installed` (not `install()`); calculator I/O is
-> via [`io_portal`](io_system.md) → Jarvis-Portal; symlink isolation via [`LibraryManager`](library.md).
+> `runtime_prepared` flag; install is `ensure_shadow_installed` (not `install()`); calculator
+> **format** I/O is Portal ([`io_portal`](io_system.md)); **SAMPLE `save:`** is HEP
+> `FileOperationService` after each write/read; symlink isolation via [`LibraryManager`](library.md).
 
 ---
 
@@ -32,7 +34,8 @@ External calculator runner with template preload and a synchronous `execute`.
 | `_subprocess_env` | dict\|None | cached environment (`bind_env`) |
 | `sample_info`, `PackID` | dict, str\|None | current run context + pack id |
 | `_templates_loaded`, `_template_parse_count`, `_command_counter` | bool/int | preload + command indexing |
-| `_scheduler`, `_command_parser` | attached handles | subprocess scheduler + Phase-2 resolver |
+| `_scheduler`, `_command_parser`, `_expression_context` | attached handles | scheduler + Phase-2 resolver + expressions |
+| `_file_ops` | `FileOperationService`\|None | SAMPLE save/copy (Worker attaches) |
 | `_installed_shadows` | set | pack_ids already installed |
 | `_library` | `LibraryManager` | symlink helper |
 
@@ -43,7 +46,7 @@ External calculator runner with template preload and a synchronous `execute`.
 | `_normalize_timeout` (`@staticmethod`) | `>0` float or None. |
 | `custom_format` (`@staticmethod`) | V1-compatible log format hook. |
 | `preload_templates()` | cache templates once per Worker (idempotent). |
-| `attach_scheduler(scheduler)` / `attach_command_parser(parser)` | bind per-Worker handles. |
+| `attach_scheduler` / `attach_command_parser` / `attach_expression_context` / `attach_file_ops` | bind per-Worker handles (scheduler, parser, expressions, FileOperation). |
 | `bind_env(env)` | store cached env-setup vars. |
 | `env_setup_sources()` | list of `source` scripts from `env_setup`. |
 | `acquire_pack_id(pack_id)` | tag the current run (`PackID`). |
@@ -61,7 +64,7 @@ External calculator runner with template preload and a synchronous `execute`.
 | `_terminate_process(process, grace)` (`@staticmethod async`) | SIGTERM the process group, then SIGKILL. |
 | `_run_command_sync(command, *, stage, command_index, timeout_sec)` | resolve tokens, ensure cwd, submit a `SubprocessJob` to the scheduler; raise on non-ok. |
 | `run_command(...)` (`async`) | scheduler path → `_run_command_sync`; else `asyncio.create_subprocess_shell` with timeout + terminate. |
-| `load_input` / `read_output` (`async`) & `_load_input_sync` / `_read_output_sync` | JSON input write / output read via `io_json`. |
+| `load_input` / `read_output` | Portal format R/W then HEP `apply_hep_io_save` (YAML `save:` → SAMPLE / `.temp`). |
 | `_execute_commands_sync` / `execute_commands` (`async`) | run the command template with a deadline. |
 | `_execute_sync` / `_execute_async` | input → commands → output, returning merged observables. |
 | `execute(sample_info, *, runtime_prepared=False) -> dict` | **sync entry**: set context, optionally `prepare_runtime`, pick scheduler-sync vs `asyncio.run`, clear context in `finally`. |

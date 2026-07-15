@@ -3,16 +3,20 @@
 **Role**: the final persistence layer (Layer 2). Consumes finished Samples from
 `hep:archive_queue`, writes DATABASE rows, and (default) packs sealed SAMPLE buckets into
 `*.tar.gz` only after every sample in the bucket is archived.
-**Status**: **As-built** @ `jarvis2` **`64d7486`**.
+**Status**: **As-built** @ `jarvis2` **`67d760d`** (own Archiver logger) + pack-after-archive.
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §5.
 **Reuses V1**: none by import (V1 `BucketAllocator` / `SampleArchiveManager` parity reimplemented).
 
 > **As-built drift:** `hdf5writer.py` → `database.py` (`SimpleHDF5Writer`, JSON-rows-in-HDF5). No
-> `GlobalHDF5Writer`/`observable_io`, and no `--convert`. Calculator format I/O is owned by
-> Jarvis-Portal (see [io_system.md](io_system.md)), not the Archiver.
+> `GlobalHDF5Writer`/`observable_io`, and no `--convert`. Calculator **format** I/O is Portal;
+> **SAMPLE save/copy** is HEP `FileOperationService` (see [io_system.md](io_system.md)).
 >
-> **Defaults (2026-07-14):** `Archiver.mode=process`, `handoff=direct` / `Cleanup.strategy=direct`
+> **Defaults (2026-07-14+):** `Archiver.mode=process`, `handoff=direct` / `Cleanup.strategy=direct`
 > (staging is **optional**), `pack_buckets=true` with Redis bucket lifecycle.
+>
+> **Logger (2026-07-16):** process mode calls `setup_jarvis_logging(role="archiver")` and binds
+> `module=Archiver` → console + `logs/<scan>/jarvis_archiver.log`. Pack/flush/drain lines use
+> the **`·•· Archiver`** prefix (not the control `Jarvis-HEP` ‰ drain heartbeats).
 
 ---
 
@@ -32,13 +36,19 @@ Background **thread** draining `hep:archive_queue` + packing ready buckets.
 - After each flush: `redis.note_sample_archived(bucket_id)` for each written row.
 - `_pack_ready_buckets()` tars only buckets Redis marked ready (`archived >= assigned`).
 - Default `pack_buckets=true`.
+- Optional `logger=` (module=`Archiver`); logs DATABASE row progress (~every 50), pack success/fail, drain/stop.
 
 ### 1.3 `ArchiverProcess(Process)`
 Default Archiver mode. Own OS process (`Jarvis2-Archiver:<scan>` via `setproctitle`).
-`run()` hosts a `SimpleArchiver` loop and mirrors `records_written` into a shared `Value`.
+`run()` configures Archiver logging (`log_path=logs/<scan>/jarvis_archiver.log` when provided),
+hosts a `SimpleArchiver` loop, and mirrors `records_written` into a shared `Value`.
 
 ## 2. `database.py` — `SimpleHDF5Writer`
-Append JSON-encoded observables rows to `samples.hdf5`.
+Append **full** JSON-encoded `observables` dicts (not params-only) to `samples.hdf5` `records[]`.
+Archiver may add `product_list` / `bucket_dir` / `bucket_id` onto the same row.
+
+Post-run plot emit also writes `DATABASE/samples.csv` as a **full-column** export of those
+records (nested values JSON-encoded); see [monitor](monitor.md) / `plot_scene.export_samples_csv_from_hdf5`.
 
 ## 3. `archive_handoff.py` — optional staging helpers
 `normalize_move_strategy`, `resolve_staging_dir`, `move_tree`, `stage_sample_dir`,
@@ -49,12 +59,14 @@ Append JSON-encoded observables rows to `samples.hdf5`.
 `normalize_sample_directory`, `bucket_dir_path`, `pack_bucket_dir` (tar.gz + prune),
 `format_bucket_name`. Layout: `SAMPLE/000001/<uuid>/…` → `SAMPLE/000001.tar.gz`.
 
-## 5. `file_ops.py` — deletion backends
+## 5. `file_ops.py` — deletion + SAMPLE save helpers
 `DEFAULT_DELETE_METHOD="shutil"`; `normalize_delete_method`, `delete_path` / `delete_paths`.
+Also: `save_io_copy` / `apply_io_save_policy` (SAMPLE landing for YAML `save:`) — executed by
+Worker-side `FileOperationService`, not by the Archiver process. See [io_system.md](io_system.md).
 
-## 6. Calculator Layer-1 format I/O
+## 6. Calculator Layer-1 format I/O + SAMPLE save
 
-Not part of the Archiver. See [io_system.md](io_system.md).
+Format R/W: Portal. SAMPLE copy/delete policy: HEP FileOperation. See [io_system.md](io_system.md).
 
 ---
 

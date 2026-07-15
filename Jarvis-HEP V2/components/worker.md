@@ -4,10 +4,11 @@
 runs its execution plan (same-layer calculators concurrent), materializes SAMPLE artifacts under
 a Redis-allocated bucket, submits results to the Archiver queue, and marks the bucket sample
 finished.
-**Status**: **As-built** @ `jarvis2` **`64d7486`**.
-**Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §4.
+**Status**: **As-built** @ `jarvis2` **`399633b`**+ (FileOperation attach).
+**Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §4;
+[`../DESIGN_SAMPLE_PROGRESS_MONITOR.md`](../DESIGN_SAMPLE_PROGRESS_MONITOR.md) (monitor progress proposal).
 **Reuses V1**: none by import — uses V2 `CalculatorModule`, `OperasModule`,
-`AsyncSubprocessScheduler`, `LogLikelihoodEvaluator`.
+`AsyncSubprocessScheduler`, `LogLikelihoodEvaluator`, `FileOperationService`.
 
 ---
 
@@ -26,17 +27,19 @@ inside the child. OS title: `Jarvis2-Worker-<id>[:<scan>]` via `setproctitle`.
 | `worker_config: dict` | init | mapper / operas / calculators / sample_config / sample_directory |
 | `_redis` | `_init_redis` | child-process Redis client |
 | `_mapper` / `_operas` / `_calculators` / `_likelihood` / `_scheduler` / `_command_parser` | `_init_runtime` | per-worker runtime |
+| `_file_ops` (`FileOperationService`) | `_init_runtime` | SAMPLE save/copy/delete process (`process` default; `file_operation_mode: inline` for tests) |
 | `_delete_method`, `_staging_dir`, `_handoff_to_staging` | `_init_runtime` | default **handoff false** (`Cleanup.strategy=direct`) |
 | `_sample_buckets_enabled` | `_init_runtime` | from `sample_directory.enabled` (default true) |
-| `_held_calc_packs`, heartbeat fields | runtime | watchdog + exclusive PackID |
+| `_held_calc_packs`, heartbeat fields | runtime | watchdog + exclusive PackID (`current_sample`, `current_task`, packs, PIDs) |
 
 **Member functions (high level):**
 
 | Method | Behavior |
 |--------|----------|
-| `run()` | set process title, logging, signals, `_init_redis` / `_init_runtime`, main loop |
+| `run()` | set process title, logging, signals, `_init_redis` / `_init_runtime`, main loop; **finally** shutdown scheduler + FileOperation + Redis |
 | `process_task(task)` | allocate bucket → rebuild Sample → workflow → submit + finish bucket |
 | `_run_layer` / calculator / opera / likelihood steps | same-layer calc concurrency |
+| `_cleanup_transient_paths` | delete via `_file_ops` when present |
 | `_handoff_sample_to_staging` | **only if** `_handoff_to_staging` (optional legacy path) |
 | `_stage_and_submit` | `redis.submit_result(to_info_dict())` (+ optional feedback) |
 | `_force_release_all_held_packs` | always release PackIDs before handoff failures |
@@ -88,6 +91,7 @@ pull task
 - **Sample**: materialize / to_info_dict / close / Sample_running.log.
 - **Archiver** ([datarecorder.md](datarecorder.md)): consumes archive queue; packs buckets later.
 - **Portal / Operas / Likelihood / AsyncSubprocessScheduler**: Layer-1 execution.
+- **FileOperationService** ([io_system.md](io_system.md)): SAMPLE save after Portal R/W; cleanup deletes.
 
 ---
 

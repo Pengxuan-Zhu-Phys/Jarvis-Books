@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "YAML-Example/ADAPTIVE_LEVEL_SET.md",
+                "file": "YAML_REFERENCE_2.0.md",
                 "mode": "preview",
                 "source": false,
                 "backlinks": true,
@@ -28,7 +28,7 @@
                 }
               },
               "icon": "lucide-file",
-              "title": "ADAPTIVE_LEVEL_SET"
+              "title": "YAML_REFERENCE_2.0"
             }
           }
         ]
@@ -193,11 +193,14 @@
       "bases:Create new base": false
     }
   },
-  "active": "e7d29cf8570c7275",
+  "active": "714cd7a2cfe9e6fa",
   "lastOpenFiles": [
+    "archive/V2_PLAN_ARCHIVE_2026-07-14.md",
+    "archive",
+    "PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md",
+    "YAML-Example/ADAPTIVE_LEVEL_SET.md",
     "YAML-Example",
     "DESIGN_PORTAL_IO_2.0.md",
-    "YAML-Example/ADAPTIVE_LEVEL_SET.md",
     "DESIGN_PLOT_BRIDGE_2.0.md",
     "DESIGN_DISTRIBUTOR_REGISTRY_2.0.md",
     "V2_DISTRIBUTED_PLAN.md",

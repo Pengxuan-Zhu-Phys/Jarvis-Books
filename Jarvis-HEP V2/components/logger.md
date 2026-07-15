@@ -58,6 +58,17 @@ Module state: `_state` dict (configured/listener/log_queue/log_path), `JARVIS_HE
 `<task_root>/logs/<scan>/<scan>.log`, prints the logo banner via `render_logo_with_version()`,
 and binds `module=Jarvis-HEP`.
 
+**Per-process roles (as-built 2026-07-16):**
+
+| Process | `setup_jarvis_logging` role | Typical path / module bind |
+|---------|----------------------------|----------------------------|
+| Control | `core` | `logs/<scan>/<scan>.log`, `module=Jarvis-HEP` |
+| Worker | `worker` | `logs/jarvis_worker_<pid>.log`, `module` via worker bind |
+| Archiver (process mode) | `archiver` | `logs/<scan>/jarvis_archiver.log`, `module=Archiver` |
+
+End-of-scan **[Scan Performance]** is logged on the **control** logger (`Jarvis-HEP`), not Archiver
+(see [monitor.md](monitor.md)). Archiver logs pack/flush/DATABASE progress on its own stream.
+
 ---
 
 ## 3. Sample layer — `sample_logger.py`

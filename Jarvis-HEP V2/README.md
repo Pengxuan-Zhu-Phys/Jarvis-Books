@@ -21,7 +21,8 @@ Docs/
 ├── PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md ← prototype closeout review + D12 (Calculator/UX parity) design
 ├── archive/                        ← completed WPs moved out of the plan (full ledger notes + WP details)
 │   └── V2_PLAN_ARCHIVE_2026-07-14.md ← D0–D7 all, D9/D10/D11 done rows; frozen history, read on demand only
-├── DESIGN_PORTAL_IO_2.0.md         ← Jarvis-Portal calculator IO bridge (formats without HEP releases)
+├── DESIGN_PORTAL_IO_2.0.md         ← Portal formats + HEP FileOperation for SAMPLE save
+├── DESIGN_SAMPLE_PROGRESS_MONITOR.md ← low-overhead active sample phase (monitor proposal)
 ├── YAML_REFERENCE_2.0.md           ← as-built task-YAML reference (every key, defaults, gaps)
 ├── YAML-Example/                   ← public YAML recipes (per method)
 │   └── ADAPTIVE_LEVEL_SET.md       ← AdaptiveLevelSet: full Sampling block + key tables

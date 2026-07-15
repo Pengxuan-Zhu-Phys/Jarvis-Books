@@ -63,10 +63,11 @@ Task YAML ──► CalculatorModule (parse specs, resolve tokens)
 | Format-specific serialization (variable R/W only) | Portal |
 | Optional extras for heavy formats | Portal package extras |
 
-**As-built (2026-07-15):** Portal adapters no longer perform SAMPLE copies. HEP builds
+**As-built (2026-07-15/16):** Portal adapters no longer perform SAMPLE copies. HEP builds
 `IOContext` **without** `sample_save_dir` for Portal calls; after each Portal write/read,
-`CalculatorModule` runs `apply_hep_io_save` via the Worker’s `FileOperationService`.
-YAML `save:` syntax is unchanged.
+`CalculatorModule` runs `apply_hep_io_save` via the Worker’s `FileOperationService`
+(`jarvishep2/file_operation_service.py`, process mode default). YAML `save:` syntax is unchanged.
+Component doc: [`components/io_system.md`](components/io_system.md).
 
 ---
 
