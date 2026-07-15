@@ -42,19 +42,12 @@ Docs/
 
 ## Read in this order
 
-> **Current status (2026-07-14 evening):** code baseline `jarvis2` **`64d7486`**.
-> Prototype closed; **D12.0–D12.2 done** (Operas core dep, Calculator V1-YAML parity on JSON path,
-> V1-style logging). **D12.8 done:** SAMPLE buckets (limit 200) + tar-after-archive, default
-> **direct handoff** (staging optional), default **process Archiver**, managed
-> `Jarvis-Redis:<scan>` + `setproctitle` process titles, SIGINT clean shutdown.
-> Live gate: Eggbox Bridson ~8k samples drains to full archive. Start with
-> [`PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md) + open
-> ledger in [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). **D8 Agent Bridge is parked**
-> (interactive SIGINT stop already enough). Active open work: **D11** CLI/Portal/PLOT,
-> **D12.3–D12.6** (flowchart, redis override, project tools, catalog). UI gaps:
-> [`USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md`](USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md).
-> Acceptance trail:
-> [`EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md`](EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md).
+> **Current status (2026-07-15):** code baseline `jarvis2` **≥ `2056e3a`**.
+> Prototype closed; **D11 + D12.0–D12.6 + D12.8 done** (CLI, Portal SLHA/xSLHA, flowchart,
+> EnvReqs.V2 groups, `Jarvis2 project …`, Examples GitHub catalog, restricted pack
+> encrypt/decrypt via CLI only). **D8 Agent Bridge is parked.** Open polish: D9/D10 partials.
+> Ledger: [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). Project crypto usage:
+> [`components/project_tools.md`](components/project_tools.md) + `Jarvis-HEP-v2/INSTALL.md`.
 
 1. [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md) — **single source of truth.** The
    full architecture, the three binding decisions (Redis-first, slow-regime-first, worker =

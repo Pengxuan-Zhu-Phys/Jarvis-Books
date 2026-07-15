@@ -1,16 +1,9 @@
 # Component — CLI parsing & dispatch (命令行解析) (`jarvishep2/client.py`)
 
-**Role**: the `Jarvis2` command-line surface. Parse args, dispatch to run / resume / monitor /
-check-modules, and stay a **separate console-script** from V1's `Jarvis`.
-**Status**: **As-built reviewed** @ `jarvis2` `0a5e85e` (Redis CLI flags removed; EnvReqs.V2).
-**Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §0.1; [core.md](core.md).
-**Reuses V1**: none by import.
-
-> **As-built drift:** the design described a declarative `card/argparser.json` and subcommands for
-> `benchmark`/`convert`/`project`/`worker start`. **`--plot` exists** as a thin Jarvis-PLOT bridge
-> (`jarvishep2/plot_bridge.py`). Other advanced subcommands are still absent. The CLI is a plain
-> `argparse` parser in `client.py` with a single positional + a handful of flags. Entry point:
-> `pyproject.toml` → `[project.scripts] Jarvis2 = "jarvishep2.client:main"`.
+**Role**: the `Jarvis2` command-line surface. One-intent subcommands + legacy bare-YAML aliases.
+**Status**: **As-built** (D11 + D12.5–D12.6 project tools). Entry:
+`Jarvis2 = jarvishep2.client:main`.
+**Design refs**: [core.md](core.md); **project / encrypt-decrypt**: [project_tools.md](project_tools.md).
 
 ---
 
@@ -18,13 +11,27 @@ check-modules, and stay a **separate console-script** from V1's `Jarvis`.
 
 | Invocation | Routes to | Notes |
 |------------|-----------|-------|
-| `Jarvis2 <task.yaml>` | `Jarvis2Core.run` | distributed run (stateless sampler) |
-| `Jarvis2 <task.yaml> --resume` | `core.run(resume=True)` | drain queue, restore sampler state |
-| `Jarvis2 <task.yaml> --check-modules` | `core.check_modules` | fixed-point calculator smoke |
-| `Jarvis2 --monitor` | `dispatch_monitor` | print one monitor snapshot and exit |
-| `Jarvis2 <plot.yaml> --plot` | `plot_bridge.run_plot` | render an existing JarvisPLOT scene; not a scan YAML |
-| `--redis-host/--redis-port/--redis-db` | Redis overrides | folded into `Runtime.redis` |
-| `--pid N` | **dead/reserved** | parsed but never consumed; must not be presented as working attach |
+| `Jarvis2 run <task.yaml> [--resume]` | `Jarvis2Core.run` | preferred run intent |
+| `Jarvis2 <task.yaml>` | → `run` | legacy alias via `normalize_argv` |
+| `Jarvis2 check <task.yaml>` | `check_modules` | fixed-point smoke |
+| `Jarvis2 monitor` | `dispatch_monitor` | one snapshot |
+| `Jarvis2 plot <plot.yaml>` | `plot_bridge` | JarvisPLOT scene |
+| `Jarvis2 portal …` | Portal CLI (V2 registry) | same as `jportal` |
+| `Jarvis2 operas list\|info` | Operas discovery | |
+| `Jarvis2 project …` | scaffold / pack / catalog / **encrypt-decrypt** | see [project_tools.md](project_tools.md) |
+| `--pid N` | **rejected** | exit usage |
+
+### Project subcommands (encrypt/decrypt usage)
+
+| Command | Role |
+|---------|------|
+| `project list` / `browse` | Catalog table: **Access** + **Key** (no \| required) |
+| `project fetch NAME [--key K]` | Download; auto-decrypt restricted packs |
+| `project pack PATH --encrypt --key K` | Pack + write `*.jenc` |
+| `project encrypt FILE --key K` | Encrypt existing tarball |
+
+Full recipes and catalog schema: [project_tools.md](project_tools.md) §3–4;
+install guide: `Jarvis-HEP-v2/INSTALL.md` § Project tools.
 
 ---
 
