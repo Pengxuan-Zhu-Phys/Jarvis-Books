@@ -58,10 +58,15 @@ Task YAML ──► CalculatorModule (parse specs, resolve tokens)
 | YAML `input[]` / `output[]` structure | HEP |
 | Path markers `&J`, `@Sdir`, `@SampleID`, `@PackID` | HEP (`CommandParser` / calculator token resolve) |
 | Expression eval (`x * Pi`, …) | HEP via `IOContext.evaluate_expression` |
-| Sample/module/pack context for save copies | HEP → `IOContext` fields |
+| SAMPLE save/copy/delete (`save: true`, `.temp`, cleanup) | **HEP `FileOperationService`** (dedicated process per Worker; not Portal) |
 | Adapter registration & lookup | Portal |
-| Format-specific serialization | Portal |
+| Format-specific serialization (variable R/W only) | Portal |
 | Optional extras for heavy formats | Portal package extras |
+
+**As-built (2026-07-15):** Portal adapters no longer perform SAMPLE copies. HEP builds
+`IOContext` **without** `sample_save_dir` for Portal calls; after each Portal write/read,
+`CalculatorModule` runs `apply_hep_io_save` via the Worker’s `FileOperationService`.
+YAML `save:` syntax is unchanged.
 
 ---
 
