@@ -1,12 +1,11 @@
 # V2 Distributed Runtime — Development Plan (Agent Execution Playbook)
 
-Last updated: 2026-07-14 (evening). Branch `jarvis2` tip **`64d7486`**.
-D12.0–D12.2 + SAMPLE-bucket/direct-handoff/process-Archiver/managed-Redis/signal
-cleanup landed. Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
+Last updated: 2026-07-15. Branch `jarvis2` (D11 complete; D12.4 EnvReqs groups done).
+Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
 **Priority note (maintainer):** **D8 Agent Bridge is parked** — do not pick D8.1/D8.2/D8.4
-(or remaining D8.3 agent-facing pieces) until unblocked. Prefer **D11** (CLI/UX/integration)
-and remaining **D12** (flowchart / EnvReqs redis override / project tools). Control-process
-SIGINT shutdown already shipped; that is enough for interactive use.
+(or remaining D8.3 agent-facing pieces) until unblocked. Prefer remaining **D12**
+(flowchart D12.3 / project tools D12.5–D12.6). Control-process SIGINT shutdown already
+shipped; that is enough for interactive use.
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -133,12 +132,12 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D12.1 | Calculator V1-YAML parity (string commands, `${source}/${path}`, module `selection`)    | D12       | D12.0, D12.2 (accept); D11.3 (SLHA complete) | **done** (JSON path)          | 2026-07-14 | Committed `15f8ef4` + later runtime fixes. Review §4.0/§4.1. String cmds, `${source}/${path}`, module `selection`, `make_paraller` pools. Live Eggbox Bridson calculator path OK. SLHA complete still needs D11.3. |
 | D12.2 | Core logging V1 visual parity (formatter, banner, file layout)                          | D12       | D12.0            | **done**                               | 2026-07-14 | `481fa97`. V1-style formatter/logo/scan log path. Tests: `test_logging_layers.py`. |
 | D12.3 | Workflow flowchart export + JarvisPLOT rendering                                        | D12       | D11.5            | todo                                   |            | Review §5.2: port V1 `export_flowchart_semantics` onto V2 execution plan; render via `plot_bridge`; `--skip-draw-flowchart` compat; un-skip golden test in `test_workflow_execution_plan.py`. |
-| D12.4 | `EnvReqs.V2` grouped settings (workers/factory/redis override)                          | D12       | —                | **partial**                            | 2026-07-14 | **Landed:** whitelist extended beyond `workers`/`batch_size` to `sample_directory`, `cleanup`, `archiver` (merged into `Scan` / `Calculators.*`); `jarvishep2/card/environment_default.yaml` + Examples Eggbox `deps/environment_default.yaml`. **Still open:** optional `redis.{host,port,db}` override over `INTERNAL_REDIS_CONFIG`; fuller grouped factory schema from Review §4.3. |
+| D12.4 | `EnvReqs.V2` grouped settings (workers/factory/redis override)                          | D12       | —                | **done**                               | 2026-07-15 | Whitelist: workers, batch_size, sample_directory, cleanup, archiver, **redis**, **factory**, **worker**. Optional `redis.{host,port,db}` overlays INTERNAL_REDIS_CONFIG; `factory.{monitor_hz,watchdog}`; `worker.{force_serial_layers,sample_artifacts}` (scalar `worker: N` still aliases workers). Legacy EnvReqs.Runtime defaults strip unknown keys. Tests: `test_task_config_compat.py`. |
 | D12.5 | `Jarvis2 project` subcommands (create/pack/browse/fetch/info)                            | D12       | D11.2            | todo                                   |            | Review §5.3: port V1 `project_scaffold` / `project_packager` / `project_template` / `official_project_library`; same `jarvis.project.yaml` layout. |
 | D12.6 | Jarvis-Examples-owned official catalog (schema-versioned remote index)                  | D12       | D12.5            | todo                                   |            | Review §5.4: move catalog JSON into Jarvis-Examples repo; HEP keeps only index URL + schema version + fetch logic; local cache fallback replaces packaged copy; cross-repo change needs user go-ahead on Jarvis-Examples. |
 | D12.8 | SAMPLE buckets + direct handoff + process Archiver + process titles                     | D12       | D12.1            | **done**                               | 2026-07-14 | Commit **`64d7486`**. Defaults: `Cleanup.strategy=direct` (staging optional), `Archiver.mode=process` + `pack_buckets=true`, `Scan/EnvReqs.V2.sample_directory` limit=200. Redis bucket meta (`active`/`completed`/`archived`/`sealed`); **pack only when `archived>=assigned`** (fixes early-tar prune race). Managed `Jarvis-Redis:<scan>` + `setproctitle` (`Jarvis2*`). Tests: `test_sample_bucket.py`, `test_redis_server.py`. Live Eggbox Bridson ~8k samples drains cleanly. |
 
-**Next pick order (current):** D11.1 → D11.2 → D12.4 remainder / D12.3 → D11.3–D11.5 → D12.5–D12.6.
+**Next pick order (current):** D12.3 (flowchart) → D12.5 → D12.6.
 **Do not start D8.1/D8.2/D8.4** until the maintainer unparks Agent work.
 
 Parallelism note: D11.1 has no dependency on parked D8 (Agent JSON can consume `RunOutcome`
