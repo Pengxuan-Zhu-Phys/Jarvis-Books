@@ -21,7 +21,13 @@
 | `Jarvis2 project …` | scaffold / pack / catalog / **encrypt-decrypt** | see [project_tools.md](project_tools.md) |
 | `Jarvis2 ps` | `process_cleanup` | list **running** Jarvis OS processes |
 | `Jarvis2 kill [--yes]` | `process_cleanup` | kill them after **interactive confirm** |
+| `Jarvis2 -v` / `--version` | `dispatch_version` | logo + authors + package version (no scan) |
 | `--pid N` | **rejected** | exit usage |
+
+### Version banner
+
+Same visual contract as V1: `render_logo_with_version()` from `jarvishep2/card/logo`
+(colored ANSI icon + Author/Version lines). Does not initialize Redis/Workers.
 
 ### Running-process inspect / kill (`jarvishep2/process_cleanup.py`)
 
