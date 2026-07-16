@@ -19,21 +19,24 @@
 | `Jarvis2 portal …` | Portal CLI (V2 registry) | same as `jportal` |
 | `Jarvis2 operas list\|info` | Operas discovery | |
 | `Jarvis2 project …` | scaffold / pack / catalog / **encrypt-decrypt** | see [project_tools.md](project_tools.md) |
-| `Jarvis2 cleanup [--kill]` | `process_cleanup` | list/kill leftover `Jarvis*` OS processes |
+| `Jarvis2 ps` | `process_cleanup` | list **running** Jarvis OS processes |
+| `Jarvis2 kill [--yes]` | `process_cleanup` | kill them after **interactive confirm** |
 | `--pid N` | **rejected** | exit usage |
 
-### Orphan process cleanup (`jarvishep2/process_cleanup.py`)
+### Running-process inspect / kill (`jarvishep2/process_cleanup.py`)
 
-After a hard kill (`kill -9` / Activity Monitor), Workers / Archiver / managed Redis may remain.
-All Jarvis titles use `setproctitle` and start with **`Jarvis2`** or **`Jarvis-Redis`**.
+Useful **during a live scan** (second terminal) or after a hard stop. Titles use `setproctitle`
+and start with **`Jarvis2`** or **`Jarvis-Redis`**.
 
 | Command | Behavior |
 |---------|----------|
-| `Jarvis2 cleanup` | List matching PIDs + titles (does not kill) |
-| `Jarvis2 cleanup --kill` | SIGTERM (dependency order: Worker → FileOp → Archiver → control → Redis), wait ~2s, then SIGKILL if still alive |
-| `Jarvis2 cleanup --kill --no-force` | SIGTERM only |
+| `Jarvis2 ps` | Print running count + PID + title (no kill) |
+| `Jarvis2 kill` | Show list, prompt `Kill N process(es)? [y/N]`, then SIGTERM → SIGKILL |
+| `Jarvis2 kill --yes` / `-y` | Skip prompt (for scripts; required when stdin is not a TTY) |
+| `Jarvis2 kill --no-force` | SIGTERM only |
 
-Skips the CLI process itself. Exit `1` if kill fails or processes remain.
+Kill order: Worker → FileOperation → Archiver → control → Redis. Skips the CLI PID.
+Exit `1` if kill fails or processes remain. Legacy: `cleanup` ≈ `ps`, `cleanup --kill` ≈ `kill --yes`.
 
 Console logging flags on `run` / `check`:
 
