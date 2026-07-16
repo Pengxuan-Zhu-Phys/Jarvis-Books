@@ -44,10 +44,11 @@ Docs/
 
 ## Read in this order
 
-> **Current status (2026-07-15):** code baseline `jarvis2` **≥ `2056e3a`**.
-> Prototype closed; **D11 + D12.0–D12.6 + D12.8 done** (CLI, Portal SLHA/xSLHA, flowchart,
-> EnvReqs.V2 groups, `Jarvis2 project …`, Examples GitHub catalog, restricted pack
-> encrypt/decrypt via CLI only). **D8 Agent Bridge is parked.** Open polish: D9/D10 partials.
+> **Current status (2026-07-16):** code baseline `jarvis2` **≥ `6e48273`**.
+> Prototype closed; **D11 + D12.0–D12.6 + D12.8 done**. CLI extras: **`-v/--version`** (logo),
+> **`ps` / `kill`** (running processes), console **`--silence` / `--console-level`**, component
+> logs under `logs/<scan>/`, FileOperation SAMPLE save, scan performance summary.
+> **D8 Agent Bridge is parked.** Open polish: D9/D10 partials. CLI reference: [components/cli.md](components/cli.md).
 > Ledger: [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). Project crypto usage:
 > [`components/project_tools.md`](components/project_tools.md) + `Jarvis-HEP-v2/INSTALL.md`.
 

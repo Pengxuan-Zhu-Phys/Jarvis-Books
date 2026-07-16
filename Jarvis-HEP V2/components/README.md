@@ -71,7 +71,7 @@ exercise it.
 | Component | Shipped module(s) | Note |
 |-----------|-------------------|------|
 | [Shared expression runtime (字母运算)](expression.md) | `expression.py`, `inner_func.py` | `ExpressionContext` + immutable `CompiledExpression`; all YAML expression consumers |
-| [CLI parsing (命令行解析)](cli.md) | `jarvishep2/client.py` | plain argparse (no `card/argparser.json`) |
+| [CLI parsing (命令行解析)](cli.md) | `jarvishep2/client.py`, `process_cleanup.py` | subcommands + `-v` / `ps` / `kill` / logging flags |
 | [Config loader & normalization](config_schema.md) | `task_config.py`, `runtime_config.py`, `worker_config.py` | no jsonschema / env checks |
 | [Paths & runtime tokens](paths_tokens.md) | `jarvishep2/base.py` | functions, no `Base` class |
 | [Project tools](project_tools.md) | `jarvishep2/project_*.py` / CLI `Jarvis2 project` | done (D12.5/D12.6) |

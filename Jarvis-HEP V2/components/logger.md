@@ -81,11 +81,25 @@ logs/<scan>/
 
 Helpers: `scan_logs_dir(task_root, scan)`, `component_log_path(scan_logs, component, worker_id=…)`.
 
+**Style file:** `jarvishep2/card/logging.yaml` (process + sample head templates). Defaults
+preserve V1 `·•·` layout; missing/broken file falls back to built-in defaults.
+
+**CLI (control + propagated to workers/archiver):**
+
+```bash
+Jarvis2 run task.yaml --console-level INFO    # default
+Jarvis2 run task.yaml --log-level DEBUG       # file only level
+Jarvis2 run task.yaml --silence               # no stderr; files still written
+```
+
 **Sample layer** remains separate: per-sample detail still goes to
 `SAMPLE/.../Sample_running.log` (not mixed into component process logs).
 
 End-of-scan **[Scan Performance]** is logged on the **control** logger (`Jarvis-HEP` →
 `core.log`). Archiver pack/flush lines go to `archiver.log`.
+
+Startup logo (also `Jarvis2 -v`) uses `render_logo_with_version()` + `card/logo` — not the
+log-line formatter.
 
 ---
 
