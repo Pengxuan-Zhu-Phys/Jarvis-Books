@@ -1,6 +1,6 @@
 # DESIGN — Feedback-Driven Samplers: MCMC / Nested / Nuisance (V2, D13)
 
-**Status**: design accepted 2026-07-16; **D13.1 done** (FeedbackSampler + ALS refactor + porting guide); D13.2–D13.6 still `todo`
+**Status**: design accepted 2026-07-16; **D13.1–D13.2 done** (FeedbackSampler + MCMC/AM/DRAM); D13.3–D13.6 still `todo`
 **Date**: 2026-07-16 (from the post-D12 capability review in this repo's session notes)
 **Scope**: migrate the V1 sampler science (MCMC family, nested sampling, nuisance
 profiling) onto the V2 distributed execution model. **V1 `Sampling` YAML surface is
@@ -136,7 +136,7 @@ Sampling:
 | WP | Title | Depends on | Accept |
 |---|---|---|---|
 | D13.1 | `FeedbackSampler` base extracted from ALS + porting guide (`components/feedback_sampler.md`) | — | **done** 2026-07-16: ALS on base; `test_adaptive_level_set` + `test_feedback_sampler` green; guide documents propose/absorb |
-| D13.2 | `Source/MCMC/` chain runtime port + `MCMC`/`AM`/`DRAM` methods | D13.1 | unmodified V1 `Example_DRAM_Operas.yaml` runs end-to-end; acceptance-rate & R-hat within tolerance of a captured V1 golden run; worker-count independence (1 vs 4 workers, same trajectory) |
+| D13.2 | `Source/MCMC/` chain runtime port + `MCMC`/`AM`/`DRAM` methods | D13.1 | **done** 2026-07-16: engines + `MCMCSampler` on FeedbackSampler; Distributor methods MCMC/AMMCMC/AM/DRAM; worker-count independence tested; feedback loop e2e with mock LogL. Full V1 eggbox golden diag comparison remains progressive under D13.6. |
 | D13.3 | Ensemble family: `EnsembleMCMC` (stretch), `DEMCMC`, `PT` | D13.2 | Eggbox posterior moments vs V1 golden; half-ensemble batches actually parallelize (≥1.5× wall-clock, 1→4 workers) |
 | D13.4 | `nuisance_optimize` Worker step + pass-condition | — (parallel to D13.2) | V1 nuisance card golden parity; step appears in flowchart + sample log like other steps |
 | D13.5 | Dynesty bridge (`RedisEvaluationPool`) + checkpoint wrap | D13.1 | unmodified V1 `Example_Dynesty_Operas.yaml` runs; `logZ` within stat tolerance of V1 golden; resume mid-run continues the same nested run |

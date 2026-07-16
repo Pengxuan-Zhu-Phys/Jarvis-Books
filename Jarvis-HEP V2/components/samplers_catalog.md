@@ -125,5 +125,9 @@ selection compile-count caching, distributed submission counts, export/import ro
   Porting guide: [feedback_sampler.md](feedback_sampler.md).
 - **AdaptiveLevelSetSampler** (`method="AdaptiveLevelSet"`, D10, 2 ≤ d ≤ 5) — **shipped** on
   `FeedbackSampler`. Full spec: [adaptive_voronoi_contour.md](adaptive_voronoi_contour.md).
-- **MCMC / AM / DRAM / ensemble / dynesty** (D13.2–D13.5) — port V1 science onto
-  `FeedbackSampler`; see [`../DESIGN_SAMPLERS_2.0.md`](../DESIGN_SAMPLERS_2.0.md).
+- **MCMC / AMMCMC / AM / DRAM** (D13.2) — **shipped** on `FeedbackSampler`
+  (`mcmc_sampler.py` + `Sampling/Source/MCMC/` engines). V1 Bounds surface
+  (`num_chains`/`chains`, `num_iters`/`steps`, `proposal_scale`, adapt/dr keys).
+  Tests: `tests/test_mcmc_sampler.py` (worker-count independence, Core DRAM e2e).
+- **Ensemble / dynesty** (D13.3 / D13.5) — still planned; see
+  [`../DESIGN_SAMPLERS_2.0.md`](../DESIGN_SAMPLERS_2.0.md).

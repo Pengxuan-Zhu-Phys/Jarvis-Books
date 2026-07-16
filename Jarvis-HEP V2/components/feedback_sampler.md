@@ -3,10 +3,9 @@
 **Role**: shared base for barrier-synchronized, feedback-driven samplers. Owns the
 propose → Redis publish → `hep:feedback` drain → absorb → checkpoint loop so each
 method only ports its science hooks.
-**Status**: ✅ **Implemented** (D13.1, 2026-07-16). First consumer:
-[`AdaptiveLevelSetSampler`](adaptive_voronoi_contour.md) (refactored onto this base;
-behavior-preserving). Next consumers: MCMC/DRAM (D13.2), ensembles (D13.3), dynesty
-pool (D13.5).
+**Status**: ✅ **Implemented** (D13.1, 2026-07-16). Consumers:
+[`AdaptiveLevelSetSampler`](adaptive_voronoi_contour.md); **MCMC / AMMCMC / AM / DRAM**
+via `mcmc_sampler.py` (D13.2). Next: ensembles (D13.3), dynesty pool (D13.5).
 **Design refs**: [`../DESIGN_SAMPLERS_2.0.md`](../DESIGN_SAMPLERS_2.0.md) §3.2,
 [checkpoint.md](checkpoint.md), [redis_queue.md](redis_queue.md),
 [sampler.md](sampler.md), [samplers_catalog.md](samplers_catalog.md).
@@ -39,7 +38,8 @@ SamplingVirtial          # config / redis / _build_sample / _submit(_group)
  └─ CheckpointedSampler  # heartbeat + persist_runtime_checkpoint + at_safe_barrier
      └─ FeedbackSampler  # pending + drain + seed + propose/absorb loop
           ├─ AdaptiveLevelSetSampler   # custom run_adaptive (cross/refine)
-          └─ (D13.2+) MCMC / AM / DRAM / Ensemble / …
+          ├─ MCMCSampler               # MCMC / AMMCMC / AM / DRAM (D13.2)
+          └─ (D13.3+) Ensemble / …
 ```
 
 ---

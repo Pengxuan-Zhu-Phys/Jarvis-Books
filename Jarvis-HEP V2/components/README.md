@@ -65,6 +65,7 @@ exercise it.
 | [Distributor (dispatch)](distributor.md) | `jarvishep2/distributor.py` | Bridson/Random/Grid/CSV + AdaptiveLevelSet |
 | [FeedbackSampler base](feedback_sampler.md) | `Sampling/feedback_sampler.py` | ✅ D13.1 — propose → hep:feedback → absorb contract + porting guide |
 | [Adaptive level-set sampler](adaptive_voronoi_contour.md) | `Sampling/adaptive_level_set.py` | ✅ D10 core — feedback-driven level-set tracer on FeedbackSampler |
+| MCMC / AM / DRAM | `Sampling/mcmc_sampler.py`, `Sampling/Source/MCMC/*` | ✅ D13.2 — V1 engines on FeedbackSampler; methods MCMC/AMMCMC/AM/DRAM |
 | [Benchmark mode](benchmark.md) | — | ⚠️ **not a module** (see `core.run_check_modules`) |
 
 **Auxiliary / support systems:**
