@@ -7,12 +7,13 @@ identifies where the level-set passes, and refinement batches are spent **only**
 crossings until the level-set is resolved to a preset precision. The neighbor graph is
 **exact Delaunay adjacency for d ≤ 3** (the Bridson–Voronoi flagship) and an **approximate
 kNN graph for d = 4–5** (the pragmatic "details reasonable, not perfect" regime).
-**Status**: ✅ **Implemented** on `jarvis2` @ `0a5e85e` / earlier D10 landing — `adaptive_level_set.py`,
+**Status**: ✅ **Implemented** on `jarvis2` — `adaptive_level_set.py`,
 `hep:feedback` channel, `Distributor` registration `AdaptiveLevelSet` (`stateless=False`).
 Target expressions use shared `ExpressionContext`. YAML inventory: §6.9 of
 [`YAML_REFERENCE_2.0.md`](../YAML_REFERENCE_2.0.md) and
 [`YAML-Example/ADAPTIVE_LEVEL_SET.md`](../YAML-Example/ADAPTIVE_LEVEL_SET.md).
-Milestone **D10** (D10.1–D10.5 core paths; 10.3–10.5 partial polish remains).
+Milestone **D10**: D10.1–D10.5 **done** (2026-07-16: Hausdorff §9.1–9.8; d=3 sphere /
+d=4 proximity shell / d=5 Sobol gen-0; resume-safe `run_adaptive`).
 **Origin**: maintainer's Bridson + Voronoi adaptive-contour idea, elaborated in two external
 drafts (2026-07-11: 2-D detailed design; same day: dimension-hybrid extension) and
 **corrected here against the as-built runtime** — the deltas from those drafts are listed in
@@ -374,8 +375,8 @@ implementation, add the block to `YAML_REFERENCE_2.0.md` (new §6.9 + Key Index 
 | D10.1 | Feedback channel: `hep:feedback` list, `publish_feedback`/`pull_feedback`, worker flag, drain-on-resume; decide fate of orphan `store_result_hash` | — |
 | D10.2 | Sampler core (d=2 flagship): generation loop, `NeighborGraph` protocol + `DelaunayGraph`, crossing detection, edge refinement + deterministic budget order, convergence; registered `stateless=False`; `core.run_adaptive` dispatch branch | D10.1 |
 | D10.3 | Finalize + outputs (d=2): polyline chaining, `levelset.json`, PLOT-bridge overlay hook | D10.2 |
-| D10.4 | Determinism + checkpoint/resume + the §9 core test suite (items 1–8); YAML_REFERENCE §6.9 entry | D10.2 |
-| D10.5 | Dimension extension: `KNNGraph` + proximity mode (d=4–5), Sobol generation-0 (d=5), d=3 crossing cloud, slice projections, dimension-dependent defaults, §9 items 9–10 | D10.2 |
+| D10.4 | Determinism + checkpoint/resume + the §9 core test suite (items 1–8); YAML_REFERENCE §6.9 entry — **done 2026-07-16** | D10.2 |
+| D10.5 | Dimension extension: `KNNGraph` + proximity mode (d=4–5), Sobol generation-0 (d=5), d=3 crossing cloud, slice projections, dimension-dependent defaults, §9 items 9–10 — **done 2026-07-16** (strict 5× near/far density not CI-hard; cloud accuracy + knn/slices + ≥uniform near-band) | D10.2 |
 
 **Open questions** (decide during implementation, none blocking D10.1):
 

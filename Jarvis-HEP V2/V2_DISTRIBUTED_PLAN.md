@@ -1,11 +1,11 @@
 # V2 Distributed Runtime — Development Plan (Agent Execution Playbook)
 
-Last updated: 2026-07-15. Branch `jarvis2` (D11 complete; D12.4 EnvReqs groups done).
+Last updated: 2026-07-16. Branch `jarvis2` @ **`61116a4`** (interrupt checkpoint + polish).
 Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
-**Priority note (maintainer):** **D8 Agent Bridge is parked** — do not pick D8.1/D8.2/D8.4
-(or remaining D8.3 agent-facing pieces) until unblocked. Prefer remaining **D12**
-(flowchart D12.3 / project tools D12.5–D12.6). Control-process SIGINT shutdown already
-shipped; that is enough for interactive use.
+**Priority note (maintainer):** **D8 Agent Bridge stays parked** (D8.1/8.2/8.4 + agent stop-ack).
+**D12 closed; D9.4/9.6/D10 done.** Human D8.3 remainder (**checkpoint-on-interrupt**) landed.
+Prefer further maintainer-directed polish only; do not start Agent JSON verbs until unparked.
+Control-process SIGINT + interrupt checkpoint; **`Jarvis2 ps` / `kill`** cover orphans.
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -104,7 +104,8 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 > [`archive/V2_PLAN_ARCHIVE_2026-07-14.md`](archive/V2_PLAN_ARCHIVE_2026-07-14.md)
 > — D0.1–D0.5, D1.1–D1.2, D2.1–D2.3, D3.1–D3.3, D4.1–D4.2, D5.1–D5.2, D6.1–D6.2,
 > D7.1 (2026-06-28/29); D9.1–D9.3, D9.5, D9.7–D9.8 (2026-07-10); D10.1–D10.2
-> (2026-07-11); D11.4a–D11.4d (2026-07-13); D12.7 (2026-07-14); plus the pre-V2 M0/M1 row. This table
+> (2026-07-11); D11.4a–D11.4d (2026-07-13); D9.4/D9.6, D10.3–D10.5, D11.1–D11.5,
+> D12.0–D12.8 (2026-07-14…16); plus the pre-V2 M0/M1 row. This table
 > keeps only open work: todo / in-progress / partial / blocked.
 
 | WP   | Title                                                                                  | Milestone | Depends on       | Status                                 | Date       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -112,33 +113,17 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 
 | D8.1 | Agent API facade: JSON envelope + `--validate`/`--results` + `--version-json`        | D8        | —                | **deferred**                           | 2026-07-14 | **Parked (maintainer):** Agent bridge not in current priority. Design remains `DESIGN_AGENT_BRIDGE_2.0.md` §4. |
 | D8.2 | `run_state.json` writer + `--status --json` / `--monitor-json`                        | D8        | D8.1             | **deferred**                           | 2026-07-14 | **Parked** with D8.1. |
-| D8.3 | Control-process graceful stop (SIGINT/SIGTERM → checkpoint → clean exit)              | D8        | —                | **partial** (enough for now)           | 2026-07-14 | **Interactive stop shipped in `64d7486`** (SIGINT/SIGTERM/Ctrl+Z policy + managed Redis cleanup). Remaining Bridge §6 items (checkpoint-on-stop, run_state interrupted, agent stop-ack) **parked with D8**. |
+| D8.3 | Control-process graceful stop (SIGINT/SIGTERM → checkpoint → clean exit)              | D8        | —                | **partial** (human path enough)        | 2026-07-16 | Interactive stop (`64d7486`) + **interrupt checkpoint** (`_save_interrupt_checkpoint` before teardown; tests `test_graceful_stop.py`). Agent pieces (run_state interrupted, stop-ack) + D8.2 still **parked**. |
 | D8.4 | Strict-validate diagnostics (silent-coercion warnings, dead keys, unknown keys)       | D8        | D8.1             | **deferred**                           | 2026-07-14 | **Parked** with D8.1. |
 
-| D9.4 | `TaskFactory` de-singleton + internal MonitorLoop/Watchdog split + honest metrics     | D9        | —                | **partial**                            | 2026-07-10 | Core owns explicit `TaskFactory`; `get_instance` deprecated shell; honest `None` metrics. MonitorLoop/Watchdog class split deferred. (D8.3 dependency dropped — interactive stop already landed; Agent D8 parked.) |
-| D9.6 | `Sample` single source of truth (`info` becomes projection)                           | D9        | D9.1, D9.3       | **partial**                            | 2026-07-10 | `merge_observables` / `set_status` / `record_pack_id` write APIs; Worker uses them. Full `info` projection deferred. |
+**Post-D12 polish already landed (no open WP; status only):** CLI `-v` / `ps` / `kill` /
+logging flags; `logs/<scan>/` layout; FileOperation SAMPLE process; Archiver logger; full
+`samples.csv` + scan performance log; **sample `op_count` single-increment contract**
+(`submit_result` only — see `components/redis_queue.md` §5). Baseline docs:
+`README.md` + `components/cli.md`.
 
-| D10.3 | Finalize + outputs (d=2): polyline chaining, `levelset.json`, PLOT overlay hook       | D10       | D10.2            | **done**                               | 2026-07-15 | `levelset.json` + polylines_u/x (chaining); stock **jplot** YAML under `images/<scan>_levelset_jplot.yaml` (scatter + level-set `plot` layers); samples CSV export; optional auto-render when JarvisPLOT installed; manual `Jarvis2 plot …`. Tests: `test_flowchart_and_plot_scene.py`. |
-| D10.4 | Determinism + checkpoint/resume + core test suite (§9.1–9.8); YAML_REFERENCE §6.9 entry | D10       | D10.2            | **partial**                            | 2026-07-11 | Tests: circle 2D, seed reproducibility, kNN vs Delaunay, feedback unit, d=5 Sobol smoke; full Hausdorff efficiency gate / YAML_REFERENCE deferred. |
-| D10.5 | Dimension extension d=3–5: `KNNGraph` proximity mode, Sobol gen-0 (d=5; Bridson grid is ~344 MB at d=5 — C10), d=3 crossing cloud, slice projections, §9.9–9.10 tests | D10       | D10.2            | **partial**                            | 2026-07-11 | KNNGraph + Sobol d=5 gen-0 + slice_projections in finalize; dedicated d=3/d=4 fixture tests deferred. |
-
-| D11.1 | Truthful run result + machine-readable failure contract (`RunOutcome`)                 | D11       | —                | **done**                               | 2026-07-14 | `jarvishep2/run_outcome.py`; `core.run`/`check_modules` return `RunOutcome`; CLI exit uses completed/failed (all-fail & partial → 1; interrupt → 130); Worker stamps `error`/`error_type`/`failed_module` on Failed. Tests: `test_run_outcome.py`, CLI all-fail regression. |
-| D11.2 | One-intent CLI + compatibility aliases + Redis override fix                            | D11       | D11.1            | **done**                               | 2026-07-14 | Subcommands `run/check/monitor/plot/portal/operas`; `normalize_argv` rewrites bare YAML; legacy flags kept; mode conflicts → exit 2; `--pid` rejected; thin `portal formats` / `operas list|info`. Tests: `test_cli.py`. Redis host override still open under D12.4. |
-| D11.3 | Portal HEP format exposure + discovery + real SLHA fixture                             | D11       | D11.2            | **done**                               | 2026-07-15 | Portal **1.4.0**: `jarvis_portal.v1` / `jarvis_portal.v2` separate interface packages (no shared factories); adapters shared. V2 surface exposes SLHA+xSLHA; V1 surface unchanged (5 base formats). HEP-v2 uses `jarvis_portal.v2`; fixture `tests/test_io_slha.py`. `Jarvis2 portal formats` lists SLHA when Portal≥1.4. |
-| D11.4 | Operas strict validation + signature/logger/Functions parity + discovery               | D11       | D11.2            | **done**                               | 2026-07-14 | `normalize_call_mode` (`call`/`acall` only); `filter_operator_kwargs` (signature filter + friendly missing-param; `**kwargs` passthrough); logger/`observables` only if accepted; CLI `operas list|info` from D11.2. Tests in `test_operas_bridge.py`. |
-| D11.5 | Scan-driven PLOT scene + workflow graph + AdaptiveLevelSet overlay                      | D11       | D10.3, D11.2     | **done** (MVP)                         | 2026-07-14 | `flowchart.py` plan→`flowchart.json` + optional PNG; `plot_scene.py` scatter from HDF5 + levelset overlay YAML; core emits after successful run; `--skip-draw-flowchart`. Full V1 IO-port graph / auto-render of scatter still optional. Tests: `test_flowchart_and_plot_scene.py`. |
-
-| D12.0 | Jarvis-Operas → core dependency + expression-scan scope fix                             | D12       | —                | **done**                               | 2026-07-14 | (a) `Jarvis-Operas>=1.3.0` is a core dep in `pyproject.toml`; `[operas]` extra kept as deprecated alias. README/INSTALL updated. (b) `expression_uses_operas_function` only treats bare strings as formula text at the call site or under `expression`/`selection`/`target_expression` keys — calculator `cmd`/install strings no longer force discovery. Tests: `test_operas_functions.py` gate cases. Argument-resolution layer remains D11.4. |
-| D12.1 | Calculator V1-YAML parity (string commands, `${source}/${path}`, module `selection`)    | D12       | D12.0, D12.2 (accept); D11.3 (SLHA complete) | **done** (JSON path)          | 2026-07-14 | Committed `15f8ef4` + later runtime fixes. Review §4.0/§4.1. String cmds, `${source}/${path}`, module `selection`, `make_paraller` pools. Live Eggbox Bridson calculator path OK. SLHA complete still needs D11.3. |
-| D12.2 | Core logging V1 visual parity (formatter, banner, file layout)                          | D12       | D12.0            | **done**                               | 2026-07-14 | `481fa97`. V1-style formatter/logo/scan log path. Tests: `test_logging_layers.py`. |
-| D12.3 | Workflow flowchart export + JarvisPLOT rendering                                        | D12       | D11.5            | **done**                               | 2026-07-15 | V1-parity `jarvisplot.scene/v1` semantic graph from task YAML (Parameters/vars/file ports/Dump free-symbols/bridges/selection); stock `jarvisplot.render_flowchart` — no V2 PLOT adapter. Paths `<scan>/images/flowchart.{json,png}`; `--skip-draw-flowchart`. Tests: `test_flowchart_and_plot_scene.py`, `test_workflow_execution_plan.py`. |
-| D12.4 | `EnvReqs.V2` grouped settings (workers/factory/redis override)                          | D12       | —                | **done**                               | 2026-07-15 | Whitelist: workers, batch_size, sample_directory, cleanup, archiver, **redis**, **factory**, **worker**. Optional `redis.{host,port,db}` overlays INTERNAL_REDIS_CONFIG; `factory.{monitor_hz,watchdog}`; `worker.{force_serial_layers,sample_artifacts}` (scalar `worker: N` still aliases workers). Legacy EnvReqs.Runtime defaults strip unknown keys. Tests: `test_task_config_compat.py`. |
-| D12.5 | `Jarvis2 project` subcommands (create/pack/browse/fetch/info)                            | D12       | D11.2            | **done**                               | 2026-07-15 | Ported `project_scaffold` / `project_packager` / `official_project_library` + `project_template/` (V2 EnvReqs.V2 quickstarts). CLI: `Jarvis2 project create|pack|browse|fetch|info`. Catalog packaged fallback + schema_version guard. Tests: `test_project_tools.py`. |
-| D12.6 | Jarvis-Examples-owned official catalog (schema-versioned remote index)                  | D12       | D12.5            | **done**                               | 2026-07-15 | Catalog = GitHub JSON only (no PyPI): `Jarvis-Examples/catalog/official_project_library.json`. V2 default index URL → Examples raw; offline user cache `~/.jarvis/cache/` + packaged snapshot. **Access:** `public` vs `restricted` + `requires_key`; list/browse table shows Key column; fetch decrypts OpenSSL AES-256-CBC via system openssl (`--key` / `JARVIS_PROJECT_FETCH_KEY`). Tests: `test_project_tools.py`. |
-| D12.8 | SAMPLE buckets + direct handoff + process Archiver + process titles                     | D12       | D12.1            | **done**                               | 2026-07-14 | Commit **`64d7486`**. Defaults: `Cleanup.strategy=direct` (staging optional), `Archiver.mode=process` + `pack_buckets=true`, `Scan/EnvReqs.V2.sample_directory` limit=200. Redis bucket meta (`active`/`completed`/`archived`/`sealed`); **pack only when `archived>=assigned`** (fixes early-tar prune race). Managed `Jarvis-Redis:<scan>` + `setproctitle` (`Jarvis2*`). Tests: `test_sample_bucket.py`, `test_redis_server.py`. Live Eggbox Bridson ~8k samples drains cleanly. |
-
-**Next pick order (current):** park D8; optional D9.4/D9.6, D10.4–D10.5 polish.
-**Do not start D8.1/D8.2/D8.4** until the maintainer unparks Agent work.
+**Next pick order (current):** **D8 fully deferred** (incl. remaining agent D8.3). Ledger
+otherwise closed for active WPs — only maintainer-directed polish / bugs.
 
 Parallelism note: D11.1 has no dependency on parked D8 (Agent JSON can consume `RunOutcome`
 later). D9.4/D9.6 may proceed without D8. Agent-side M4.5 (Jarvis-Agent repo) stays blocked
@@ -213,17 +198,17 @@ done. **Rollback**: how it is disabled. **Out of scope**: excluded work.
 - **Design refs**: Bridge §6; `DESIGN_2.0_DISTRIBUTED.md` §10 (checkpoint model).
 - **Files**: `jarvishep2/core.py`, `jarvishep2/client.py`, `jarvishep2/redis_server.py`,
   NEW `tests/test_graceful_stop.py` (still open).
-- **Status: partial (`64d7486`)** — control handlers landed; agent/checkpoint contract incomplete.
+- **Status: partial (human path enough)** — agent contract still open with D8.
 - **Done**:
   1. SIGINT/SIGTERM → `KeyboardInterrupt` → `run()` `finally` → idempotent `shutdown()`.
   2. Always stop managed Redis; refuse Ctrl+Z/SIGTSTP with a warning.
   3. CLI exit **130** on interrupt.
-- **Remaining steps**:
-  1. Force an immediate runtime checkpoint on stop (before teardown).
-  2. `run_state.status="interrupted"` once D8.2 lands; formal stop-ack for agents.
-  3. Dedicated `tests/test_graceful_stop.py` (stop→resume→parity under fakeredis TCP).
-- **Accept (remaining)**: SIGINT mid-scan leaves a valid checkpoint and (with D8.2) run_state;
-  `--resume` completes with output parity.
+  4. **Force interrupt checkpoint** before teardown (`_save_interrupt_checkpoint`, reason
+     `interrupt`); unit tests in `tests/test_graceful_stop.py`.
+- **Remaining (parked with Agent D8)**:
+  1. `run_state.status="interrupted"` once D8.2 lands; formal stop-ack for agents.
+  2. Optional: live stop→resume→parity integration under fakeredis TCP (beyond unit tests).
+- **Accept (remaining / agent)**: with D8.2, run_state reports interrupted; Agent stop-ack.
 - **Rollback**: revert signal-handler commit.
 - **Out of scope**: pause/steering; Worker-side signals (already shipped).
 

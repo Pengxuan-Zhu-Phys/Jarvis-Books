@@ -435,11 +435,17 @@ Public V2 scheduling + SAMPLE/archive policy knobs (also mergeable from
 | Key | Values | Default | Notes |
 |---|---|---|---|
 | `workers` | int ≥ 0 | `0` | number of Worker processes; the factory uses one Worker when the value is ≤ 0 |
-| `worker` | int ≥ 0 | — | singular compatibility alias for `workers`; do not specify both |
+| `worker` | int ≥ 0 **or** mapping | — | scalar = compatibility alias for `workers` (do not specify both); mapping = per-Worker knobs `{force_serial_layers: bool, sample_artifacts: auto\|always\|never}` |
 | `batch_size` | int > 0 | `256` | number of samples submitted in one scheduler group |
 | `sample_directory` | mapping | see §5.1 | SAMPLE bucket layout + tar packing (V1 parity) |
 | `cleanup` | mapping | `{strategy: direct}` | handoff policy; see §9.3 |
 | `archiver` | mapping | process + pack | Layer-2 policy; see §9.2 |
+| `redis` | mapping | internal `127.0.0.1:6379/0` | optional broker override `{host, port, db}` overlaid on the internal zero-config default (multi-host / non-default-port deployments); other keys ignored |
+| `factory` | mapping | `monitor_hz: 120`, watchdog defaults | control-process knobs: `monitor_hz` (or `monitor: {hz}`), `watchdog: {enabled, stale_sec, poll_interval_sec, max_sample_retries}` |
+
+Unknown `EnvReqs.V2` keys are a hard error listing the supported set. Keys outside
+`EnvReqs.V2` (V1's `Python`, `CERN_ROOT`, …) are tolerated and ignored; legacy
+`EnvReqs.Runtime` default files are filtered to the supported V2 keys instead of failing.
 
 ### 5.1 `sample_directory` (also `Scan.sample_directory`)
 
@@ -461,6 +467,10 @@ EnvReqs:
     sample_directory: { limit: 200, pack: true }
     cleanup: { strategy: direct }
     archiver: { mode: process, pack_buckets: true }
+    # optional groups (D12.4):
+    # redis: { host: 127.0.0.1, port: 6380, db: 1 }
+    # factory: { monitor_hz: 120, watchdog: { enabled: true, stale_sec: 30 } }
+    # worker: { force_serial_layers: false, sample_artifacts: auto }
 ```
 
 Top-level `Runtime` is rejected by the YAML loader. It remains an internal normalized object

@@ -2,7 +2,8 @@
 
 **Role**: the single cross-process broker. Task queue, calculator free-pools, status hashes,
 results, and `op_count` change counters — all through one thin, tested access layer.
-**Status**: **As-built** @ `jarvis2` **`64d7486`**.
+**Status**: **As-built** @ `jarvis2` **`7c482ec`** (D1.1 sample `op_count` contract clarified in
+`2c8351f` + later bucket/isolation work).
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §7; discussions
 `factory_design.md` §4/§5, `worker_design.md` §8.
 **Reuses V1**: none (new). Replaces the in-process queues/locks of the V1 thread runtime.
@@ -59,14 +60,14 @@ Redis broker for tasks, calculator pools, results, and monitor counters.
 |--------|-----------|----------|
 | `__init__` | `(config=None, *, client=None)` | store config + codec; client injectable for tests. |
 | `connect` | `() -> None` | build a `redis.Redis` from `url` or `host/port/db`; `decode_responses` when codec is json; no-op if a client is injected. |
-| `push_task` | `(task) -> None` | validate, `rpush(TASK_QUEUE)` + `incr` task op_count in one transaction. |
-| `pull_task` | `(timeout=5) -> dict\|None` | `blpop(TASK_QUEUE)`; decode to dict or `None`. |
+| `push_task` | `(task) -> None` | validate, `rpush(TASK_QUEUE)` + `incr` **task** op_count in one transaction. |
+| `pull_task` | `(timeout=5) -> dict\|None` | `blpop(TASK_QUEUE)`; decode to dict or `None`. On success: **`hincrby(SAMPLE_STATS, "running", 1)` only** — **does not** bump sample `op_count` (D1.1). |
 | `drain_task_queue` | `() -> int` | discard all queued tasks (resume path D6.2); returns count. |
-| `push_many_tasks` | `(tasks) -> None` | validate all, pipeline `rpush` + single `incrby`. |
-| `register_calc_pool` | `(name, n) -> None` | reset `CALC_FREE`/`CALC_BUSY_PACKS`, seed `n` ready tokens, set status free=n busy=0. |
-| `acquire_calc` | `(name, timeout=30) -> str\|None` | `blpop` a slot → mint a `pack_id`, mark busy, flip free/busy counters, bump op_count. |
-| `release_calc` | `(name, pack_id) -> None` | validate pack_id ownership, push slot back, flip counters, bump op_count; raises on unknown pack_id. |
-| `submit_result` | `(info) -> None` | validate, `rpush(ARCHIVE_QUEUE)`, update `SAMPLE_STATS` (completed/failed/running), bump sample op_count. |
+| `push_many_tasks` | `(tasks) -> None` | validate all, pipeline `rpush` + single `incrby` (**task** op_count). |
+| `register_calc_pool` | `(name, n) -> None` | reset `CALC_FREE`/`CALC_BUSY_PACKS`, seed **stable PackIDs `001`…`N`** (`format_calc_pack_id`), set status free=n busy=0. |
+| `acquire_calc` | `(name, timeout=30) -> str\|None` | `blpop` a slot → the popped value **is** the stable PackID (no minting; legacy `ready` junk discarded), mark busy, flip free/busy counters, bump **calculator** op_count. |
+| `release_calc` | `(name, pack_id) -> None` | **atomic `HDEL` guard** (single winner under Worker-finally vs watchdog-sweep races), push the **same PackID** back, flip counters, bump **calculator** op_count; raises on unknown pack_id, ignores legacy junk ids. |
+| `submit_result` | `(info) -> None` | validate, `rpush(ARCHIVE_QUEUE)`, update `SAMPLE_STATS` (completed/failed + running−1), **exactly one** `incr` **sample** op_count per sample (D1.1). |
 | `pull_result` | `(timeout=1) -> dict\|None` | `blpop(ARCHIVE_QUEUE)` for the Archiver. |
 | `init_sample_buckets` | `(sample_root, limit, width, …)` | reset bucket meta for a run. |
 | `allocate_sample_bucket` | `() -> dict\|None` | assign `SAMPLE/<bucket>/`, active++/assigned++; may seal previous bucket. |
@@ -123,7 +124,20 @@ Redis broker for tasks, calculator pools, results, and monitor counters.
   status flip + op_count). Single-key ops are naturally atomic.
 - `blpop` is the **backpressure** mechanism: empty queue ⇒ Worker blocks (timeout loop), no spin.
 - Connection loss → methods **raise**; callers decide retry (no silent swallow).
-- `op_count` is **monotonic** (a global change counter, not a gauge).
+- `op_count` is **monotonic** (a global change counter, not a gauge). Factory monitor refreshes
+  subsystem hashes only when the matching kind advances.
+
+### 5.1 D1.1 sample `op_count` contract (binding)
+
+| Event | `SAMPLE_STATS` | `hep:sample:op_count` |
+|-------|----------------|------------------------|
+| Task dequeued (`pull_task`) | `running += 1` | **no change** |
+| Result submitted (`submit_result`) | `completed` or `failed` += 1; `running -= 1` | **+1 once** |
+| Sampler in-flight backpressure | reads `fetch_sample_stats()` | does **not** require op bump |
+
+Rationale: one sample must not double-count (pull + submit). Backpressure and dashboards that
+need in-flight load use the stats hash; `op_count` only signals “sample terminal outcome
+changed” for op_count-gated monitor refresh.
 
 ---
 
@@ -145,8 +159,12 @@ Schema grew: `CALC_BUSY_PACKS` (pack_id ownership) is new and underpins `release
 and the D6.1 dead-Worker slot sweep (`sweep_held_calc_slots`). Added: explicit
 `CodecError`/`TaskValidationError`, payload validators, `drain_task_queue`, the batched
 `get_all_op_counts`/`get_queue_lengths`/`fetch_*` monitor reads, heartbeat task/held-pack
-codecs, `connection_config`/`extract_connection_config` (spawn picklability), and the
-`calculator_pools.py` helpers.
+codecs, `connection_config`/`extract_connection_config` (spawn picklability), SAMPLE bucket
+keys + control lock / ephemeral reset, and the `calculator_pools.py` helpers.
+
+**Design wording vs as-built:** design §7 says sample `op_count` increments on “sample status
+change.” As-built **narrows** that to **terminal** outcomes in `submit_result` only (§5.1);
+in-flight (`running`) is a gauge on `SAMPLE_STATS`, not an op_count event.
 
 ---
 

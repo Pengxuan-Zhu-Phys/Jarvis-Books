@@ -17,7 +17,7 @@ calculators run concurrently inside a Sample) → async NAS Archiver → HDF5/CS
 Docs/
 ├── README.md                       ← you are here (master index)
 ├── DESIGN_2.0_DISTRIBUTED.md       ← architecture, single source of truth
-├── V2_DISTRIBUTED_PLAN.md          ← execution playbook — **open work only** (D8, D11, D12 + partials)
+├── V2_DISTRIBUTED_PLAN.md          ← execution playbook — **open work only** (D8 parked; D0–D12 archived)
 ├── PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md ← prototype closeout review + D12 (Calculator/UX parity) design
 ├── archive/                        ← completed WPs moved out of the plan (full ledger notes + WP details)
 │   └── V2_PLAN_ARCHIVE_2026-07-14.md ← D0–D7 all, D9/D10/D11 done rows; frozen history, read on demand only
@@ -44,12 +44,15 @@ Docs/
 
 ## Read in this order
 
-> **Current status (2026-07-16):** code baseline `jarvis2` **≥ `6e48273`**.
-> Prototype closed; **D11 + D12.0–D12.6 + D12.8 done**. CLI extras: **`-v/--version`** (logo),
-> **`ps` / `kill`** (running processes), console **`--silence` / `--console-level`**, component
-> logs under `logs/<scan>/`, FileOperation SAMPLE save, scan performance summary.
-> **D8 Agent Bridge is parked.** Open polish: D9/D10 partials. CLI reference: [components/cli.md](components/cli.md).
-> Ledger: [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). Project crypto usage:
+> **Current status (2026-07-16):** code baseline `jarvis2` (see recent commits: D9.4/9.6, D10.4/10.5,
+> interrupt checkpoint; working tree may have benchmark JSON / `checkpoints/` dirt).
+> Prototype closed; **D11 + D12 done**. Post-D12 polish: version/ps/kill/logging flags, logs layout,
+> FileOperation, CSV + scan perf, D1.1 `op_count` contract.
+> **D10 + D9.4/9.6 done.** **D8 Agent Bridge parked** (JSON API / run_state / agent stop-ack).
+> Human stop path includes **interrupt → runtime checkpoint** then teardown.
+> Open: maintainer-directed polish only until D8 is unparked.
+> CLI: [components/cli.md](components/cli.md). Broker contract: [components/redis_queue.md](components/redis_queue.md).
+> Ledger: [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). Project crypto:
 > [`components/project_tools.md`](components/project_tools.md) + `Jarvis-HEP-v2/INSTALL.md`.
 
 1. [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md) — **single source of truth.** The

@@ -2,99 +2,91 @@
 
 **Role**: Worker-process manager + Redis initializer + read-only monitor snapshot provider +
 watchdog. It does **not** execute tasks, hold calculators, or own Sample objects.
-**Status**: **As-built** @ `jarvis2` `d0de31a`. `factory.py` 471 lines.
-**Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §6; `factory_design.md`.
+**Status**: **As-built** @ `jarvis2` (D9.4) — composition of private `_MonitorLoop` /
+`_Watchdog`; explicit construction preferred. ~676 lines.
+**Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §6;
+[`../DESIGN_PRINCIPLES_REVIEW_2.0.md`](../DESIGN_PRINCIPLES_REVIEW_2.0.md) §3.4 / D9.4.
 **Reuses V1**: none by import — replaces the singleton thread-pool `WorkerFactory`.
 
 ---
 
-## 1. Class defined — `TaskFactory`
+## 1. Classes
 
-Process-local singleton (class vars `_instance`, `_lock`) that spawns and monitors Workers.
+### 1.1 `TaskFactory` (public facade)
 
-**Attributes** (from `__init__`): `redis_config`, `redis`, `workers: list[Worker]`, snapshot
-state (`_snapshot`, `_snapshot_lock` RLock, `_last_op_counts`, `_updater_thread`, `_running`),
-run metrics (`_run_started_at`, `_peak_workers_alive`), watchdog state (`_watchdog_thread`,
-`_watchdog_running`, `_watchdog_stale_sec`, `_watchdog_poll_interval_sec`, `_max_sample_retries`),
-recovery state (`_worker_spawn_template`, `_redis_connection_config`, `_recovery_lock`,
-`_last_recovered_pid`, `_respawn_count`), `_logger`.
+Owns Worker lifecycle and composes two private helpers. Prefer
+`TaskFactory(redis_config)` held on `Jarvis2Core.factory`. `get_instance` /
+`reset_instance` remain as a **deprecated** process-local shell for older tests.
 
-**Member functions:**
+**Attributes:** `redis_config`, `redis`, `workers`, run metrics
+(`_run_started_at`, `_peak_workers_alive`), recovery
+(`_worker_spawn_template`, `_redis_connection_config`, `_recovery_lock`,
+`_last_recovered_pid`, `_respawn_count`), `_monitor: _MonitorLoop`,
+`_watchdog: _Watchdog`, `_logger`.
+
+Compatibility property aliases expose pre-D9.4 private field names
+(`_snapshot`, `_updater_thread`, `_running`, `_watchdog_thread`, …) so
+existing unit tests keep working without a mass rewrite.
 
 | Method | Behavior |
 |--------|----------|
-| `get_instance(redis_config=None)` (`@classmethod`) | return/create the singleton; merge redis_config. |
-| `reset_instance()` (`@classmethod`) | drop the singleton (test helper). |
-| `init_redis(*, client=None)` | build + connect the control-process `RedisQueue`. |
-| `_alive_workers()` | live Workers. |
-| `start_workers(n, **worker_kwargs)` | register calc pools, deep-copy config per Worker, spawn `n` `Worker`s with picklable connection settings; refuse if Redis uninitialized or Workers already alive; record spawn template + connection config for respawn. |
-| `get_run_metrics()` | project submitted/ok/failed + worker counts for run_summary. |
-| `stop_all_workers(*, graceful=True, join_timeout=30)` | SIGTERM + join, then force-terminate survivors. |
-| `request_worker_shutdown()` | SIGTERM every live Worker pid. |
-| `get_monitor_snapshot()` | in-memory deepcopy of the latest snapshot (no Redis on the read path). |
-| `_worker_status()` | per-Worker `{worker_id,pid,alive,name}` rows. |
-| `_fetch_workers_redis()` | heartbeat hashes for tracked Workers. |
-| `_carry_forward_section(...)` / `_subsystem_refresh_needed(...)` | op_count-gated incremental fetch helpers. |
-| `_collect_latest_status()` | build one snapshot: local rows + op_count-gated Redis sections + queue lengths. |
-| `_start_snapshot_updater(*, update_hz=120)` / `start_monitor(*, update_hz=120)` | background ~120 Hz updater thread. |
-| `start_watchdog(*, enabled=True, stale_sec=30, poll_interval_sec=1, max_sample_retries=3)` | launch the D6.1 watchdog thread. |
-| `_heartbeat_timestamp(heartbeat)` (`@staticmethod`) | parse last_heartbeat/ts. |
-| `_worker_heartbeat(worker_id)` | fetch one heartbeat hash. |
-| `_inspect_workers()` | per Worker: process-exit or stale-while-busy → `_handle_worker_failure`. |
-| `_force_stop_worker(worker)` | SIGKILL + join. |
-| `_requeue_in_flight_task(heartbeat)` | re-queue the decoded in-flight task with a retry counter; submit a Failed result when retries exhausted. |
-| `_handle_worker_failure(worker, *, reason)` | sweep held calc slots, re-queue task, kill + respawn a replacement Worker (dedup by dead pid). |
-| `shutdown(*, wait=True)` | stop watchdog + monitor threads, signal + join Workers, close Redis, reset all state. |
+| `get_instance` / `reset_instance` | deprecated singleton shell |
+| `init_redis` | control-process `RedisQueue` |
+| `start_workers` | register calc pools, spawn `n` Workers (spawn context) |
+| `get_run_metrics` | submitted/ok/failed + worker counts; untracked gauges = `None` |
+| `stop_all_workers` / `request_worker_shutdown` | SIGTERM then force |
+| `get_monitor_snapshot` | in-memory deepcopy via `_monitor` (no Redis) |
+| `start_monitor` / `start_watchdog` | start collaborator threads |
+| `_handle_worker_failure` | kill → sweep slots → requeue → respawn (on factory so duck-typed stubs work) |
+| `shutdown` | stop watchdog + monitor, join Workers, close Redis |
+
+### 1.2 `_MonitorLoop` (private)
+
+Op_count-gated snapshot collector + ~120 Hz background updater (D5.1).
+
+- `collect_latest_status()` — local worker rows + gated Redis sections
+- `start(update_hz)` / `stop()` / `get_snapshot()` / `clear()`
+
+### 1.3 `_Watchdog` (private)
+
+Worker liveness loop (D6.1): process-exit or stale-while-busy →
+`factory._handle_worker_failure`. Also owns `force_stop_worker`,
+`requeue_in_flight_task`, `kill_orphan_process_groups`.
 
 ---
 
 ## 2. Spawn boundary
 
-`start_workers` passes only `redis.connection_config()` (settings) + a deep-copied picklable
-`worker_config`. A live Redis client **never** crosses the spawn boundary — each Worker opens its
-own client in `Worker.run()`. The respawn path reuses `_redis_connection_config` +
-`_worker_spawn_template`.
+`start_workers` passes only `redis.connection_config()` + a deep-copied picklable
+`worker_config`. A live Redis client **never** crosses the spawn boundary.
 
 ---
 
 ## 3. Monitor snapshot (op_count-gated)
 
-The updater always reads the four `op_count` keys + both queue lengths each tick; the per-subsystem
-`HGETALL`s (worker heartbeats / calculator status / sample stats) refresh **only** when their
-`op_count` advanced (or on bootstrap). `get_monitor_snapshot()` is a pure in-memory deepcopy
-(safe to poll). Updater exceptions are logged; Redis loss never crashes the control process.
+Updater always reads the four `op_count` keys + queue lengths; per-subsystem
+`HGETALL`s refresh only when the matching `op_count` advanced (or on bootstrap).
 
 ---
 
 ## 4. Watchdog (D6.1)
 
-`_inspect_workers` runs every `poll_interval_sec`: a dead process or a `busy`/`starting` Worker
-whose heartbeat is older than `stale_sec` triggers `_handle_worker_failure` →
-`sweep_held_calc_slots` + `_requeue_in_flight_task` (bounded by `max_sample_retries`) + respawn.
+`_inspect_workers` every `poll_interval_sec`: dead process or `busy`/`starting`
+Worker with heartbeat older than `stale_sec` → recovery (dedup by dead pid).
 
 ---
 
 ## 5. Interfaces / collaborators
 
-- **Jarvis2Core.init_factory** ([core.md](core.md)) obtains the singleton, reuses the core Redis
-  client, `start_workers` + `start_monitor` + `start_watchdog`.
-- **Worker** ([worker.md](worker.md)) receives the picklable config; all task/result flow is via
-  Redis (Factory does not relay).
-- **RedisQueue** ([redis_queue.md](redis_queue.md)) read-only monitor reads + slot sweep.
-- **run_summary** ([monitor.md](monitor.md)) consumes `get_run_metrics()`.
+- **Jarvis2Core.init_factory** constructs `TaskFactory(redis_config)`, reuses core Redis,
+  `start_workers` + `start_monitor` + `start_watchdog`.
+- **client.dispatch_monitor** builds an explicit `TaskFactory` (no singleton).
+- **SnapshotReader / run_summary** consume `get_monitor_snapshot` / `get_run_metrics`.
 
 ---
 
-## 6. Drift from design
+## 6. Tests
 
-As-built the watchdog/respawn (designed as "deferred") **is implemented**; the snapshot updater
-default is 120 Hz; `get_run_metrics` and the recovery bookkeeping (`_worker_spawn_template`,
-`_last_recovered_pid`, `_respawn_count`) are present.
-
----
-
-## 7. Tests
-
-`tests/test_worker_pool.py` (6), `test_monitor_snapshot.py` (5), `test_worker_failure.py` (2),
-`test_distributed_resume.py` (8): lifecycle, op_count-gated snapshot, watchdog respawn + slot
-sweep + in-flight re-queue, graceful shutdown.
+- `tests/test_monitor_snapshot.py` — explicit `TaskFactory()` (no singleton);
+  collaborator composition; op_count gating; honest `None` metrics.
+- Worker pool / failure suites exercise recovery via factory facades.

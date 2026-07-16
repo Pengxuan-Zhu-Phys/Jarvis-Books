@@ -1,5 +1,13 @@
 # Jarvis-HEP V2 原型阶段收尾评审与下一阶段（Calculator / 体验对齐）规划
 
+> **结项后记（2026-07-16）**：本评审规划的全部工作已执行完毕并归档——§3 的两个修复
+> （表达式扫描收窄、Operas 签名过滤）、§4 Calculator V1 对齐（D12.1，含字符串命令、
+> `${source}/${path}`、模块级 `selection`）、§4.3 EnvReqs 归口（D12.4，含可选 `redis`
+> 覆盖）、§5 的日志（D12.2）/flowchart（D12.3）/project（D12.5）/Examples catalog
+> （D12.6）。另有本评审之后追加的稳定 PackID 槽位机制与 D12.7 槽位安全加固、
+> D12.8 SAMPLE buckets。本文档此后仅作历史记录；现状以
+> [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md) 与两个 README 为准。
+
 **评审日期**：2026-07-14
 **代码基线**：`Jarvis-HEP-v2` / `jarvis2` 分支，`0a5e85e`（expression 统一 + EnvReqs.V2 已提交；评审时对照 `6b9841e` + 工作树）
 **对照基线**：冻结的 `Jarvis-HEP` V1（loguru 日志、flowchart、project 子命令、official library）

@@ -398,7 +398,7 @@ hep:calculator:status         Hash   # {<name>:free, <name>:busy, ...}
 hep:sample:stats              Hash   # {running, completed, failed}
 hep:worker:op_count           Str    # INCR on worker state change
 hep:calculator:op_count       Str    # INCR on calc free/busy change
-hep:sample:op_count           Str    # INCR on sample status change
+hep:sample:op_count           Str    # INCR once per sample in submit_result only (not on pull/in-flight)
 hep:task:op_count             Str    # INCR on task submit
 ```
 

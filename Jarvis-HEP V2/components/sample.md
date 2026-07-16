@@ -2,7 +2,7 @@
 
 **Role**: the unit of work. Carries a parameter point from the Sampler, across Redis, into a
 Worker, through the workflow, and out to the Archiver.
-**Status**: **As-built** @ `jarvis2` `d0de31a`. 643 lines.
+**Status**: **As-built** @ `jarvis2` (D9.6 dual-truth collapse).
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §3; discussions
 `worker_design.md` §3/§5.
 **Reuses V1**: none by import — V2 is a **fresh dataclass reimplementation** (V1 `jarvishep/` is
@@ -60,7 +60,7 @@ The unit of work: identity + `u_coords` cross Redis; everything else is Worker-l
 | `priority` | `int = 0` | ✅ | queue priority hint |
 | `created_at` | `str \| None` | ✅ | ISO timestamp |
 | `params` | `dict` (`repr=False`) | ❌ | x-space params (Worker-local) |
-| `info` | `dict` (`repr=False`) | ❌ | V1-compat bag (save_dir, logger, handlers…) |
+| `info` | `dict` (`repr=False`) | ❌ | Runtime bag + **projection** of dual-truth keys: after `_mirror_fields_to_info`, `info["params"]`/`info["observables"]` are the **same objects** as the fields (D9.6) |
 | `observables` | `dict` (`repr=False`) | ❌ | computed observables |
 | `status` | `str = "Created"` | ❌ | Created/Init/Running/Completed/Failed |
 | `_materialized` | `bool` | ❌ | dirs/logger created on disk |
@@ -96,8 +96,16 @@ The unit of work: identity + `u_coords` cross Redis; everything else is Worker-l
 | `materialize_failure_artifacts` | `(error=None) -> str\|None` | gated by `should_materialize_on_failure`; materialize + log failure message. |
 | `resolve_token` | `(text, *, stage="runtime", field="") -> str` | Replace `@PackID/@SampleID/@Sdir`; `@Sdir` triggers `materialize()`; raises if pack_id/uuid missing. |
 | `start` | `() -> None` | status → Running; log readiness + nuisance attempt banner. |
+| `_mirror_fields_to_info` | `() -> None` | **D9.6**: share `params`/`observables` object identity with `info`; mirror status/uuid. |
+| `adopt_params` | `(params, *, as_observables=True) -> None` | replace physical params (+ seed observables); mirror. |
+| `merge_observables` | `(updates) -> None` | single write entry for calc/opera outputs; re-mirror. |
+| `set_status` | `(status) -> None` | field + info status. |
+| `record_pack_id` | `(step_name, pack_id) -> None` | pack_ids on info bag. |
+| `record_failure` | `(error, *, failed_module=None) -> None` | Failed + error/error_type/failed_module. |
+| `record_handoff` | `(*, staging_path, product_list=None, clear_save_dir=True) -> None` | staging metadata after SAMPLE handoff. |
+| `pull_dual_truth_from_info` | `() -> None` | adopt rebinding of info dual keys after Likelihood; re-share. |
 | `close` | `() -> None` | log close summary (if materialized) then `close_logger`. |
-| `_build_close_message` | `() -> str` | format the "Sample SUMMARY" block from observables. |
+| `_build_close_message` | `() -> str` | format the "Sample SUMMARY" block from **field** observables. |
 | `close_logger` | `() -> None` | discard buffered / close file logger; clear handles. |
 | `record` | `() -> dict` | Final Archiver record: `{uuid, observables, metadata}` (metadata = selected info keys). |
 | `format_summary` | `@staticmethod (values, *, key_width=None, value_width=60, float_precision=6) -> str` | two-column aligned key/value rendering with float/nan/inf formatting. |
