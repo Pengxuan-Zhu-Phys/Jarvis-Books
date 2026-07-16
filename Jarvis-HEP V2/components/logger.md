@@ -54,20 +54,38 @@ Module state: `_state` dict (configured/listener/log_queue/log_path), `JARVIS_HE
 | `shutdown_jarvis_logging() -> None` | stop the queue listener, drain, reset `_state`. |
 | `get_jarvis_logger(name="jarvis") -> JarvisLoggerAdapter` | qualified adapter under the `jarvis_hep` domain, bound with `jarvis_module=name`. |
 
-**Control-process layout (D12.2):** `Jarvis2Core.init_logger` writes
-`<task_root>/logs/<scan>/<scan>.log`, prints the logo banner via `render_logo_with_version()`,
+**Control-process layout (D12.2 + component files 2026-07-16):** `Jarvis2Core.init_logger`
+writes under ``<task_root>/logs/<scan>/``, prints the logo banner via `render_logo_with_version()`,
 and binds `module=Jarvis-HEP`.
 
-**Per-process roles (as-built 2026-07-16):**
+### Scan-scoped component files (as-built)
 
-| Process | `setup_jarvis_logging` role | Typical path / module bind |
-|---------|----------------------------|----------------------------|
-| Control | `core` | `logs/<scan>/<scan>.log`, `module=Jarvis-HEP` |
-| Worker | `worker` | `logs/jarvis_worker_<pid>.log`, `module` via worker bind |
-| Archiver (process mode) | `archiver` | `logs/<scan>/jarvis_archiver.log`, `module=Archiver` |
+All process logs for a scan live under **`logs/<scan>/`**, one primary file per process
+component (Jarvis V1 visual format unchanged: ``·•· <module>`` / timestamp / level):
 
-End-of-scan **[Scan Performance]** is logged on the **control** logger (`Jarvis-HEP`), not Archiver
-(see [monitor.md](monitor.md)). Archiver logs pack/flush/DATABASE progress on its own stream.
+```text
+logs/<scan>/
+  core.log           # control process (Jarvis-HEP, Factory, Sampler.* via module bind)
+  worker-00.log      # Worker 0
+  worker-01.log      # Worker 1
+  ...
+  archiver.log       # Archiver process
+```
+
+| Process | `setup_jarvis_logging` | File | `·•·` module label |
+|---------|------------------------|------|---------------------|
+| Control | `component=core`, `scan_logs_dir=logs/<scan>` | `core.log` | `Jarvis-HEP` |
+| Factory / Sampler | same process as control (no extra file) | lines in `core.log` | `Factory`, `Sampler:<name>` |
+| Worker *N* | `component=worker`, `worker_id=N` | `worker-NN.log` | `Worker-N` |
+| Archiver | `component=archiver` | `archiver.log` | `Archiver` |
+
+Helpers: `scan_logs_dir(task_root, scan)`, `component_log_path(scan_logs, component, worker_id=…)`.
+
+**Sample layer** remains separate: per-sample detail still goes to
+`SAMPLE/.../Sample_running.log` (not mixed into component process logs).
+
+End-of-scan **[Scan Performance]** is logged on the **control** logger (`Jarvis-HEP` →
+`core.log`). Archiver pack/flush lines go to `archiver.log`.
 
 ---
 
