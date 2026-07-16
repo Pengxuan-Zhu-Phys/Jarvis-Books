@@ -2,15 +2,15 @@
 
 **Role**: lightweight, multiprocess-safe logging in two layers — top-level process logs and
 per-Sample detailed logs — over the standard library (no loguru).
-**Status**: **As-built** @ `jarvis2` **D12.2** — V1 visual formatter (`·•·` / `Ϡ`), scan-scoped
-main log path, logo banner; QueueListener architecture unchanged (D0.3). Remaining gaps: V1
-check-modules console mirroring and calculator command-block ownership (this doc §3–§4) are not
-yet fully landed in V2 `sample_logger.py` / `Sample.sample_console`.
+**Status**: **As-built** @ `jarvis2` **2026-07-16** — V1 visual formatter (`·•·` / `Ϡ`) loaded
+from **`jarvishep2/card/logging.yaml`** (style file; defaults preserve historical look);
+scan-scoped component files under `logs/<scan>/`; CLI `--console-level` / `--silence`.
+QueueListener architecture unchanged (D0.3).
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §9;
 [`../PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](../PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md) §5.1.
 **Reuses V1**: none by import — top-level rendering and per-Sample sink/replay are **fresh
-reimplementations** of the V1 visual contract. Logo template lives at `jarvishep2/card/logo`
-with `jarvishep2/versioning.py`.
+reimplementations** of the V1 visual contract. Templates: `jarvishep2/card/logging.yaml`,
+logo at `jarvishep2/card/logo` + `jarvishep2/versioning.py`.
 
 ---
 
@@ -50,7 +50,7 @@ Module state: `_state` dict (configured/listener/log_queue/log_path), `JARVIS_HE
 | `_resolve_level(level) -> int` | name/int → logging level (default INFO). |
 | `_make_console_handler(*, level) -> Handler` | `StreamHandler(stderr)` + V1 formatter with colorize. |
 | `_make_file_handler(*, log_path, level, max_bytes, backup_count) -> RotatingFileHandler` | rotating file sink; default max **5 MiB** (V1 rotation). |
-| `setup_jarvis_logging(*, level="INFO", console=True, role="jarvis", log_dir="logs", log_path=None, max_bytes=5MiB, backup_count=7, use_queue=True) -> str` | configure the `jarvis_hep` domain **once per process**: console + rotating file; `log_path` if set else `logs/jarvis_<role>_<pid>.log`; QueueHandler+QueueListener when `use_queue`; returns the log path. |
+| `setup_jarvis_logging(*, level="INFO", console=True, console_level=None, silence=False, component=…, scan_logs_dir=…, style_path=None, …) -> str` | configure once per process; style from `card/logging.yaml`; console level default INFO; **`silence=True`** disables console (files still written). |
 | `shutdown_jarvis_logging() -> None` | stop the queue listener, drain, reset `_state`. |
 | `get_jarvis_logger(name="jarvis") -> JarvisLoggerAdapter` | qualified adapter under the `jarvis_hep` domain, bound with `jarvis_module=name`. |
 
