@@ -129,5 +129,8 @@ selection compile-count caching, distributed submission counts, export/import ro
   (`mcmc_sampler.py` + `Sampling/Source/MCMC/` engines). V1 Bounds surface
   (`num_chains`/`chains`, `num_iters`/`steps`, `proposal_scale`, adapt/dr keys).
   Tests: `tests/test_mcmc_sampler.py` (worker-count independence, Core DRAM e2e).
-- **Ensemble / dynesty** (D13.3 / D13.5) — still planned; see
+- **Ensemble / DEMCMC / PT** (D13.3) — **shipped**: stretch (`EnsembleMCMC`/`Ensemble`),
+  DE (`DEMCMC`), parallel tempering (`PTMCMC`/`PT`/`PTEnsemble`). Half-ensemble
+  barriers; control-side temperature swaps. Tests: `tests/test_ensemble_samplers.py`.
+- **Dynesty** (D13.5) — still planned; see
   [`../DESIGN_SAMPLERS_2.0.md`](../DESIGN_SAMPLERS_2.0.md).

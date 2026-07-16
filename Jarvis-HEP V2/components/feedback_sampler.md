@@ -5,7 +5,8 @@ propose → Redis publish → `hep:feedback` drain → absorb → checkpoint loo
 method only ports its science hooks.
 **Status**: ✅ **Implemented** (D13.1, 2026-07-16). Consumers:
 [`AdaptiveLevelSetSampler`](adaptive_voronoi_contour.md); **MCMC / AMMCMC / AM / DRAM**
-via `mcmc_sampler.py` (D13.2). Next: ensembles (D13.3), dynesty pool (D13.5).
+(D13.2) and **Ensemble / DEMCMC / PT** (D13.3) via `mcmc_sampler.py`. Next: dynesty
+pool (D13.5), nuisance step (D13.4).
 **Design refs**: [`../DESIGN_SAMPLERS_2.0.md`](../DESIGN_SAMPLERS_2.0.md) §3.2,
 [checkpoint.md](checkpoint.md), [redis_queue.md](redis_queue.md),
 [sampler.md](sampler.md), [samplers_catalog.md](samplers_catalog.md).
@@ -38,8 +39,7 @@ SamplingVirtial          # config / redis / _build_sample / _submit(_group)
  └─ CheckpointedSampler  # heartbeat + persist_runtime_checkpoint + at_safe_barrier
      └─ FeedbackSampler  # pending + drain + seed + propose/absorb loop
           ├─ AdaptiveLevelSetSampler   # custom run_adaptive (cross/refine)
-          ├─ MCMCSampler               # MCMC / AMMCMC / AM / DRAM (D13.2)
-          └─ (D13.3+) Ensemble / …
+          └─ MCMCSampler               # MCMC/AM/DRAM (D13.2) + Ensemble/DE/PT (D13.3)
 ```
 
 ---
@@ -169,9 +169,10 @@ the shared blob. On resume, Core calls `repropose_unfinished` when
 ## 8. Non-goals
 
 - Nested sampling / MultiNest / HMC / RL (D13.5+ / later).
-- Ensemble family (D13.3) and nuisance step (D13.4).
+- Nuisance step (D13.4).
 - Full V1 golden diagnostic closure (D13.6).
 - No change to the Archiver / DATABASE contract.
 - No D8 / agent surface.
 
-MCMC / AMMCMC / AM / DRAM science **is in scope** and shipped under D13.2 (`mcmc_sampler.py`).
+Metropolis + ensemble/PT science **is in scope** and shipped under D13.2–D13.3
+(`mcmc_sampler.py`).

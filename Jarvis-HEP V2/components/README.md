@@ -66,6 +66,7 @@ exercise it.
 | [FeedbackSampler base](feedback_sampler.md) | `Sampling/feedback_sampler.py` | ✅ D13.1 — propose → hep:feedback → absorb contract + porting guide |
 | [Adaptive level-set sampler](adaptive_voronoi_contour.md) | `Sampling/adaptive_level_set.py` | ✅ D10 core — feedback-driven level-set tracer on FeedbackSampler |
 | MCMC / AM / DRAM | `Sampling/mcmc_sampler.py`, `Sampling/Source/MCMC/*` | ✅ D13.2 — V1 engines on FeedbackSampler; methods MCMC/AMMCMC/AM/DRAM |
+| Ensemble / DE / PT | `mcmc_sampler.py`, `Source/MCMC/engine_{ensemble,demcmc}.py` | ✅ D13.3 — half-ensemble + PT exchange; EnsembleMCMC/DEMCMC/PTMCMC/PTEnsemble |
 | [Benchmark mode](benchmark.md) | — | ⚠️ **not a module** (see `core.run_check_modules`) |
 
 **Auxiliary / support systems:**

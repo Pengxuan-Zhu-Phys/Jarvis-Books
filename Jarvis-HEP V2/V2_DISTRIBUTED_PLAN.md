@@ -6,7 +6,7 @@ Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
 re-confirmed 2026-07-16). **D9–D12 closed.** Next phase designed and open:
 **D13 samplers → D14 cluster → D15 reuse/analysis** (see §2 map + §3 rows; designs
 `DESIGN_SAMPLERS_2.0.md` / `DESIGN_CLUSTER_EXECUTION_2.0.md` / `DESIGN_RESULTS_ANALYSIS_2.0.md`).
-First pick after D13.2: **D13.3** (or D13.4 nuisance in parallel). Do not start Agent JSON verbs until D8 is unparked.
+First pick after D13.3: **D13.4** (nuisance) or **D13.5** (dynesty). Do not start Agent JSON verbs until D8 is unparked.
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -122,7 +122,7 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 
 | D13.1 | `FeedbackSampler` base extracted from ALS + porting guide                              | D13       | —                | **done**                               | 2026-07-16 | `jarvishep2/Sampling/feedback_sampler.py` + `components/feedback_sampler.md`. ALS subclasses `FeedbackSampler`; suite `test_adaptive_level_set.py` + `test_feedback_sampler.py` green. |
 | D13.2 | `Source/MCMC` chain runtime port + `MCMC`/`AM`/`DRAM` methods                          | D13       | D13.1            | **done**                               | 2026-07-16 | Engines under `jarvishep2/Sampling/Source/MCMC/`; `MCMCSampler` on FeedbackSampler; methods MCMC/AMMCMC/AM/DRAM registered; worker-count trajectory test green; `tests/test_mcmc_sampler.py`. Full V1 golden DRAM parity is progressive (diag + e2e path live). |
-| D13.3 | Ensemble family: stretch / DE / parallel tempering                                      | D13       | D13.2            | todo                                   |            | Half-ensemble batches; control-side temperature swaps at barriers. Accept: Eggbox posterior moments vs V1 golden + parallel speedup gate. |
+| D13.3 | Ensemble family: stretch / DE / parallel tempering                                      | D13       | D13.2            | **done**                               | 2026-07-17 | `EnsembleChain`/`DEMCMCChain` engines; methods EnsembleMCMC/Ensemble/DEMCMC/PTMCMC/PT/PTEnsemble; half-ensemble barriers + PT exchange; `tests/test_ensemble_samplers.py`. V1 golden moments / wall-clock gate progressive under D13.6. |
 | D13.4 | `nuisance_optimize` Worker step + pass-condition                                        | D13       | —                | todo                                   |            | Step type already reserved in `_VALID_EXECUTION_STEP_TYPES`. Port V1 `NuisanceExpressionRegistry` onto shared `ExpressionContext`; flowchart/sample-log visibility. |
 | D13.5 | Dynesty bridge (`RedisEvaluationPool`) + checkpoint wrap                                | D13       | D13.1            | todo                                   |            | Stock dynesty + injected pool (V1 `JarvisFactoryAsyncPool` pattern). Accept: unmodified V1 Dynesty card, `logZ` tolerance, mid-run resume. |
 | D13.6 | D13 acceptance + docs closure (YAML_REFERENCE §6 methods, samplers_catalog, DATABASE chain columns) | D13 | D13.2–D13.5 | todo                                   |            | Convergence-diagnostic columns are additive to the output contract (invariant 3). |
@@ -143,8 +143,8 @@ logging flags; `logs/<scan>/` layout; FileOperation SAMPLE process; Archiver log
 (`submit_result` only — see `components/redis_queue.md` §5). Baseline docs:
 `README.md` + `components/cli.md`.
 
-**Next pick order (current):** **D13.3** (ensembles) or **D13.4** (nuisance, parallel),
-then D13.5/6, then D14, then D15. **D8 stays fully deferred** (maintainer decision,
+**Next pick order (current):** **D13.4** (nuisance) or **D13.5** (dynesty), then D13.6,
+then D14, then D15. **D8 stays fully deferred** (maintainer decision,
 re-confirmed 2026-07-16) — do not start Agent JSON verbs until unparked. Designs:
 [`DESIGN_SAMPLERS_2.0.md`](DESIGN_SAMPLERS_2.0.md), [`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md), [`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md).
 
