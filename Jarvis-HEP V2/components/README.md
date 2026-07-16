@@ -55,7 +55,7 @@ exercise it.
 | [I/O parameter system](io_system.md) | `io_portal.py`, `file_ops.py`, `file_operation_service.py` | Portal formats + HEP FileOperation for `save:` |
 | [Subprocess scheduler](subprocess_scheduler.md) | `jarvishep2/async_subprocess.py` | per-Worker |
 | [Parameters & Variables](parameters_variables.md) | `Sampling/variables.py` | no `Module/parameters.py` |
-| [Nuisance handling](nuisance.md) | — | ⚠️ **stubbed only** |
+| [Nuisance handling](nuisance.md) | `Module/nuisance.py`, `Module/profile1d.py` | ✅ D13.4 Profile1D + pass-condition Worker step |
 
 **Sampling & measurement:**
 
