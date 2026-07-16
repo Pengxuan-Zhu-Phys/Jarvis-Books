@@ -1,6 +1,6 @@
 # DESIGN — Feedback-Driven Samplers: MCMC / Nested / Nuisance (V2, D13)
 
-**Status**: design accepted 2026-07-16; **D13.1–D13.4 done** (samplers + nuisance_optimize); D13.5–D13.6 still `todo`
+**Status**: design accepted 2026-07-16; **D13.1–D13.5 done** (samplers + nuisance + Dynesty); D13.6 still `todo`
 **Date**: 2026-07-16 (from the post-D12 capability review in this repo's session notes)
 **Scope**: migrate the V1 sampler science (MCMC family, nested sampling, nuisance
 profiling) onto the V2 distributed execution model. **V1 `Sampling` YAML surface is
@@ -139,7 +139,7 @@ Sampling:
 | D13.2 | `Source/MCMC/` chain runtime port + `MCMC`/`AM`/`DRAM` methods | D13.1 | **done** 2026-07-16: engines + `MCMCSampler` on FeedbackSampler; Distributor methods MCMC/AMMCMC/AM/DRAM; worker-count independence tested; feedback loop e2e with mock LogL. Full V1 eggbox golden diag comparison remains progressive under D13.6. |
 | D13.3 | Ensemble family: `EnsembleMCMC` (stretch), `DEMCMC`, `PT` | D13.2 | **done** 2026-07-17: half-ensemble barriers + PT exchange; methods EnsembleMCMC/Ensemble/DEMCMC/PTMCMC/PT/PTEnsemble; worker-count trajectory test. Golden moments / wall-clock gate progressive under D13.6. |
 | D13.4 | `nuisance_optimize` Worker step + pass-condition | — (parallel to D13.2) | **done** 2026-07-17: Profile1D on Worker; ExpressionContext registries; flowchart + sample log; tests green. Full HinoLLP golden progressive under D13.6. |
-| D13.5 | Dynesty bridge (`RedisEvaluationPool`) + checkpoint wrap | D13.1 | unmodified V1 `Example_Dynesty_Operas.yaml` runs; `logZ` within stat tolerance of V1 golden; resume mid-run continues the same nested run |
+| D13.5 | Dynesty bridge (`RedisEvaluationPool`) + checkpoint wrap | D13.1 | **done** 2026-07-17: vendored dynesty 3.0.0 + UUID channel; RedisEvaluationPool; DynestySampler. Full card golden / native resume progressive under D13.6. |
 | D13.6 | Acceptance & docs closure | D13.2–5 | YAML_REFERENCE §6 entries per method; samplers_catalog.md updated; convergence-diagnostics columns documented in the DATABASE contract |
 
 **Rollback**: unregistered methods keep erroring with the supported list — each WP only
