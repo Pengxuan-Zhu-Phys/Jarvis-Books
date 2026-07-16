@@ -22,7 +22,8 @@ Docs/
 ├── archive/                        ← completed WPs moved out of the plan (full ledger notes + WP details)
 │   └── V2_PLAN_ARCHIVE_2026-07-14.md ← D0–D7 all, D9/D10/D11 done rows; frozen history, read on demand only
 ├── DESIGN_PORTAL_IO_2.0.md         ← Portal formats + HEP FileOperation for SAMPLE save
-├── DESIGN_SAMPLE_PROGRESS_MONITOR.md ← low-overhead active sample phase (monitor proposal)
+├── DESIGN_SAMPLE_COORDINATION_2.0.md ← **accepted**: uuid key; task=u_coords; feedback=logL; stage opt-in
+├── DESIGN_SAMPLE_PROGRESS_MONITOR.md ← monitor stage-on-heartbeat (aligned with coordination design)
 ├── YAML_REFERENCE_2.0.md           ← as-built task-YAML reference (every key, defaults, gaps)
 ├── YAML-Example/                   ← public YAML recipes (per method)
 │   └── ADAPTIVE_LEVEL_SET.md       ← AdaptiveLevelSet: full Sampling block + key tables

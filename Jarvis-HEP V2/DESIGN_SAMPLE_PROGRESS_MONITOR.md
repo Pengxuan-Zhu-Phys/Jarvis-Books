@@ -1,8 +1,12 @@
 # DESIGN — Active Sample Progress for Monitor (low overhead)
 
-**Status**: design proposal (not implemented)  
+**Status**: design proposal (not implemented) — **aligned with**
+[`DESIGN_SAMPLE_COORDINATION_2.0.md`](DESIGN_SAMPLE_COORDINATION_2.0.md)  
 **Date**: 2026-07-16  
-**Goal**: Let the monitor show *which* sample is active and *which workflow phase* it is in (calculator / opera / likelihood / archive handoff), **without** slowing the scan hot path.
+**Goal**: Let the monitor show *which* sample is active and *which workflow phase* it is in
+(calculator / opera / likelihood / archive handoff), **without** slowing the scan hot path.
+**Constraint**: stage is **opt-in** (monitor switch); **never** on the sampler feedback channel;
+**no observables** on monitor Redis paths.
 
 ---
 
