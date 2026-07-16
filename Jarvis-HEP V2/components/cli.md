@@ -1,7 +1,7 @@
 # Component — CLI parsing & dispatch (命令行解析) (`jarvishep2/client.py`)
 
 **Role**: the `Jarvis2` command-line surface. One-intent subcommands + legacy bare-YAML aliases.
-**Status**: **As-built** (D11 + D12.5–D12.6 project tools + process cleanup). Entry:
+**Status**: **As-built** (D11 + D12.5–D12.6 project tools + ``ps``/``kill``). Entry:
 `Jarvis2 = jarvishep2.client:main`.
 **Design refs**: [core.md](core.md); **project / encrypt-decrypt**: [project_tools.md](project_tools.md).
 
@@ -36,7 +36,7 @@ and start with **`Jarvis2`** or **`Jarvis-Redis`**.
 | `Jarvis2 kill --no-force` | SIGTERM only |
 
 Kill order: Worker → FileOperation → Archiver → control → Redis. Skips the CLI PID.
-Exit `1` if kill fails or processes remain. Legacy: `cleanup` ≈ `ps`, `cleanup --kill` ≈ `kill --yes`.
+Exit `1` if kill fails or processes remain.
 
 Console logging flags on `run` / `check`:
 
