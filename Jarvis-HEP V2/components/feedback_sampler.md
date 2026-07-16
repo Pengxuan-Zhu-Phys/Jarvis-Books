@@ -166,9 +166,12 @@ the shared blob. On resume, Core calls `repropose_unfinished` when
 
 ---
 
-## 8. Non-goals (this WP)
+## 8. Non-goals
 
-- No MCMC / nested / nuisance science (D13.2–D13.5).
+- Nested sampling / MultiNest / HMC / RL (D13.5+ / later).
+- Ensemble family (D13.3) and nuisance step (D13.4).
+- Full V1 golden diagnostic closure (D13.6).
 - No change to the Archiver / DATABASE contract.
 - No D8 / agent surface.
-- No MultiNest / HMC / RL (explicitly later).
+
+MCMC / AMMCMC / AM / DRAM science **is in scope** and shipped under D13.2 (`mcmc_sampler.py`).
