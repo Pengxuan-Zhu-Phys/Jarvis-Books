@@ -480,12 +480,21 @@ used by the executor, not a supported task interface.
 
 ## 6. `Sampling`
 
-`Sampling.Method` selects the sampler via `Distributor.set_method`. Implemented methods:
-stateless **`Bridson`, `Random`, `Grid`, `CSV`** (resume-capable fixed sets) and stateful
-**`AdaptiveLevelSet`** (feedback barrier, `stateless=False`; see §6.9). Any other value
-raises `NotImplementedError` — see §13 and Appendix A.9 for exactly which error message
-you get and when. Alternatively `Sampling.mode: check_modules` (or `check-modules`) runs the
-fixed-point calculator smoke path (§6.7), bypassing `Method` entirely.
+`Sampling.Method` selects the sampler via `Distributor.set_method`. Implemented methods
+(as-built):
+
+| Family | Methods |
+|---|---|
+| Stateless | `Bridson`, `Random`, `Grid`, `CSV` |
+| Contour | `AdaptiveLevelSet` (§6.9) |
+| MCMC | `MCMC`, `AMMCMC`, `AM`, `DRAM` |
+| Ensemble / PT | `EnsembleMCMC`, `Ensemble`, `DEMCMC`, `PTMCMC`, `PT`, `PTEnsemble` |
+| Nested | `Dynesty`, `MultiNest` (§6.10) |
+
+Unknown methods raise via Distributor (supported-list message). Alternatively
+`Sampling.mode: check_modules` (or `check-modules`) runs the fixed-point calculator smoke
+path (§6.7), bypassing `Method` for the scan loop (bootstrap still resolves Method first —
+see Appendix A.12).
 
 ### 6.1 Keys Common to Bridson / Random / Grid
 
@@ -736,6 +745,93 @@ Operas:
       input:
         - { name: x, expression: x }
         - { name: y, expression: y }
+```
+
+### 6.10 Nested sampling: `Dynesty` / `MultiNest`
+
+Both methods use the **vendored dynesty 3.x** stack + Redis evaluation pool (UUID channel).
+They are **not** Fortran MultiNest / pymultinest — V1 already used that naming for static
+`NestedSampler`.
+
+| Method | Engine default | Force |
+|---|---|---|
+| `Dynesty` | `DynamicNestedSampler` | `Bounds.dynamic: false` → static |
+| `MultiNest` | `NestedSampler` (static) | always static; ignores `dynamic: true` |
+
+YAML surface is aligned with the [official dynesty API](https://dynesty.readthedocs.io/en/stable/api.html):
+
+```yaml
+Sampling:
+  Method: Dynesty          # or MultiNest
+  selection: "x > 0"       # optional; rejects before physics when false
+  Variables: [...]
+  Bounds:
+    nlive: 500             # required in practice; min 2
+    rseed: 21              # RNG seed (also Sampling.Seed)
+    dynamic: true          # Dynesty only (default true); MultiNest ignores
+    dlogz: 0.1             # evidence threshold alias:
+                           #   static  → run_nested.dlogz
+                           #   dynamic → run_nested.dlogz_init
+
+    # --- NestedSampler / DynamicNestedSampler constructor (official keys) ---
+    # Prefer nested block; flat Bounds.bound / Bounds.sample / … also accepted.
+    sampler:
+      bound: multi           # none | single | multi | balls | cubes
+      sample: auto           # auto | unif | rwalk | slice | rslice
+      walks: 25              # rwalk
+      facc: 0.5
+      slices: null           # slice / rslice
+      bootstrap: null
+      enlarge: null
+      update_interval: null  # int or float×nlive
+      first_update: { min_ncall: 1000, min_eff: 10.0 }
+      periodic: null         # list of dim indices
+      reflective: null
+      ncdim: null
+      blob: false
+      queue_size: null       # default: EnvReqs.V2.batch_size
+      use_pool: null
+      # history_filename / save_evaluation_history also accepted
+
+    # --- run_nested (official keys; filtered by static vs dynamic) ---
+    run_nested:
+      print_progress: true   # default true → Jarvis logger
+      maxcall: 40000
+      maxiter: null
+      # static only:
+      # dlogz: 0.1
+      # logl_max: .inf
+      # add_live: true
+      # dynamic only:
+      # dlogz_init: 0.01
+      # nlive_init / nlive_batch / maxbatch / n_effective / use_stop / …
+      # checkpoint_file / checkpoint_every / resume (both)
+```
+
+**Pass-through rules**
+
+1. Constructor kwargs: union of flat official keys + `Bounds.sampler` / `Bounds.constructor`.
+   HEP always injects `loglikelihood`, `prior_transform`, `ndim`, `pool`, `rstate` (stripped
+   if a user pastes them). Unknown keys are **ignored with a warning**, never crash.
+2. `run_nested` kwargs: filtered to the live `run_nested` signature. Static vs dynamic
+   use different evidence keys (`dlogz` vs `dlogz_init`); a mis-named `dlogz` on Dynamic
+   is remapped to `dlogz_init` automatically.
+3. Outputs: `DATABASE/dynesty_result.csv` or `DATABASE/multinest_result.csv` + stock
+   Jarvis-PLOT `dynesty_runplot` jplot under `images/<scan>/`.
+
+**Minimal V1-compatible card (still valid):**
+
+```yaml
+Sampling:
+  Method: Dynesty
+  Variables: [...]
+  Bounds:
+    nlive: 1600
+    rseed: 21
+    dlogz: 0.1
+    run_nested:
+      print_progress: true
+      maxcall: 40000
 ```
 
 ---
@@ -1040,11 +1136,10 @@ surface the "silently coerced" list above as warnings without changing this runt
 9. **Two different, easy-to-conflate errors for "bad `Sampling.Method`"** — which one you hit
    depends on *what kind* of mistake you made, and the more common mistake gets the better
    message:
-   - A **wrong/typo'd** value (e.g. `Method: Dynesty`) never reaches `core.py` at all. It fails
-     earlier, inside `bootstrap_distributed_runtime() → init_sampler_from_config()`
-     (`core.py:97-100`), via `Distributor.set_method`'s own `NotImplementedError`
-     (`"Sampling.Method 'Dynesty' is not implemented in Jarvis-HEP V2 yet"`,
-     `distributor.py:43-45`) — accurate, echoes the bad value back.
+   - A **wrong/typo'd** value (e.g. `Method: Dynestyy`) never reaches `core.py` at all. It fails
+     earlier, inside `bootstrap_distributed_runtime() → init_sampler_from_config()`, via
+     `Distributor.set_method`'s own `NotImplementedError` with the supported-method list —
+     accurate, echoes the bad value back. (`Dynesty` / `MultiNest` **are** implemented.)
    - Only a **missing/empty** `Sampling.Method` (with `Sampling.mode` not `check_modules`)
      falls through `init_sampler_from_config`'s falsy-method branch (no exception there) and
      is later caught by `run()`'s own `else:` branch, whose message historically named only

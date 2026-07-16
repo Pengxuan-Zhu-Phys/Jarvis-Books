@@ -134,14 +134,12 @@ selection compile-count caching, distributed submission counts, export/import ro
   barriers; control-side temperature swaps. Tests: `tests/test_ensemble_samplers.py`.
 - **Dynesty** (D13.5) — **shipped** (`dynesty_sampler.py` + vendored
   `Sampling/Source/Dynesty` 3.0.0 with UUID channel + RedisEvaluationPool).
-  Post-run diagnostics use the V1 **Jarvis-PLOT** path only (not `dynesty.plotting`):
-  write `DATABASE/dynesty_result.csv`, then
-  `plot_scene.emit_jplot_dynesty_runplot_yaml` → stock
-  `style: [a4paper_2x1, dynesty_runplot]`. Render with `Jarvis2 plot …`.
-  Tests: `tests/test_dynesty_sampler.py`, dynesty hook in
-  `tests/test_flowchart_and_plot_scene.py`.
-- **MultiNest** — **shipped** as V1-parity **static** NestedSampler wrapper
-  (`multinest_sampler.py`, subclass of DynestySampler). Not Fortran MultiNest;
-  always `NestedSampler` (ignores `Bounds.dynamic`). CSV:
-  `DATABASE/multinest_result.csv`; same Jarvis-PLOT `dynesty_runplot` card with
-  `DataSet.name: dynesty`. Tests: `tests/test_multinest_sampler.py`.
+  **YAML = official dynesty 3.x API**: `Bounds.sampler` / flat constructor keys
+  (`bound`, `sample`, `walks`, …) + `Bounds.run_nested` (static `dlogz` /
+  dynamic `dlogz_init` alias map). Default DynamicNestedSampler.
+  Post-run: `DATABASE/dynesty_result.csv` + Jarvis-PLOT `dynesty_runplot`.
+  Tests: `tests/test_dynesty_sampler.py`, `tests/test_nested_yaml_kwargs.py`.
+- **MultiNest** — **shipped** as **static** NestedSampler wrapper
+  (`multinest_sampler.py`). Same full constructor/run_nested pass-through;
+  always static (ignores `dynamic: true`). CSV: `multinest_result.csv` + same
+  jplot card. Tests: `tests/test_multinest_sampler.py`.
