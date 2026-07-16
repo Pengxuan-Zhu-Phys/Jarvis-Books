@@ -105,9 +105,20 @@ with exit 0. Unit coverage lives in `tests/test_plot_bridge.py` (8 tests).
 
 ---
 
-## 6. Follow-ups
+## 6. Follow-ups / as-built
 
-- `emit_jplot_from_scan(task_yaml, out_dir)` using DATABASE paths.
-- `Jarvis2 <task.yaml> --plot` after successful run.
-- Flowchart via `jarvisplot.flowchart` during workflow init.
-- Standard overlay scene for D10 `levelset.json`.
+**Done (scan-driven emit, still render-only in PLOT):**
+
+- Level-set + samples: `plot_scene.emit_jplot_scan_levelset_yaml` / `emit_plot_scenes_from_run`.
+- Dynesty diagnostics (V1 path): `DynestySampler.save_dynesty_results_to_csv` →
+  `DATABASE/dynesty_result.csv`; `emit_jplot_dynesty_runplot_yaml` with
+  `DataSet.name: dynesty` and `style: [a4paper_2x1, dynesty_runplot]`. HEP does **not**
+  call `dynesty.plotting` — all panels live in Jarvis-PLOT.
+- MultiNest diagnostics (same card): `multinest_result.csv` + jplot YAML; DataSet
+  name remains `dynesty` (PLOT card contract), path points at MultiNest CSV.
+- Core auto-emits after successful run; optional auto-render when JarvisPLOT is installed.
+- CLI: `Jarvis2 plot <plot.yaml>` / `Jarvis2 --plot …`.
+
+**Still open:**
+
+- Full V1 multi-figure `emit_jplot` (scatter pairs for all Sampling.Variables).

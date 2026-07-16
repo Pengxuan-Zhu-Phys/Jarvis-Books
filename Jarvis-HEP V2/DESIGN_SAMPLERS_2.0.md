@@ -50,7 +50,8 @@ the runtime is production-grade but the science surface is not.
 ### Non-goals
 
 - RL/DNN/differential-evolution samplers (`rltpmcmc`, `dnn`, `diver`) — later milestone.
-- MultiNest (Fortran callback model) — optional follow-up behind dynesty.
+- Fortran MultiNest / pymultinest — V1 never used it; V1/V2 ``Method: MultiNest``
+  is static dynesty NestedSampler (shipped). True Fortran MultiNest remains out of scope.
 - Changing the Archiver/DATABASE output contract (new columns are additive).
 - Any D8/agent-facing control surface.
 
@@ -139,7 +140,7 @@ Sampling:
 | D13.2 | `Source/MCMC/` chain runtime port + `MCMC`/`AM`/`DRAM` methods | D13.1 | **done** 2026-07-16: engines + `MCMCSampler` on FeedbackSampler; Distributor methods MCMC/AMMCMC/AM/DRAM; worker-count independence tested; feedback loop e2e with mock LogL. Full V1 eggbox golden diag comparison remains progressive under D13.6. |
 | D13.3 | Ensemble family: `EnsembleMCMC` (stretch), `DEMCMC`, `PT` | D13.2 | **done** 2026-07-17: half-ensemble barriers + PT exchange; methods EnsembleMCMC/Ensemble/DEMCMC/PTMCMC/PT/PTEnsemble; worker-count trajectory test. Golden moments / wall-clock gate progressive under D13.6. |
 | D13.4 | `nuisance_optimize` Worker step + pass-condition | — (parallel to D13.2) | **done** 2026-07-17: Profile1D on Worker; ExpressionContext registries; flowchart + sample log; tests green. Full HinoLLP golden progressive under D13.6. |
-| D13.5 | Dynesty bridge (`RedisEvaluationPool`) + checkpoint wrap | D13.1 | **done** 2026-07-17: vendored dynesty 3.0.0 + UUID channel; RedisEvaluationPool; DynestySampler. Full card golden / native resume progressive under D13.6. |
+| D13.5 | Dynesty bridge (`RedisEvaluationPool`) + checkpoint wrap | D13.1 | **done** 2026-07-17: vendored dynesty 3.0.0 + UUID channel; RedisEvaluationPool; DynestySampler; `DATABASE/dynesty_result.csv` + Jarvis-PLOT `dynesty_runplot` jplot (V1 path, no `dynesty.plotting`). Full card golden / native resume progressive under D13.6. |
 | D13.6 | Acceptance & docs closure | D13.2–5 | YAML_REFERENCE §6 entries per method; samplers_catalog.md updated; convergence-diagnostics columns documented in the DATABASE contract |
 
 **Rollback**: unregistered methods keep erroring with the supported list — each WP only

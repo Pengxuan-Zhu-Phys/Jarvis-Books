@@ -132,5 +132,16 @@ selection compile-count caching, distributed submission counts, export/import ro
 - **Ensemble / DEMCMC / PT** (D13.3) — **shipped**: stretch (`EnsembleMCMC`/`Ensemble`),
   DE (`DEMCMC`), parallel tempering (`PTMCMC`/`PT`/`PTEnsemble`). Half-ensemble
   barriers; control-side temperature swaps. Tests: `tests/test_ensemble_samplers.py`.
-- **Dynesty** (D13.5) — still planned; see
-  [`../DESIGN_SAMPLERS_2.0.md`](../DESIGN_SAMPLERS_2.0.md).
+- **Dynesty** (D13.5) — **shipped** (`dynesty_sampler.py` + vendored
+  `Sampling/Source/Dynesty` 3.0.0 with UUID channel + RedisEvaluationPool).
+  Post-run diagnostics use the V1 **Jarvis-PLOT** path only (not `dynesty.plotting`):
+  write `DATABASE/dynesty_result.csv`, then
+  `plot_scene.emit_jplot_dynesty_runplot_yaml` → stock
+  `style: [a4paper_2x1, dynesty_runplot]`. Render with `Jarvis2 plot …`.
+  Tests: `tests/test_dynesty_sampler.py`, dynesty hook in
+  `tests/test_flowchart_and_plot_scene.py`.
+- **MultiNest** — **shipped** as V1-parity **static** NestedSampler wrapper
+  (`multinest_sampler.py`, subclass of DynestySampler). Not Fortran MultiNest;
+  always `NestedSampler` (ignores `Bounds.dynamic`). CSV:
+  `DATABASE/multinest_result.csv`; same Jarvis-PLOT `dynesty_runplot` card with
+  `DataSet.name: dynesty`. Tests: `tests/test_multinest_sampler.py`.
