@@ -18,9 +18,10 @@ d=4 proximity shell / d=5 Sobol gen-0; resume-safe `run_adaptive`).
 drafts (2026-07-11: 2-D detailed design; same day: dimension-hybrid extension) and
 **corrected here against the as-built runtime** — the deltas from those drafts are listed in
 §2 and are binding.
-**Design refs**: [sampler.md](sampler.md), [samplers_catalog.md](samplers_catalog.md),
-[checkpoint.md](checkpoint.md), [distributor.md](distributor.md),
-[redis_queue.md](redis_queue.md), [expression.md](expression.md),
+**Design refs**: [sampler.md](sampler.md), [feedback_sampler.md](feedback_sampler.md),
+[samplers_catalog.md](samplers_catalog.md), [checkpoint.md](checkpoint.md),
+[distributor.md](distributor.md), [redis_queue.md](redis_queue.md),
+[expression.md](expression.md),
 [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §3/§11.
 **Related but distinct**: Jarvis-PLOT's `likelihood_report` (PLOT bridge) does *post-hoc*
 Voronoi cell analysis of a finished scan; this sampler puts the same geometric idea *in the
@@ -71,7 +72,7 @@ drafts.
 | C3 | `UMapper.from_config(...)`, `self._umapper.map` + inverse | No `UMapper` class; use `Sampling/variables.load_variables` + `sampling_utils.map_u_to_physical` for the sampler-side u→x it needs (exporting physical coords, `selection`). No inverse mapping is required — all geometry stays in u-space |
 | C4 | `Bridson(radius=…).generate_batch(n)` | No such class API. Reuse the **module-level `Bridson_sampling(dims, radius, k, hypersphere_sample)`** function from `Sampling/bridson.py` for generation-0 (d ≤ 4); refinement candidates are drawn per-edge (§4.4), not via a local Bridson instance |
 | C5 | `__init__(self, config)` | V2 samplers are no-arg constructed by a `Distributor` factory and configured via `set_config(config)` |
-| C6 | Inherit `SamplingVirtial`; add a `match` case in `Distributor` | Inherit **`CheckpointedSampler`** (checkpoint heartbeat + resume come free); register via **`Distributor.register("AdaptiveLevelSet", factory, stateless=False, resume="implemented")`** — the registry landed with D9.2, no `match` edits exist anymore |
+| C6 | Inherit `SamplingVirtial`; add a `match` case in `Distributor` | Inherit **`FeedbackSampler`** (D13.1; sits on `CheckpointedSampler` so checkpoint heartbeat + resume come free); register via **`Distributor.register("AdaptiveLevelSet", factory, stateless=False, resume="implemented")`** — the registry landed with D9.2, no `match` edits exist anymore |
 | C7 | `Variables: [m0, m12]` in the YAML example | Wrong shape — `Sampling.Variables` is a list of mappings (`name` + `distribution`), per `YAML_REFERENCE_2.0.md` §6.2. Corrected recipe in §6 |
 | C8 | Results consumed ad-hoc from `hep:results` inside the loop | The archive queue has exactly one consumer (the Archiver); a sampler pulling from it would race the persistence path. A **new opt-in feedback channel** is required (§5) — the only new runtime infrastructure this sampler needs |
 | C9 | Refinement whenever "new results" arrive (timeout-polled) | Non-deterministic: refinement decisions would depend on worker-race arrival order, breaking seeded reproducibility (a V2 hard invariant). Corrected to **generation barriers** (§4.1): propose generation *g*, wait for *all* of generation *g*, then refine. Slightly lower worker utilization at generation edges; exact reproducibility for free |
@@ -108,7 +109,7 @@ class NeighborGraph(Protocol):
 class DelaunayGraph:      # d ≤ 3: exact adjacency = voronoi.ridge_points (qhull "QJ")
 class KNNGraph:           # d = 4–5: symmetric union of knn_k nearest-neighbor edges (cKDTree)
 
-class AdaptiveLevelSetSampler(CheckpointedSampler):
+class AdaptiveLevelSetSampler(FeedbackSampler):   # D13.1: FeedbackSampler → CheckpointedSampler
     method = "AdaptiveLevelSet"
 
     # --- config (set_config, from Sampling.AdaptiveLevelSet) ---

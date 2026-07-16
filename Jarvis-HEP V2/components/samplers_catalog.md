@@ -9,8 +9,10 @@ light task dicts, and submits them to Redis via the [sampler base](sampler.md).
 
 > **As-built drift (large):** the design catalog listed MCMC (`mcmc_standard`, `tpmcmc`, `dream*`,
 > `ess`, …), nested samplers (`dynesty`, `multinest`), and gradient samplers (`mala/hmc/nuts`).
-> **None of those exist in V2.** Shipped: **four stateless samplers** (Bridson, Random, Grid, CSV)
-> + a seeded test sampler, all built on `CheckpointedSampler` → `SamplingVirtial`.
+> **None of those exist in V2 yet (D13.2+).** Shipped: **four stateless samplers** (Bridson,
+> Random, Grid, CSV) + a seeded test sampler on `CheckpointedSampler`, plus **AdaptiveLevelSet**
+> on the new **`FeedbackSampler`** base (D13.1). Porting guide:
+> [feedback_sampler.md](feedback_sampler.md).
 
 ---
 
@@ -22,7 +24,9 @@ SamplingVirtial (sampler.py)               # base: build_sample + Redis submit
       ├─ RandomS  (randoms.py)        method="Random"
       ├─ Grid     (grid.py)           method="Grid"
       ├─ CSVSampler (csv_sampler.py)  method="CSV"
-      └─ Bridson  (bridson.py)        method="Bridson"
+      ├─ Bridson  (bridson.py)        method="Bridson"
+      └─ FeedbackSampler (feedback_sampler.py)   # D13.1: propose → feedback → absorb
+           └─ AdaptiveLevelSetSampler (adaptive_level_set.py)  method="AdaptiveLevelSet"
 SeededOperaSampler (seeded_sampler.py)     # SamplingVirtial directly (test/acceptance)
 ```
 
@@ -115,14 +119,11 @@ selection compile-count caching, distributed submission counts, export/import ro
 
 ---
 
-## 10. Planned additions
+## 10. Feedback-driven family + planned additions
 
-- **AdaptiveLevelSetSampler** (`method="AdaptiveLevelSet"`, milestone D10, 2 ≤ d ≤ 5) — the
-  first **feedback-driven** sampler: low-discrepancy generation-0 → crossing detection on a
-  neighbor graph (exact Delaunay ridges for d ≤ 3, approximate symmetric kNN for d = 4–5) →
-  barrier-synchronized refinement around the target level-set. One algorithm, two graph
-  builders; d = 4–5 explicitly targets "details reasonable" density near the level-set, not
-  hypersurface reconstruction; d ≥ 6 rejected. Registers with `stateless=False` (needs the
-  new `hep:feedback` channel and a `core.run_adaptive` dispatch branch); does **not** fit
-  `FixedSetSampler` (the point set grows adaptively), so it sits directly on
-  `CheckpointedSampler`. Full spec: [adaptive_voronoi_contour.md](adaptive_voronoi_contour.md).
+- **FeedbackSampler** (D13.1) — shared propose → Redis → `hep:feedback` → absorb base.
+  Porting guide: [feedback_sampler.md](feedback_sampler.md).
+- **AdaptiveLevelSetSampler** (`method="AdaptiveLevelSet"`, D10, 2 ≤ d ≤ 5) — **shipped** on
+  `FeedbackSampler`. Full spec: [adaptive_voronoi_contour.md](adaptive_voronoi_contour.md).
+- **MCMC / AM / DRAM / ensemble / dynesty** (D13.2–D13.5) — port V1 science onto
+  `FeedbackSampler`; see [`../DESIGN_SAMPLERS_2.0.md`](../DESIGN_SAMPLERS_2.0.md).

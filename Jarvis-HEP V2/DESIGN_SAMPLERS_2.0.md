@@ -1,6 +1,6 @@
 # DESIGN — Feedback-Driven Samplers: MCMC / Nested / Nuisance (V2, D13)
 
-**Status**: design accepted 2026-07-16; no code yet — all WPs `todo`
+**Status**: design accepted 2026-07-16; **D13.1 done** (FeedbackSampler + ALS refactor + porting guide); D13.2–D13.6 still `todo`
 **Date**: 2026-07-16 (from the post-D12 capability review in this repo's session notes)
 **Scope**: migrate the V1 sampler science (MCMC family, nested sampling, nuisance
 profiling) onto the V2 distributed execution model. **V1 `Sampling` YAML surface is
@@ -135,7 +135,7 @@ Sampling:
 
 | WP | Title | Depends on | Accept |
 |---|---|---|---|
-| D13.1 | `FeedbackSampler` base extracted from ALS + porting guide (`components/feedback_sampler.md`) | — | ALS refactored onto the base; full ALS test suite green unchanged; guide documents the propose/absorb contract |
+| D13.1 | `FeedbackSampler` base extracted from ALS + porting guide (`components/feedback_sampler.md`) | — | **done** 2026-07-16: ALS on base; `test_adaptive_level_set` + `test_feedback_sampler` green; guide documents propose/absorb |
 | D13.2 | `Source/MCMC/` chain runtime port + `MCMC`/`AM`/`DRAM` methods | D13.1 | unmodified V1 `Example_DRAM_Operas.yaml` runs end-to-end; acceptance-rate & R-hat within tolerance of a captured V1 golden run; worker-count independence (1 vs 4 workers, same trajectory) |
 | D13.3 | Ensemble family: `EnsembleMCMC` (stretch), `DEMCMC`, `PT` | D13.2 | Eggbox posterior moments vs V1 golden; half-ensemble batches actually parallelize (≥1.5× wall-clock, 1→4 workers) |
 | D13.4 | `nuisance_optimize` Worker step + pass-condition | — (parallel to D13.2) | V1 nuisance card golden parity; step appears in flowchart + sample log like other steps |

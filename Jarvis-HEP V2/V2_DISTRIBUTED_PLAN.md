@@ -6,7 +6,7 @@ Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
 re-confirmed 2026-07-16). **D9–D12 closed.** Next phase designed and open:
 **D13 samplers → D14 cluster → D15 reuse/analysis** (see §2 map + §3 rows; designs
 `DESIGN_SAMPLERS_2.0.md` / `DESIGN_CLUSTER_EXECUTION_2.0.md` / `DESIGN_RESULTS_ANALYSIS_2.0.md`).
-First pick: **D13.1**. Do not start Agent JSON verbs until D8 is unparked.
+First pick after D13.1: **D13.2**. Do not start Agent JSON verbs until D8 is unparked.
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -120,7 +120,7 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D8.3 | Control-process graceful stop (SIGINT/SIGTERM → checkpoint → clean exit)              | D8        | —                | **partial** (human path enough)        | 2026-07-16 | Interactive stop (`64d7486`) + **interrupt checkpoint** (`_save_interrupt_checkpoint` before teardown; tests `test_graceful_stop.py`). Agent pieces (run_state interrupted, stop-ack) + D8.2 still **parked**. |
 | D8.4 | Strict-validate diagnostics (silent-coercion warnings, dead keys, unknown keys)       | D8        | D8.1             | **deferred**                           | 2026-07-14 | **Parked** with D8.1. |
 
-| D13.1 | `FeedbackSampler` base extracted from ALS + porting guide                              | D13       | —                | todo                                   |            | `DESIGN_SAMPLERS_2.0.md` §3.2/WP table. ALS refactored onto the base, its suite green unchanged; NEW `components/feedback_sampler.md`. |
+| D13.1 | `FeedbackSampler` base extracted from ALS + porting guide                              | D13       | —                | **done**                               | 2026-07-16 | `jarvishep2/Sampling/feedback_sampler.py` + `components/feedback_sampler.md`. ALS subclasses `FeedbackSampler`; suite `test_adaptive_level_set.py` + `test_feedback_sampler.py` green. |
 | D13.2 | `Source/MCMC` chain runtime port + `MCMC`/`AM`/`DRAM` methods                          | D13       | D13.1            | todo                                   |            | Copy V1 `Sampling/Source/MCMC/` (never import `jarvishep`); futures backed by `hep:feedback`. Accept: unmodified V1 DRAM card, diagnostics parity vs V1 golden, worker-count independence. |
 | D13.3 | Ensemble family: stretch / DE / parallel tempering                                      | D13       | D13.2            | todo                                   |            | Half-ensemble batches; control-side temperature swaps at barriers. Accept: Eggbox posterior moments vs V1 golden + parallel speedup gate. |
 | D13.4 | `nuisance_optimize` Worker step + pass-condition                                        | D13       | —                | todo                                   |            | Step type already reserved in `_VALID_EXECUTION_STEP_TYPES`. Port V1 `NuisanceExpressionRegistry` onto shared `ExpressionContext`; flowchart/sample-log visibility. |
@@ -143,8 +143,8 @@ logging flags; `logs/<scan>/` layout; FileOperation SAMPLE process; Archiver log
 (`submit_result` only — see `components/redis_queue.md` §5). Baseline docs:
 `README.md` + `components/cli.md`.
 
-**Next pick order (current):** **D13.1 → D13.2** (sampler science; D13.4 may run in
-parallel), then D14, then D15. **D8 stays fully deferred** (maintainer decision,
+**Next pick order (current):** **D13.2** (MCMC/AM/DRAM; D13.4 may run in
+parallel), then D13.3/5/6, then D14, then D15. **D8 stays fully deferred** (maintainer decision,
 re-confirmed 2026-07-16) — do not start Agent JSON verbs until unparked. Designs:
 [`DESIGN_SAMPLERS_2.0.md`](DESIGN_SAMPLERS_2.0.md), [`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md), [`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md).
 

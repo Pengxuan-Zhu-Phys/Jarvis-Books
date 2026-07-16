@@ -8,8 +8,9 @@ execution-plan template) and submits them to Redis. Concrete algorithms subclass
 
 > **As-built drift:** the design framed this as extending V1's `SamplingVirtial(Base)` with MCMC
 > result-feedback, `set_factory`, `loglike`, etc. **Shipped is a minimal base** with only
-> config/redis/plan + submit; the checkpoint/resume machinery lives in the
-> [`CheckpointedSampler`](samplers_catalog.md) subclass, not here. MCMC feedback is **not** present.
+> config/redis/plan + submit; the checkpoint/resume machinery lives in
+> [`CheckpointedSampler`](samplers_catalog.md). Feedback-driven methods (AdaptiveLevelSet, D13
+> MCMC) sit on [`FeedbackSampler`](feedback_sampler.md) above that — not on this file.
 
 ---
 
