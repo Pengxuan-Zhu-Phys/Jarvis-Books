@@ -22,6 +22,9 @@ Docs/
 ├── archive/                        ← completed WPs moved out of the plan (full ledger notes + WP details)
 │   └── V2_PLAN_ARCHIVE_2026-07-14.md ← D0–D7 all, D9/D10/D11 done rows; frozen history, read on demand only
 ├── DESIGN_PORTAL_IO_2.0.md         ← Portal formats + HEP FileOperation for SAMPLE save
+├── DESIGN_SAMPLERS_2.0.md          ← D13 (todo): MCMC/nested/nuisance on the feedback channel
+├── DESIGN_CLUSTER_EXECUTION_2.0.md ← D14 (todo): remote worker pools, SLURM, broker auth/AOF
+├── DESIGN_RESULTS_ANALYSIS_2.0.md  ← D15 (todo): warm-start cache, Jarvis2 analyze, Portal formats
 ├── DESIGN_SAMPLE_COORDINATION_2.0.md ← **accepted**: uuid key; task=u_coords; feedback=logL; stage opt-in
 ├── DESIGN_SAMPLE_PROGRESS_MONITOR.md ← monitor stage-on-heartbeat (aligned with coordination design)
 ├── YAML_REFERENCE_2.0.md           ← as-built task-YAML reference (every key, defaults, gaps)
@@ -50,7 +53,10 @@ Docs/
 > FileOperation, CSV + scan perf, D1.1 `op_count` contract.
 > **D10 + D9.4/9.6 done.** **D8 Agent Bridge parked** (JSON API / run_state / agent stop-ack).
 > Human stop path includes **interrupt → runtime checkpoint** then teardown.
-> Open: maintainer-directed polish only until D8 is unparked.
+> Open: next phase designed 2026-07-16 — **D13 samplers** ([`DESIGN_SAMPLERS_2.0.md`](DESIGN_SAMPLERS_2.0.md)),
+> **D14 cluster** ([`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md)),
+> **D15 reuse/analysis** ([`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md));
+> pick order D13.1 → D13.2. **D8 stays parked.**
 > CLI: [components/cli.md](components/cli.md). Broker contract: [components/redis_queue.md](components/redis_queue.md).
 > Ledger: [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). Project crypto:
 > [`components/project_tools.md`](components/project_tools.md) + `Jarvis-HEP-v2/INSTALL.md`.

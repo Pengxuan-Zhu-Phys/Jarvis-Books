@@ -2,10 +2,11 @@
 
 Last updated: 2026-07-16. Branch `jarvis2` @ **`61116a4`** (interrupt checkpoint + polish).
 Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
-**Priority note (maintainer):** **D8 Agent Bridge stays parked** (D8.1/8.2/8.4 + agent stop-ack).
-**D12 closed; D9.4/9.6/D10 done.** Human D8.3 remainder (**checkpoint-on-interrupt**) landed.
-Prefer further maintainer-directed polish only; do not start Agent JSON verbs until unparked.
-Control-process SIGINT + interrupt checkpoint; **`Jarvis2 ps` / `kill`** cover orphans.
+**Priority note (maintainer):** **D8 Agent Bridge stays parked** (D8.1/8.2/8.4 + agent stop-ack;
+re-confirmed 2026-07-16). **D9–D12 closed.** Next phase designed and open:
+**D13 samplers → D14 cluster → D15 reuse/analysis** (see §2 map + §3 rows; designs
+`DESIGN_SAMPLERS_2.0.md` / `DESIGN_CLUSTER_EXECUTION_2.0.md` / `DESIGN_RESULTS_ANALYSIS_2.0.md`).
+First pick: **D13.1**. Do not start Agent JSON verbs until D8 is unparked.
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -93,6 +94,9 @@ user-visible behavior.
 | **D10** | Adaptive Level-Set Sampler (first feedback-driven sampler, 2 ≤ d ≤ 5) | opt-in `hep:feedback` result channel (zero cost when off), `AdaptiveLevelSetSampler`: low-discrepancy gen-0 → crossing detection on a neighbor graph (exact Delaunay ridges d≤3 / approximate kNN d=4–5) → barrier-synchronized edge refinement → `levelset.json`; registered `stateless=False`; deterministic across worker counts; checkpoint at generation barriers; d≥6 rejected. Design: [`components/adaptive_voronoi_contour.md`](components/adaptive_voronoi_contour.md) |
 | **D11** | User Interface & Integration Closure | one-intent CLI (`run/check/monitor/plot/portal/operas`) with compatibility aliases; truthful `RunOutcome` and machine-readable failures; Portal HEP formats exposed and discoverable; Operas validation/runtime parity; scan-driven PLOT + flowchart + D10 overlay. Review: [`USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md`](USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md) |
 | **D12** | Calculator V1 parity + user-experience alignment ("V1 用户无感迁移") | unmodified **Eggbox Calculator card** (historical file `Example_Bridson_process.yaml` = `Calculators` external program, not Operas, not a runtime mode) runs end-to-end with golden parity; V1-style core log rendering; flowchart.{json,png} export; `EnvReqs.V2` grouped settings; `Jarvis2 project …`; Jarvis-Examples-owned official catalog. Review: [`PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md) §4.0 naming |
+| **D13** | Feedback-driven samplers: MCMC / Nested / Nuisance (V1 science surface on the V2 runtime) | unmodified V1 `Example_DRAM_Operas.yaml` + `Example_Dynesty_Operas.yaml` run end-to-end with convergence/evidence parity vs captured V1 goldens; `FeedbackSampler` base extracted from ALS; `nuisance_optimize` Worker step implemented; worker-count-independent chains. Design: [`DESIGN_SAMPLERS_2.0.md`](DESIGN_SAMPLERS_2.0.md) |
+| **D14** | Cluster execution + broker durability | `Jarvis2 worker start --connect` remote pools (template over Redis, `<host>:<n>` ids, no-respawn foreign watchdog); broker `requirepass` + AOF + broker-restart resume; SLURM/HTCondor submitters render Phase-1 pools; shared-FS invariant documented. Design: [`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md) |
+| **D15** | Result reuse + analysis closure | `--warm-start` point cache (fingerprint-miss-by-default, `cached_from` provenance); `Jarvis2 analyze` corner/best-fit/posterior via JarvisPLOT scenes; Portal File/HepMC/LHE exposure + fixtures. Design: [`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md) |
 
 ---
 
@@ -116,14 +120,33 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D8.3 | Control-process graceful stop (SIGINT/SIGTERM → checkpoint → clean exit)              | D8        | —                | **partial** (human path enough)        | 2026-07-16 | Interactive stop (`64d7486`) + **interrupt checkpoint** (`_save_interrupt_checkpoint` before teardown; tests `test_graceful_stop.py`). Agent pieces (run_state interrupted, stop-ack) + D8.2 still **parked**. |
 | D8.4 | Strict-validate diagnostics (silent-coercion warnings, dead keys, unknown keys)       | D8        | D8.1             | **deferred**                           | 2026-07-14 | **Parked** with D8.1. |
 
+| D13.1 | `FeedbackSampler` base extracted from ALS + porting guide                              | D13       | —                | todo                                   |            | `DESIGN_SAMPLERS_2.0.md` §3.2/WP table. ALS refactored onto the base, its suite green unchanged; NEW `components/feedback_sampler.md`. |
+| D13.2 | `Source/MCMC` chain runtime port + `MCMC`/`AM`/`DRAM` methods                          | D13       | D13.1            | todo                                   |            | Copy V1 `Sampling/Source/MCMC/` (never import `jarvishep`); futures backed by `hep:feedback`. Accept: unmodified V1 DRAM card, diagnostics parity vs V1 golden, worker-count independence. |
+| D13.3 | Ensemble family: stretch / DE / parallel tempering                                      | D13       | D13.2            | todo                                   |            | Half-ensemble batches; control-side temperature swaps at barriers. Accept: Eggbox posterior moments vs V1 golden + parallel speedup gate. |
+| D13.4 | `nuisance_optimize` Worker step + pass-condition                                        | D13       | —                | todo                                   |            | Step type already reserved in `_VALID_EXECUTION_STEP_TYPES`. Port V1 `NuisanceExpressionRegistry` onto shared `ExpressionContext`; flowchart/sample-log visibility. |
+| D13.5 | Dynesty bridge (`RedisEvaluationPool`) + checkpoint wrap                                | D13       | D13.1            | todo                                   |            | Stock dynesty + injected pool (V1 `JarvisFactoryAsyncPool` pattern). Accept: unmodified V1 Dynesty card, `logZ` tolerance, mid-run resume. |
+| D13.6 | D13 acceptance + docs closure (YAML_REFERENCE §6 methods, samplers_catalog, DATABASE chain columns) | D13 | D13.2–D13.5 | todo                                   |            | Convergence-diagnostic columns are additive to the output contract (invariant 3). |
+
+| D14.1 | Worker template over Redis + `Jarvis2 worker start --connect`                           | D14       | —                | todo                                   |            | `DESIGN_CLUSTER_EXECUTION_2.0.md` §3/§4. Template `hep:worker:template:<scan>` (JSON, version-guarded); two pools on one host drain a live scan with DATABASE parity. |
+| D14.2 | Remote-aware watchdog + `<host>:<n>` worker ids                                         | D14       | D14.1            | todo                                   |            | Sweep foreign dead workers, never respawn; pool-local D12.7 orphan reaping. |
+| D14.3 | Broker auth (`requirepass`) + AOF knob + broker-restart resume                          | D14       | —                | todo                                   |            | Password never logged; checkpoint stays authoritative — wiped broker must resume from checkpoint (§13.5). |
+| D14.4 | `Jarvis2 cluster submit --backend slurm` (+ HTCondor)                                   | D14       | D14.1            | todo                                   |            | Renders/submits sbatch calling Phase-1 pools; dry-run prints script; INSTALL.md docs. |
+
+| D15.1 | Point cache + `--warm-start`                                                            | D15       | —                | todo                                   |            | `DESIGN_RESULTS_ANALYSIS_2.0.md` §2/§3. Fingerprint = params(rounded per `cache_decimals`) + module config hash; miss-by-default; `cached_from` provenance; `cached` metric in run_summary. |
+| D15.2 | `Jarvis2 analyze`: corner / marginals / best-fit via JarvisPLOT scenes                  | D15       | —                | todo                                   |            | Reads DATABASE only; reduced mode without chain columns; zero drawing code in HEP. |
+| D15.3 | Posterior weighting mode (nested weights / MCMC post-burn-in)                            | D15       | D13.6, D15.2     | todo                                   |            | Reproduces V1 golden analysis numbers. |
+| D15.4 | Portal File / HepMC / LHE exposure + V2 fixtures                                        | D15       | Portal release   | todo                                   |            | Same model as Portal 1.4.0 SLHA work; one real fixture per format. |
+
 **Post-D12 polish already landed (no open WP; status only):** CLI `-v` / `ps` / `kill` /
 logging flags; `logs/<scan>/` layout; FileOperation SAMPLE process; Archiver logger; full
 `samples.csv` + scan performance log; **sample `op_count` single-increment contract**
 (`submit_result` only — see `components/redis_queue.md` §5). Baseline docs:
 `README.md` + `components/cli.md`.
 
-**Next pick order (current):** **D8 fully deferred** (incl. remaining agent D8.3). Ledger
-otherwise closed for active WPs — only maintainer-directed polish / bugs.
+**Next pick order (current):** **D13.1 → D13.2** (sampler science; D13.4 may run in
+parallel), then D14, then D15. **D8 stays fully deferred** (maintainer decision,
+re-confirmed 2026-07-16) — do not start Agent JSON verbs until unparked. Designs:
+[`DESIGN_SAMPLERS_2.0.md`](DESIGN_SAMPLERS_2.0.md), [`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md), [`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md).
 
 Parallelism note: D11.1 has no dependency on parked D8 (Agent JSON can consume `RunOutcome`
 later). D9.4/D9.6 may proceed without D8. Agent-side M4.5 (Jarvis-Agent repo) stays blocked
