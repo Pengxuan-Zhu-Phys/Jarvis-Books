@@ -1,7 +1,7 @@
 # Component — CLI parsing & dispatch (命令行解析) (`jarvishep2/client.py`)
 
 **Role**: the `Jarvis2` command-line surface. One-intent subcommands + legacy bare-YAML aliases.
-**Status**: **As-built** (D11 + D12.5–D12.6 project tools). Entry:
+**Status**: **As-built** (D11 + D12.5–D12.6 project tools + process cleanup). Entry:
 `Jarvis2 = jarvishep2.client:main`.
 **Design refs**: [core.md](core.md); **project / encrypt-decrypt**: [project_tools.md](project_tools.md).
 
@@ -11,7 +11,7 @@
 
 | Invocation | Routes to | Notes |
 |------------|-----------|-------|
-| `Jarvis2 run <task.yaml> [--resume]` | `Jarvis2Core.run` | preferred run intent |
+| `Jarvis2 run <task.yaml> [--resume] [--console-level] [--silence]` | `Jarvis2Core.run` | preferred run intent |
 | `Jarvis2 <task.yaml>` | → `run` | legacy alias via `normalize_argv` |
 | `Jarvis2 check <task.yaml>` | `check_modules` | fixed-point smoke |
 | `Jarvis2 monitor` | `dispatch_monitor` | one snapshot |
@@ -19,7 +19,29 @@
 | `Jarvis2 portal …` | Portal CLI (V2 registry) | same as `jportal` |
 | `Jarvis2 operas list\|info` | Operas discovery | |
 | `Jarvis2 project …` | scaffold / pack / catalog / **encrypt-decrypt** | see [project_tools.md](project_tools.md) |
+| `Jarvis2 cleanup [--kill]` | `process_cleanup` | list/kill leftover `Jarvis*` OS processes |
 | `--pid N` | **rejected** | exit usage |
+
+### Orphan process cleanup (`jarvishep2/process_cleanup.py`)
+
+After a hard kill (`kill -9` / Activity Monitor), Workers / Archiver / managed Redis may remain.
+All Jarvis titles use `setproctitle` and start with **`Jarvis2`** or **`Jarvis-Redis`**.
+
+| Command | Behavior |
+|---------|----------|
+| `Jarvis2 cleanup` | List matching PIDs + titles (does not kill) |
+| `Jarvis2 cleanup --kill` | SIGTERM (dependency order: Worker → FileOp → Archiver → control → Redis), wait ~2s, then SIGKILL if still alive |
+| `Jarvis2 cleanup --kill --no-force` | SIGTERM only |
+
+Skips the CLI process itself. Exit `1` if kill fails or processes remain.
+
+Console logging flags on `run` / `check`:
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--console-level` | `INFO` | stderr log level |
+| `--log-level` | `INFO` | file log level under `logs/<scan>/` |
+| `--silence` / `-s` | off | no console output (files still written) |
 
 ### Project subcommands (encrypt/decrypt usage)
 
@@ -57,18 +79,10 @@ install guide: `Jarvis-HEP-v2/INSTALL.md` § Project tools.
   non-zero exit code (`1`/`2`), no traceback dump.
 - A distinct console-script (`Jarvis2`) lets V1 `Jarvis` and V2 coexist.
 
-### Known interface defects
+### Known interface defects (historical; many fixed in D11)
 
-- Mode flags are not mutually exclusive; dispatch silently prioritizes monitor, then plot, then
-  check/run.
-- Redis option defaults double as the “not supplied” sentinel, so explicitly passing the default
-  host/port/db cannot override a different YAML value.
-- `core.run_distributed_scan()` returns submitted count and archiving includes failed records;
-  therefore all-sample failure can still produce CLI exit 0.
-- Failed sample results do not expose stable `error_type`/`error` fields.
-- There is no Portal or Operas discovery command. See
-  [`../USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md`](../USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md)
-  and plan D11.
+- Prefer single subcommand per invocation (`run|check|monitor|…`).
+- Prefer `RunOutcome` exit codes (partial/all-fail → 1). See [core.md](core.md).
 
 ---
 
