@@ -53,10 +53,15 @@ Docs/
 > FileOperation, CSV + scan perf, D1.1 `op_count` contract.
 > **D10 + D9.4/9.6 done.** **D8 Agent Bridge parked** (JSON API / run_state / agent stop-ack).
 > Human stop path includes **interrupt → runtime checkpoint** then teardown.
-> Open: next phase designed 2026-07-16 — **D13 samplers** ([`DESIGN_SAMPLERS_2.0.md`](DESIGN_SAMPLERS_2.0.md)),
-> **D14 cluster** ([`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md)),
-> **D15 reuse/analysis** ([`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md));
-> pick order D13.1 → D13.2. **D8 stays parked.**
+> **D13 samplers mostly shipped** (D13.1–D13.5b: FeedbackSampler, MCMC/ensemble,
+> nuisance, Dynesty/MultiNest — verified and archived). **2026-07-17 review**
+> ([`D13_SAMPLERS_REVIEW_2026-07-17.md`](D13_SAMPLERS_REVIEW_2026-07-17.md)) found
+> D13.6 was mis-marked done with an uncommitted diagnostics tail (now in-progress)
+> and opened **D13.7** (fail-loud pool dispatch, feedback-drop logging, nuisance
+> re-run default, MCMC ESS). Next: finish D13.6/D13.7, then **D14 cluster**
+> ([`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md)), then
+> **D15 reuse/analysis** ([`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md)).
+> **D8 stays parked.**
 > CLI: [components/cli.md](components/cli.md). Broker contract: [components/redis_queue.md](components/redis_queue.md).
 > Ledger: [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). Project crypto:
 > [`components/project_tools.md`](components/project_tools.md) + `Jarvis-HEP-v2/INSTALL.md`.

@@ -834,6 +834,47 @@ Sampling:
       maxcall: 40000
 ```
 
+### 6.11 MCMC family: `MCMC` / `AMMCMC` / `AM` / `DRAM`
+
+Feedback-driven Metropolis on Redis. One generation ≈ one proposal stage across chains;
+Workers evaluate `LogL`; control absorbs accept/reject.
+
+| Key (`Sampling.Bounds`) | Aliases | Default | Notes |
+|---|---|---|---|
+| `num_chains` | `chains` | `1` | Prefer `chains ≥ workers` |
+| `num_iters` | `steps` | required-ish | Iterations per chain |
+| `proposal_scale` | — | `0.1` | Gaussian scale (unit cube) |
+| `on_failure` | — | `reject` | `reject` \| `halt` |
+| `adapt.enabled` | `adapt_enabled` | `true` (AM/DRAM) | Adaptive covariance |
+| `adapt.start_iter` / `adapt.window` / `adapt.eps` / `adapt.scale` | dotted or flat | V1 defaults | AM/DRAM |
+| `dr.steps` | `dr_steps` | `2` | DRAM delayed-rejection stages |
+| `dr.scale_factors` | `dr_scale_factors` | `[1.0, 0.5]` | DRAM |
+
+**Outputs:** `DATABASE/samples.hdf5` rows include `chain_id`, `step`, `stage`;
+`DATABASE/chain_history.csv` has `accepted`/`weight`; `DATABASE/sampler_summary.json`
+has accept rates + Gelman–Rubin `rhat_logl`. See [datarecorder.md](components/datarecorder.md) §2.1.
+
+### 6.12 Ensemble / DE / PT: `EnsembleMCMC` / `Ensemble` / `DEMCMC` / `PT*` 
+
+Same `MCMCSampler` class, different engines:
+
+| Method | Engine notes |
+|---|---|
+| `EnsembleMCMC` / `Ensemble` | Stretch move; half-ensemble barriers; `stretch_a` (default 2.0) |
+| `DEMCMC` | Differential evolution; `de.gamma` / `de.noise` / `de.crossover` |
+| `PTMCMC` / `PT` / `PTEnsemble` | Parallel tempering; temperature ladder + control-side swaps |
+
+Common Bounds keys from §6.11 still apply (`num_chains`, `num_iters`, …). PT extras:
+temperature ladder from Bounds (see engine config contract). Summary includes
+`swap_attempts` / `swap_accepts` when PT is active.
+
+### 6.13 `nuisance_optimize` (Worker step, not a Sampling.Method)
+
+Declared under module/likelihood workflow as an execution step (V1 Profile1D).
+Not selected via `Sampling.Method`. See Worker plan / flowchart: step type
+`nuisance_optimize` + pass-condition. Config surface lives on the module block
+(V1-compatible); implementation: `jarvishep2/Module/nuisance.py` + `profile1d.py`.
+
 ---
 
 ## 7. `Mapper` (top-level, optional)

@@ -2,17 +2,14 @@
 
 **Role**: the concrete sampling algorithms. Each proposes `u_coords` (or replays rows), builds
 light task dicts, and submits them to Redis via the [sampler base](sampler.md).
-**Status**: **As-built** @ `jarvis2` `0a5e85e` (expression/selection cache; EnvReqs.V2 batch_size).
+**Status**: **As-built** @ D13.6 (stateless + ALS + MCMC/ensemble + Dynesty/MultiNest + diagnostics).
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §11;
-[sampler.md](sampler.md), [checkpoint.md](checkpoint.md).
-**Reuses V1**: none by import.
+[`../DESIGN_SAMPLERS_2.0.md`](../DESIGN_SAMPLERS_2.0.md); [sampler.md](sampler.md),
+[checkpoint.md](checkpoint.md), [feedback_sampler.md](feedback_sampler.md).
+**Reuses V1**: none by import (engines copied under `Sampling/Source/`, not imported).
 
-> **As-built drift (large):** the design catalog listed MCMC (`mcmc_standard`, `tpmcmc`, `dream*`,
-> `ess`, …), nested samplers (`dynesty`, `multinest`), and gradient samplers (`mala/hmc/nuts`).
-> **None of those exist in V2 yet (D13.2+).** Shipped: **four stateless samplers** (Bridson,
-> Random, Grid, CSV) + a seeded test sampler on `CheckpointedSampler`, plus **AdaptiveLevelSet**
-> on the new **`FeedbackSampler`** base (D13.1). Porting guide:
-> [feedback_sampler.md](feedback_sampler.md).
+> **Out of scope (still):** RobustAM, DREAM*, Slice/ESS, MALA/HMC/NUTS, RLTPMCMC, DNN, Diver,
+> Fortran MultiNest. Nested YAML surface is official dynesty 3.x (see YAML_REFERENCE §6.10).
 
 ---
 
@@ -25,8 +22,11 @@ SamplingVirtial (sampler.py)               # base: build_sample + Redis submit
       ├─ Grid     (grid.py)           method="Grid"
       ├─ CSVSampler (csv_sampler.py)  method="CSV"
       ├─ Bridson  (bridson.py)        method="Bridson"
-      └─ FeedbackSampler (feedback_sampler.py)   # D13.1: propose → feedback → absorb
-           └─ AdaptiveLevelSetSampler (adaptive_level_set.py)  method="AdaptiveLevelSet"
+      └─ FeedbackSampler (feedback_sampler.py)   # propose → hep:feedback → absorb
+           ├─ AdaptiveLevelSetSampler (adaptive_level_set.py)
+           ├─ MCMCSampler (mcmc_sampler.py)  # MCMC/AM/DRAM + Ensemble/DE/PT
+           ├─ DynestySampler (dynesty_sampler.py)
+           └─ MultiNestSampler (multinest_sampler.py)  # static NestedSampler
 SeededOperaSampler (seeded_sampler.py)     # SamplingVirtial directly (test/acceptance)
 ```
 

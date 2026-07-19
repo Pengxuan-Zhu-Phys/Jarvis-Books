@@ -50,6 +50,23 @@ Archiver may add `product_list` / `bucket_dir` / `bucket_id` onto the same row.
 Post-run plot emit also writes `DATABASE/samples.csv` as a **full-column** export of those
 records (nested values JSON-encoded); see [monitor](monitor.md) / `plot_scene.export_samples_csv_from_hdf5`.
 
+### 2.1 Sampler diagnostic files (D13.6, additive)
+
+Under the same `DATABASE/` directory (never changes the frozen `run_summary.*` schema):
+
+| File | Producer | Contents |
+|---|---|---|
+| `samples.hdf5` / `samples.csv` | Archiver / plot_scene | Per-Sample observables. MCMC proposals stamp `chain_id`, `step`, `stage` on the proposal row **before** Metropolis absorb. |
+| `sampler_summary.json` | MCMC / nested finish + Core `write_run_summary` mirror | Method summary: accept rates, R-hat (`rhat_logl`), per-chain stats, nested `logz`/`logzerr`/`ncall`. |
+| `chain_history.csv` | MCMC/ensemble finish (`diagnostics_export`) | One row per completed Metropolis iteration: `chain_id`, `step`, `accepted` (0/1), `weight` (1 if accepted else 0), `logl`, `temperature`, `state`. |
+| `dynesty_result.csv` / `multinest_result.csv` | Dynesty/MultiNest finalize | Nested dead-point table for Jarvis-PLOT `dynesty_runplot` (`log_weight`, `log_Like`, `log_Evidence`, …). |
+
+**Contract notes**
+
+* Accept/reject is **not** rewritten onto the archived HDF5 proposal row (archive is Worker-side before control-side absorb). Use `chain_history.csv` for accepted/weight.
+* Nested importance weights are `log_weight` in `*_result.csv`, not `chain_history.csv`.
+* Columns are **additive** (hard invariant 3): missing files mean the method did not run or export failed with a warning.
+
 ## 3. `archive_handoff.py` — optional staging helpers
 `normalize_move_strategy`, `resolve_staging_dir`, `move_tree`, `stage_sample_dir`,
 `archive_staging_to_sample`, `list_product_names`. Used when `Cleanup.strategy=mv_to_staging`;
