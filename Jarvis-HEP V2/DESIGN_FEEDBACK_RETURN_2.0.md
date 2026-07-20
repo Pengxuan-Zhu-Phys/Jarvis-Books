@@ -4,10 +4,11 @@
 **Date**: 2026-07-20  
 **Scope**: shrink and parameterize what Workers put on `hep:feedback`, while keeping
 archive/DataRecorder as the sole full-observables persistence path.  
-**Code targets**: `worker.py`, `worker_config.py`, `redis_queue.py`, sampler bases
-(`feedback_sampler.py`, `dynesty_sampler.py`, `mcmc_sampler.py`, `adaptive_level_set.py`).  
-**Maintainer constraint**: **D8 stays parked**. Additive only — existing YAML cards
-keep running; default becomes **minimal**.
+**Code targets**: `worker.py`, `worker_config.py`, `redis_queue.py`, likelihood,
+sampler bases (`feedback_sampler.py`, `dynesty_sampler.py`, `mcmc_sampler.py`,
+`adaptive_level_set.py`).  
+**Maintainer constraint**: **D8 stays parked**. Default wire becomes **flat
+`{uuid, logL}`**; extra fields are also top-level flat keys.
 
 ---
 
@@ -17,145 +18,157 @@ Today the Worker dual-writes after each sample:
 
 | Path | Redis | Payload | Consumer |
 |------|-------|---------|----------|
-| Archive | `hep:archive_queue` | full `to_info_dict()` (params, observables, **status**, paths, …) | Archiver → SAMPLE + `samples.hdf5` |
-| Feedback | `hep:feedback` | `{uuid, status, observables: **full**}` | Sampler control process |
+| Archive | `hep:archive_queue` | full `to_info_dict()` (params, observables, status, paths, …) | Archiver → SAMPLE + `samples.hdf5` |
+| Feedback | `hep:feedback` | `{uuid, status, observables: **full nested bag**}` | Sampler control process |
 
-Archive is correct: it is the DataRecorder path. Feedback is not:
+Archive is correct (DataRecorder). Feedback is not:
 
-- Comments call it a “light” record, but it copies **every** observable **and** `status`.
-- Dynesty / MultiNest / MCMC only need **`uuid` + `LogL`**.
-- AdaptiveLevelSet (and future optimizers) need **selected** target fields, not the whole bag.
-- **Sample `status` is for persistence / ops, not for sampler science** — the control
-  process should not depend on Worker lifecycle status to accept/reject a proposal.
-- Full observables on the barrier channel waste bandwidth and hide the real contract.
+- Nested `observables` + `status` is heavier than samplers need.
+- Dynesty / MultiNest / MCMC only need **`uuid` + scalar logL**.
+- Optimizers may need a few extra scalars, still as **flat** fields — not a nested bag.
+- Sample lifecycle `status` belongs on archive, not on the sampler barrier.
 
-**Goal**: make feedback **sampler-owned and declarative**. Default minimal; opt-in for
-arbitrary keys; stamp the policy into Worker config at scan start so Workers project
-observables before `rpush`. **Do not put `status` on the feedback wire.**
+**Goal**: feedback is a **flat science dict** owned by the active sampler policy.
+Default is two keys. Extensions add sibling keys. Archive stays full and nested.
 
 ---
 
 ## 2. Principles
 
 1. **Two channels, two jobs**
-   - Archive = truth for persistence / analysis / DataRecorder (includes `status`).
-   - Feedback = barrier inputs for the **active sampler only** (science scalars only).
-2. **Default = minimal** for every feedback-driven sampler:  
-   `{uuid, observables: {LogL}}` (LogL omitted when unavailable / failed).
-3. **No `status` on feedback.** Sampler failure is inferred from **missing science
-   values** (no `LogL`, missing target field), not from sample lifecycle status.
-4. **Extension is first-class**, not a hack: samplers and YAML may request extra
-   observable names (or `all` for debug).
-5. **Policy is decided on the control process**, stamped once into `worker_config`,
-   applied identically by every Worker for that scan.
-6. **Wire format**: top-level **`uuid` + `observables`** only (`observables` is a
-   projected map). Drop `status` from the published feedback payload.
-7. **No per-task negotiation** in v1 of this design: one policy per Worker pool /
-   scan. (Per-task override is a non-goal until a sampler proves it needs it.)
+   - Archive = full persistence / DataRecorder (nested observables, status, paths).
+   - Feedback = barrier inputs for the **active sampler only** (flat scalars).
+2. **Default wire (every feedback method unless extended):**
+
+   ```json
+   { "uuid": "…", "logL": -12.34 }
+   ```
+
+3. **Flat only.** No nested `observables` map on feedback. Extra requested fields
+   are **top-level siblings** of `uuid` / `logL`:
+
+   ```json
+   { "uuid": "…", "logL": -2.99, "delta_chi2": 3.84 }
+   ```
+
+4. **No `status` on feedback.** Persistence keeps status on archive.
+5. **Always publish a finite-or-−∞ logL when `include_logl` is true.**  
+   Likelihood sets **`logL = -∞`** for points that did not yield a usable
+   likelihood (failed / not computed). Samplers never have to guess from “missing key”.
+6. **Policy is control-owned**, stamped once into `worker_config["feedback_return"]`,
+   applied by every Worker for that scan.
+7. **One policy per scan** (no per-task negotiation in v1).
 
 ---
 
 ## 3. Feedback return spec
 
-### 3.1 Schema (pickled into `worker_config["feedback_return"]`)
+### 3.1 Wire format (published on `hep:feedback`)
 
-```python
-{
-  "mode": "minimal" | "fields" | "all",
-  # mode=minimal: observables ⊆ {LogL} (see §3.2)
-  # mode=fields:  observables = {LogL?} ∪ requested keys present on sample
-  # mode=all:     observables = full sample.observables (escape hatch / debug)
-  "fields": ["delta_chi2", "m0"],   # only used when mode == "fields"
-  "include_logl": true,             # default true; false only for pure non-LogL targets
-}
-```
-
-**Always present on the wire:**
+**Required keys:**
 
 | Key | Type | Notes |
 |-----|------|--------|
-| `uuid` | str | required |
+| `uuid` | str | sample identity |
+| `logL` | float | **always present** when `include_logl: true` (default). Use JSON-friendly encoding of −∞ (see §3.3). |
 
-**Not on the feedback wire:**
+**Not on the wire:**
 
-| Key | Where it lives instead |
-|-----|------------------------|
-| `status` | Archive / DataRecorder only (`submit_result` / `to_info_dict`) |
+| Key | Where instead |
+|-----|----------------|
+| `status` | archive / DataRecorder only |
+| nested `observables` | archive only; feedback never nests this bag |
 
-**Inside `observables` after projection:**
+**Optional extra keys (flat):** any names listed in `fields` that exist as scalars
+on the sample (from params/observables after the Worker pipeline). Values are
+copied as top-level keys next to `logL`.
 
-| Mode | Contents |
-|------|----------|
-| `minimal` | `{LogL: float}` when available (and `include_logl`) |
-| `fields` | requested names that exist on the sample, plus LogL if `include_logl` |
-| `all` | shallow copy of full `sample.observables` (still no top-level `status`) |
+Reserved top-level names that Workers must not overwrite from `fields`:
+`uuid`, `logL` (case-sensitive on the wire as specified in §3.2).
 
-Missing requested fields are **omitted** (not null-filled). Consumers must tolerate
-absence.
+### 3.2 Wire key spelling
 
-### 3.2 LogL extraction rule (Worker projection)
+| Wire key | Meaning |
+|----------|---------|
+| `uuid` | identity |
+| `logL` | total log-likelihood (camel **L** — matches common HEP `LogL` concept, short form on the wire) |
 
-Same defensive rule control already uses when reading:
+Worker projection maps internal `observables["LogL"]` / summed `LogL*` → wire **`logL`**.  
+Consumers read **`record["logL"]`** (not `observables["LogL"]`).
 
-1. If `observables["LogL"]` exists → use it.
-2. Else if any keys match `LogL*` (excluding the total) → sum them into a single
-   projected `LogL` for the feedback map.
-3. Else → omit `LogL`.
+### 3.3 −∞ and JSON / msgpack
 
-**Failed / unusable samples:** do **not** invent a fake LogL. Project an empty or
-partial `observables` map (typically `{}` under `minimal`). The sampler treats
-**missing LogL** (or missing required target field) as reject / −∞ / `f=None`.
+Likelihood / Worker must set unusable points to **`float("-inf")`** (Python) before
+publish. Codecs:
 
-If the sample completed physics but Likelihood failed to write LogL, the same
-“missing LogL” path applies — which is what the sampler needs for its barrier,
-independent of whether archive records `status: Failed` or `Completed`.
+- **msgpack**: native float −∞ preferred when codec is msgpack.
+- **json**: encode −∞ as a sentinel string `"−inf"` / `"-inf"` (and `"+inf"` / `"nan"`
+  if ever needed); `publish_feedback` / `pull_feedback` round-trip via a tiny
+  encode/decode helper so consumers always see real floats after decode.
 
-### 3.3 Failure semantics (replacing `status` on feedback)
+Acceptance: after `pull_feedback`, `math.isinf(record["logL"]) and record["logL"] < 0`
+is true for failed points.
 
-| Situation | Feedback body | Sampler absorb |
-|-----------|---------------|----------------|
-| Success with LogL | `{uuid, observables: {LogL: x, …}}` | use LogL / target fields |
-| Failed or no LogL | `{uuid, observables: {}}` or without `LogL` | reject / −∞ / `f=None` |
-| Success, non-LogL target only | `{uuid, observables: {delta_chi2: …}}` | ALS uses target keys |
+### 3.4 Likelihood contract (source of −∞)
 
-Implementation note: existing code that branches on `record["status"] == "Failed"`
-must be updated to **value presence** checks (`LogL` / target keys). Archive still
-carries real status for humans and DataRecorder.
+**Owner:** Worker likelihood step / `LogLikelihoodEvaluator` (not the sampler).
 
-### 3.4 Wire example
+| Outcome | Internal `observables["LogL"]` | Feedback `logL` |
+|---------|--------------------------------|-----------------|
+| Normal evaluation | finite float | same |
+| Failed sample / exception / pass-fail soft fail that kills LogL | **`-np.inf`** | **`-inf`** |
+| Selection reject (if still feedback-published) | **`-np.inf`** | **`-inf`** |
 
-**Default (Dynesty / MCMC):**
+Rules:
 
-```json
+1. Prefer a single total **`LogL`** on the sample; if only term keys `LogL_*` exist,
+   sum them once when projecting (or when likelihood finalizes).
+2. **Never omit `logL` on the feedback wire** when `include_logl` is true.
+3. Do **not** invent fake finite placeholders (−1e300 is legacy dynesty glue only
+   if a consumer still needs it internally; the **wire** value is real −∞, and
+   Dynesty pool may map −∞ → engine-specific sentinel at absorb time if required).
+
+### 3.5 Policy schema (`worker_config["feedback_return"]`)
+
+```python
 {
-  "uuid": "a1b2…",
-  "observables": { "LogL": -12.34 }
+  "mode": "minimal" | "fields" | "all_flat",
+  # minimal:   {uuid, logL}
+  # fields:    {uuid, logL?, *named flat keys from sample}
+  # all_flat:  {uuid, logL?, **every scalar observable as top-level key}
+  #            (debug escape hatch; still flat — never nested bag)
+  "fields": ["delta_chi2", "m0"],  # mode=fields only
+  "include_logl": true,            # default true; false only for pure non-logL targets
 }
 ```
 
-**Failed / missing LogL:**
+When `include_logl` is false (rare ALS pure-target cards), wire may be
+`{uuid, delta_chi2, …}` without `logL`. Default for all stock methods is **true**.
+
+### 3.6 Wire examples
+
+**Default (Dynesty / MCMC) — success:**
 
 ```json
-{
-  "uuid": "a1b2…",
-  "observables": {}
-}
+{ "uuid": "a1b2…", "logL": -12.34 }
 ```
 
-**ALS with target fields:**
+**Default — unusable point (likelihood set −∞):**
 
 ```json
-{
-  "uuid": "…",
-  "observables": {
-    "LogL": -2.99,
-    "delta_chi2": 3.84
-  }
-}
+{ "uuid": "a1b2…", "logL": "-inf" }
 ```
 
-**Debug / `mode: all`:** full observables map under `observables`, still **no**
-top-level `status`.
+(decoded to `float("-inf")` on pull)
+
+**ALS / optimizer with extra fields:**
+
+```json
+{ "uuid": "…", "logL": -2.99, "delta_chi2": 3.84 }
+```
+
+**Debug `all_flat`:** every scalar observable as a sibling key + `uuid` (+ `logL`
+if included). Still no nested `observables`, no `status`.
 
 ---
 
@@ -165,158 +178,158 @@ top-level `status`.
 
 ```
 1. Explicit YAML: Sampling.FeedbackReturn / Sampling.feedback_return
-2. Sampler class/method override: Sampler.feedback_return_spec(config) -> dict
+2. Sampler.feedback_return_spec() -> dict
 3. Built-in defaults by method family (§4.2)
 ```
 
-YAML always wins so a user can force `all` for debugging without code changes.
-
-### 4.2 Built-in defaults (when YAML absent)
+### 4.2 Built-in defaults
 
 | Method family | Default mode | fields | Rationale |
 |---------------|--------------|--------|-----------|
-| Dynesty, MultiNest | `minimal` | — | Nested sampling only needs logL |
-| MCMC, AM, DRAM, Ensemble*, DEMCMC, PT* | `minimal` | — | Metropolis only needs logL |
-| AdaptiveLevelSet | `fields` | symbols from `target_expression` (+ LogL if present) | Target eval needs those keys |
-| Unknown feedback method | `minimal` | — | Safe bandwidth default |
-| Stateless methods | *no feedback* | — | `publish_feedback=false` unchanged |
+| Dynesty, MultiNest | `minimal` | — | only uuid + logL |
+| MCMC, AM, DRAM, Ensemble*, DEMCMC, PT* | `minimal` | — | only uuid + logL |
+| AdaptiveLevelSet | `fields` | symbols from `target_expression` | flat target keys (+ logL) |
+| Unknown feedback method | `minimal` | — | safe default |
+| Stateless methods | *no feedback* | — | `publish_feedback=false` |
 
-ALS field discovery: parse `target_expression` free symbols that are not numeric
-literals; intersect with “likely observables” is **not** required — request the
-symbol names; Worker omits missing ones. If expression is just `LogL`, ALS
-collapses to the same wire shape as `minimal`.
+If ALS `target_expression` is just `LogL` / `logL`, wire collapses to the same
+shape as `minimal`.
 
 ### 4.3 Sampler API
 
 ```python
 class SamplingVirtual:
     def feedback_return_spec(self) -> dict:
-        """Return worker_config['feedback_return'] fragment for this method."""
         return {"mode": "minimal", "include_logl": True, "fields": []}
 ```
 
-Overrides:
+- Dynesty / MultiNest / MCMC: fixed `minimal`.
+- ALS: `mode=fields`, `fields=target_symbols`.
+- Future optimizers: declare flat field names they absorb.
 
-- `DynestySampler` / `MultiNestSampler` / `MCMCSampler`: keep `minimal` (fixed).
-- `AdaptiveLevelSetSampler`: `mode=fields`, `fields=target_symbols`.
-- Future optimizers (HMC control, RL, …): declare what they absorb.
-
-### 4.4 Stamping into Workers
-
-In `build_worker_config` / Core scan setup (same place as `publish_feedback`):
+### 4.4 Stamping
 
 ```python
 worker_config["publish_feedback"] = …
 worker_config["feedback_return"] = resolve_feedback_return(cfg, sampler)
 ```
 
-Workers read the dict once at `__init__` and reuse for every sample. No Redis
-round-trip for the policy itself.
-
 ---
 
 ## 5. Worker projection (implementation sketch)
 
 ```python
-def project_feedback_observables(
-    observables: Mapping[str, Any],
+def build_feedback_record(
+    sample: Sample,
     *,
     spec: Mapping[str, Any],
 ) -> dict[str, Any]:
     mode = str(spec.get("mode") or "minimal").lower()
     include_logl = bool(spec.get("include_logl", True))
-    if mode == "all":
-        return dict(observables)
-    out: dict[str, Any] = {}
+    obs = dict(sample.observables or {})
+    params = dict(sample.params or {})
+    # Lookup bag for extra fields (observables win over params).
+    bag = {**params, **obs}
+
+    out: dict[str, Any] = {"uuid": str(sample.uuid)}
+
+    if include_logl:
+        logl = extract_logl_total(obs)  # LogL or sum LogL*; None → -inf
+        out["logL"] = float(logl) if logl is not None else float("-inf")
+
+    if mode == "minimal":
+        return out
+
+    names: list[str]
     if mode == "fields":
-        for name in spec.get("fields") or []:
-            key = str(name)
-            if key in observables:
-                out[key] = observables[key]
-    if include_logl and "LogL" not in out:
-        logl = extract_logl_total(observables)  # LogL or sum LogL*
-        if logl is not None:
-            out["LogL"] = logl
+        names = [str(n) for n in (spec.get("fields") or [])]
+    elif mode in ("all_flat", "all"):
+        names = [k for k in bag.keys() if k not in ("uuid", "logL", "LogL")]
+    else:
+        raise ValueError(f"unknown feedback_return mode: {mode}")
+
+    for name in names:
+        if name in ("uuid", "logL"):
+            continue
+        if name in bag and _is_feedback_scalar(bag[name]):
+            # Wire uses the requested name as-is (except LogL → already as logL).
+            key = "logL" if name == "LogL" else name
+            if key == "logL" and "logL" in out:
+                continue
+            out[key] = bag[name]
     return out
 
 # _stage_and_submit:
-info = sample.to_info_dict()
-self._redis.submit_result(info)          # FULL (incl. status) — unchanged
+self._redis.submit_result(sample.to_info_dict())   # FULL nested + status
 if self._publish_feedback:
-    self._redis.publish_feedback({
-        "uuid": sample.uuid,
-        # no status
-        "observables": project_feedback_observables(
-            sample.observables,
-            spec=self._feedback_return,
-        ),
-    })
+    self._redis.publish_feedback(
+        build_feedback_record(sample, spec=self._feedback_return)
+    )
 ```
 
-`RedisQueue.publish_feedback` stays a thin transport (validate `uuid` only);
-**projection lives in the Worker** so the archive path never accidentally shrinks.
-Optional: strip any accidental `status` key if a caller passes one.
+`RedisQueue.publish_feedback`:
+
+- Requires `uuid`.
+- Does **not** wrap into `observables`.
+- Rejects or strips accidental nested `observables` / `status` if present
+  (fail-loud in debug tests; strip in production only if we prefer soft).
 
 ---
 
 ## 6. YAML surface
 
-### 6.1 Optional block
-
 ```yaml
 Sampling:
   Method: Dynesty
-  # Optional — Dynesty already defaults to minimal
-  FeedbackReturn:
-    mode: minimal          # minimal | fields | all
-    # fields: []           # only for mode: fields
+  FeedbackReturn:                 # optional — Dynesty already minimal
+    mode: minimal                 # minimal | fields | all_flat
+    # fields: []
     # include_logl: true
 
-  Method: AdaptiveLevelSet   # example override
+  Method: AdaptiveLevelSet
   AdaptiveLevelSet:
     target_expression: "delta_chi2"
   FeedbackReturn:
     mode: fields
-    fields: [delta_chi2, LogL]
+    fields: [delta_chi2]
+    include_logl: true
 ```
 
-### 6.2 Alias
+Aliases: `feedback_return` / `FeedbackReturn`.  
+Unknown `mode` → `ValueError`.  
+`mode: fields` + empty `fields` + `include_logl: false` → `ValueError`.
 
-Accept `feedback_return` (snake_case) as well as `FeedbackReturn`.
-
-### 6.3 Validation
-
-- Unknown `mode` → `ValueError` at config load (fail loud).
-- `mode: fields` with empty `fields` and `include_logl: false` → `ValueError`
-  (empty projection is useless for a feedback sampler).
-- Stateless methods: block ignored (no publish).
-
-Document in `YAML_REFERENCE_2.0.md` §6 (Sampling).
+Document in `YAML_REFERENCE_2.0.md` §6.
 
 ---
 
 ## 7. Consumer contracts
 
-| Consumer | Today | After this design |
-|----------|-------|-------------------|
-| `RedisEvaluationPool` | `status`→−1e300; else `LogL` | **missing LogL** → −1e300 / fail path; else `LogL` |
-| `MCMCSampler._extract_logl` | `status==Failed` → None | **missing LogL** → None (reject) |
-| `FeedbackSampler._failure_policy_halt` | `status==Failed` | redefine on missing science values, or drop halt-on-status; archive remains source of Failed counts |
-| `AdaptiveLevelSet.absorb` | `status` + target keys | **missing target / LogL** → `f=None` |
-| Archiver / DATABASE | full info incl. status | **unchanged** |
+| Consumer | Today | After |
+|----------|-------|--------|
+| `RedisEvaluationPool` | nested `observables` + status | `record["logL"]` (float, may be −∞) |
+| `MCMCSampler` | nested extract | `record["logL"]`; −∞ → reject / None policy |
+| `AdaptiveLevelSet` | nested bag + status | flat `record[field]`; −∞ logL or missing target → `f=None` |
+| `FeedbackSampler` failure halt | `status==Failed` | optional: halt if `logL == -inf` and policy says so; default reject |
+| Archiver | full nested info | **unchanged** |
 
-Absorb helpers should not read `record.get("status")` for science decisions.
+Absorb helpers **must not** read `record["status"]` or `record["observables"]`
+for science. Legacy keys, if still present during a transition, are ignored once
+D13.8 consumers land (single cut preferred; short dual-read only if tests force it).
+
+Dynesty engine: if the vendored path requires a huge negative finite instead of
+IEEE −∞, convert **only inside the pool** when packing `.val` for dynesty — the
+Redis wire stays real −∞.
 
 ---
 
 ## 8. Non-goals
 
-- Changing archive / DataRecorder schema (status stays there).
-- Streaming intermediate calculator observables mid-workflow onto feedback.
+- Nested feedback bags (rejected).
+- Sample `status` on feedback (rejected).
+- Changing archive / DataRecorder schema.
 - Per-sample dynamic field lists (v1).
-- Compressing archive payloads.
 - Agent / D8 surfaces.
-- Putting sample lifecycle status back on the feedback channel for “convenience”.
 
 ---
 
@@ -324,44 +337,36 @@ Absorb helpers should not read `record.get("status")` for science decisions.
 
 | Case | Expect |
 |------|--------|
-| Unit: `project_feedback_observables` minimal / fields / all | map shapes; no status key |
-| Unit: LogL sum fallback when only `LogL_a`/`LogL_b` | single `LogL` in projection |
-| Worker + fakeredis: Dynesty pool drain | feedback JSON keys ⊆ `{uuid, observables}`; observables ⊆ `{LogL}` |
-| Worker: Failed sample | feedback has uuid, empty/no LogL; archive still has status Failed |
-| Worker: ALS fields mode | target key present; unrelated bulky keys absent |
-| Archive side: `submit_result` still full | Archiver tests unchanged |
-| YAML `mode: all` | full observables under `observables`, still no top-level status |
-| Default resolution without YAML | Dynesty → minimal; ALS → fields(symbols) |
-| Consumer unit: MCMC/Dynesty/ALS | no dependency on feedback `status` |
+| Minimal success | `{uuid, logL}` only; `logL` finite |
+| Failed / no LogL | `{uuid, logL: -inf}` after decode |
+| Fields mode | flat extra keys; no `observables` key |
+| `all_flat` | flat scalars; no nested bag; no status |
+| Archive still full | `submit_result` includes nested observables + status |
+| Likelihood unit | unusable point writes `LogL = -inf` on sample |
+| Dynesty pool | reads `logL`; maps −∞ for engine if needed |
+| MCMC / ALS absorb | no `status` / nested `observables` dependency |
+| JSON codec | −∞ round-trips through encode/decode |
 
 ---
 
 ## 10. Key Decisions
 
-1. **Default minimal (`uuid` + `LogL`)** for all feedback methods unless they declare
-   otherwise — matches Dynesty/MCMC reality and cuts barrier traffic.
-2. **`status` is not part of feedback.** Persistence keeps status on archive;
-   samplers use missing LogL / missing target fields as the failure signal.
-3. **Keep `observables` key** on the wire (projected map) — extension for optimizers
-   without inventing a second field bag; only the map content shrinks.
-4. **Policy stamped in `worker_config`**, not per-task — one scan, one contract;
-   Workers stay simple.
-5. **Projection in Worker, not RedisQueue** — archive path cannot be accidentally
-   filtered; transport stays dumb.
-6. **YAML override + sampler defaults** — optimizers keep an open interface;
-   stock nested/MCMC cards need no new keys.
-7. **ALS auto-fields from `target_expression`** — preserves current ALS cards without
-   forcing users to list FeedbackReturn.
+1. **Wire is flat: `{uuid, logL}` by default** — no nested `observables`.
+2. **Extra fields are flat siblings**, not a second bag.
+3. **Likelihood owns −∞** for uncomputed / failed points; feedback always carries
+   `logL` when `include_logl` is true.
+4. **No `status` on feedback** — archive only.
+5. **Policy in `worker_config`**, projection on Worker; Redis transport stays dumb.
+6. **Dynesty/MCMC fixed minimal**; ALS / optimizers use `fields`.
+7. **Wire key `logL`** (maps from internal `LogL`).
 
 ---
 
 ## 11. Open questions
 
-None blocking. Optional later:
+None blocking.
 
-- Should `mode: fields` warn when a requested key is missing on >N% of samples?
-  (nice-to-have monitor, not required for v1.)
-- Rename wire field to `feedback` later? Rejected for now — keep `observables`.
+Optional later: warn if `fields` keys missing on many samples (monitor only).
 
 ---
 
@@ -369,20 +374,19 @@ None blocking. Optional later:
 
 | WP | Title | Depends | Accept |
 |----|-------|---------|--------|
-| **D13.8a** | Spec helpers: `project_feedback_observables`, `resolve_feedback_return`, unit tests | — | pure functions green; no status in payload |
-| **D13.8b** | Worker applies `worker_config["feedback_return"]`; stamp from `build_worker_config`; drop status from `publish_feedback` | D13.8a | Dynesty feedback body = uuid + LogL only under fakeredis |
-| **D13.8c** | Consumer cleanup: MCMC / pool / ALS / failure policy use missing values not status; sampler defaults (Dynesty/MCMC minimal; ALS fields) | D13.8b | ALS e2e still fills target `f`; Failed → reject without status |
-| **D13.8d** | YAML_REFERENCE + feedback_sampler / redis_queue / worker component docs | D13.8b | docs match wire contract |
+| **D13.8a** | `build_feedback_record` / `resolve_feedback_return` + −∞ codec helpers; unit tests | — | flat payload shapes; −∞ round-trip |
+| **D13.8b** | Likelihood / finalize: unusable → `LogL = -inf`; Worker publish flat record; drop nested bag + status from feedback | D13.8a | fakeredis body is exactly `{uuid, logL}` for Dynesty |
+| **D13.8c** | Consumers: pool / MCMC / ALS / failure policy read flat `logL` + fields | D13.8b | suites green; no status/observables on absorb path |
+| **D13.8d** | YAML_REFERENCE + component docs | D13.8b | docs match flat contract |
 
-**Rollback**: set `FeedbackReturn.mode: all` for observables map size only — status
-still stays off the feedback channel once D13.8b lands.
+**Rollback**: temporary dual-read of legacy nested feedback in consumers only if a
+mid-migration hotfix is required; goal is single-cut flat wire.
 
 ---
 
 ## 13. Relation to existing docs
 
-- Supersedes the informal “light record = full observables + status” wording in
-  [`components/adaptive_voronoi_contour.md`](components/adaptive_voronoi_contour.md) §5
-  and [`components/feedback_sampler.md`](components/feedback_sampler.md) §3 absorb note.
-- Complements D13.7b (unmatched feedback logging): smaller payloads, same drain.
-- Independent of D14 cluster (same `worker_config` template will carry the policy).
+- Replaces earlier draft wording that kept nested `observables` on feedback.
+- Updates absorb notes in [`components/feedback_sampler.md`](components/feedback_sampler.md)
+  and feedback wording in [`components/adaptive_voronoi_contour.md`](components/adaptive_voronoi_contour.md).
+- Independent of D14 (same stamped `worker_config` on remote Workers).

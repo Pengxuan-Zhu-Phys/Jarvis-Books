@@ -62,12 +62,13 @@ class MySampler(FeedbackSampler):
     def absorb_generation(self, results: Sequence[Mapping[str, Any]]) -> None:
         """Fold barrier feedback into method state.
 
-        Each record has at least: ``uuid`` and a **projected** ``observables``
-        map (see FeedbackReturn design — default is only ``LogL``; not the full
-        DataRecorder bag). **No ``status``** on feedback; missing LogL / target
-        fields mean reject (archive still stores sample status).
-        Default physics-safe policy for missing science values: reject the
-        proposal (self._on_failure = "reject"; set "halt" to abort).
+        Each record is a **flat** dict (see FeedbackReturn design). Default:
+        ``{"uuid": …, "logL": float}``. Extra optimizer fields are top-level
+        siblings (no nested ``observables``, no sample ``status``). Unusable
+        points carry ``logL = -inf`` (set by likelihood). Archive still stores
+        full nested observables + status.
+        Default physics-safe policy for ``logL == -inf``: reject the proposal
+        (self._on_failure = "reject"; set "halt" to abort).
         """
 ```
 
@@ -94,17 +95,16 @@ Core drives this via `Jarvis2Core.run_adaptive_scan` (same path as AdaptiveLevel
 Archive / DataRecorder still receives the **full** sample via `submit_result`.
 `hep:feedback` is sampler-owned and **projected** before publish:
 
-Wire shape: **`{uuid, observables}` only** — no sample `status` on this channel.
+Wire shape is **flat** — default **`{"uuid", "logL"}`**; no nested bag, no `status`.
 
-| Mode | `observables` content | Typical users |
-|------|----------------------|---------------|
-| `minimal` (default) | `{LogL}` only | Dynesty, MultiNest, MCMC family |
-| `fields` | named keys (+ LogL if enabled) | AdaptiveLevelSet target, optimizers |
-| `all` | full map (escape hatch) | debug |
+| Mode | Content | Typical users |
+|------|---------|---------------|
+| `minimal` (default) | `{uuid, logL}` | Dynesty, MultiNest, MCMC family |
+| `fields` | `{uuid, logL?, field1, …}` flat | AdaptiveLevelSet / optimizers |
+| `all_flat` | `{uuid, logL?, **scalars}` flat | debug |
 
-Missing `LogL` / required fields ⇒ treat as failed proposal. Policy lives in
-`worker_config["feedback_return"]`, resolved from `Sampling.FeedbackReturn` YAML
-or `Sampler.feedback_return_spec()`. Full design:
+Likelihood sets **`logL = -inf`** when a point is not usable. Policy lives in
+`worker_config["feedback_return"]`. Full design:
 [`DESIGN_FEEDBACK_RETURN_2.0.md`](../DESIGN_FEEDBACK_RETURN_2.0.md).
 
 ### 3.2 Custom control loops

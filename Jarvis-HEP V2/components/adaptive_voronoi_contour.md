@@ -246,11 +246,11 @@ The only piece V2 lacks today. **Spec:**
 - New Redis key `hep:feedback` (List). When `worker_config["publish_feedback"]` is true
   (default **false** — zero cost for every existing sampler), the Worker, in the same place
   it calls `submit_result`, also `rpush`es a **projected** record:
-  `{uuid, observables}` where `observables` is **not** the full bag by default
-  (see [`DESIGN_FEEDBACK_RETURN_2.0.md`](../DESIGN_FEEDBACK_RETURN_2.0.md) — default
-  `minimal` = LogL only; ALS uses `fields` for `target_expression` symbols).
-  **No sample `status` on feedback** (archive only). No paths, no product list —
-  the Archiver payload stays the single source for persistence.
+  a **flat** record (see [`DESIGN_FEEDBACK_RETURN_2.0.md`](../DESIGN_FEEDBACK_RETURN_2.0.md)):
+  default `{uuid, logL}`; ALS uses `fields` so target symbols are **top-level**
+  siblings (e.g. `{uuid, logL, delta_chi2}`). Unusable points: `logL = -inf`.
+  No nested `observables`, no sample `status` on feedback (archive only).
+  No paths / product list — Archiver remains the persistence source.
 - `RedisQueue` gains `publish_feedback(info)` / `pull_feedback(timeout)` mirroring the
   task-queue helpers, plus drain-on-resume (stale feedback from a previous run is discarded
   the same way `drain_task_queue` handles stale tasks).
