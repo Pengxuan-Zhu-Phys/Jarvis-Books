@@ -53,12 +53,8 @@ Docs/
 > FileOperation, CSV + scan perf, D1.1 `op_count` contract.
 > **D10 + D9.4/9.6 done.** **D8 Agent Bridge parked** (JSON API / run_state / agent stop-ack).
 > Human stop path includes **interrupt → runtime checkpoint** then teardown.
-> **D13 samplers mostly shipped** (D13.1–D13.5b: FeedbackSampler, MCMC/ensemble,
-> nuisance, Dynesty/MultiNest — verified and archived). **2026-07-17 review**
-> ([`D13_SAMPLERS_REVIEW_2026-07-17.md`](D13_SAMPLERS_REVIEW_2026-07-17.md)) found
-> D13.6 was mis-marked done with an uncommitted diagnostics tail (now in-progress)
-> and opened **D13.7** (fail-loud pool dispatch, feedback-drop logging, nuisance
-> re-run default, MCMC ESS). Next: finish D13.6/D13.7, then **D14 cluster**
+> **D13 samplers closed** (D13.1–D13.7: FeedbackSampler, MCMC/ensemble, nuisance,
+> Dynesty/MultiNest, DATABASE diagnostics, review fixes). Next: **D14 cluster**
 > ([`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md)), then
 > **D15 reuse/analysis** ([`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md)).
 > **D8 stays parked.**

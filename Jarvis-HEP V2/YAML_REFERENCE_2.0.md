@@ -870,10 +870,43 @@ temperature ladder from Bounds (see engine config contract). Summary includes
 
 ### 6.13 `nuisance_optimize` (Worker step, not a Sampling.Method)
 
-Declared under module/likelihood workflow as an execution step (V1 Profile1D).
-Not selected via `Sampling.Method`. See Worker plan / flowchart: step type
-`nuisance_optimize` + pass-condition. Config surface lives on the module block
-(V1-compatible); implementation: `jarvishep2/Module/nuisance.py` + `profile1d.py`.
+Declared under `Sampling.Nuisance` (or top-level `Nuisance`); inserted as an
+execution-plan step **before** likelihood. Not selected via `Sampling.Method`.
+Implementation: `jarvishep2/Module/nuisance.py` + `profile1d.py` (Profile1D
+golden-section).
+
+| Key | Required | Default | Notes |
+|---|---|---|---|
+| `Method` | no | `Profile1D` | Only Profile1D ships in D13 |
+| `Variables` | yes | — | First entry used (1-D profile); `name` + `distribution.parameters.{min,max}` |
+| `LogLikelihood` | yes | — | `[{name, expression}, …]` compile-once via `ExpressionContext` |
+| `PassCondition` | no | `[]` | Soft-fail sample when any term is false at best probe |
+| `TargetMode` | no | `min` | `min` / `max` |
+| `MaxAttempt` | no | `50` | Golden-section probe budget |
+| `re_run_physics` | no | **`true`** | Alias: `rerun_physics` |
+
+**`re_run_physics` (D13.7c decision):** default **`true`** for V1 parity. V1
+Profile1D re-executed each probe as a full sample (`NAttempt` card → new
+Worker pipeline). V2 folds that into one Worker step; when true, every probe
+re-runs calculators + Operas with the free nuisance injected. Set
+`re_run_physics: false` when the nuisance is pure expression-only (e.g.
+Gaussian constraint that never feeds an external calculator) — then probes
+only re-evaluate compiled LogL/pass expressions on cached observables.
+
+```yaml
+Sampling:
+  Nuisance:
+    Method: Profile1D
+    Variables:
+      - name: ratio
+        distribution: {type: Flat, parameters: {min: -3, max: -2}}
+    LogLikelihood:
+      - {name: L_nu, expression: "Abs(log(WN2) + 40.3)"}
+    TargetMode: min
+    MaxAttempt: 100
+    re_run_physics: true   # default; false = expression-only probes
+    PassCondition: []
+```
 
 ---
 

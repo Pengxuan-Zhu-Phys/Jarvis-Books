@@ -29,7 +29,7 @@ Sampling:
       - {name: "LogLNP_wN2", expression: "Abs(log(WN2) + 40.3)"}
     TargetMode: min          # or max
     MaxAttempt: 100
-    re_run_physics: true     # default: re-run calc+opera per probe
+    re_run_physics: true     # default true (V1 parity); false = expression-only
     PassCondition:
       - {name: "N1LSP", expression: "Abs(mN1) < Abs(mC1)"}
 ```
@@ -66,9 +66,11 @@ for layer in execution_plan:
   likelihood …
 ```
 
-Expression evaluation does **not** recompile per probe (V1 contract). Physics may
-re-run when `re_run_physics: true` so nuisance parameters that feed calculators
-(HinoLLP-style `ratio`) work; set `false` for pure expression objectives.
+Expression evaluation does **not** recompile per probe. **`re_run_physics`
+defaults to `true`** (D13.7c): V1 Profile1D re-ran the full sample pipeline per
+`NAttempt` probe; V2 keeps that cost model so nuisances that feed calculators
+(HinoLLP-style `ratio`) stay correct. Set `false` for pure expression-only
+objectives that never touch calculators/Operas.
 
 ---
 

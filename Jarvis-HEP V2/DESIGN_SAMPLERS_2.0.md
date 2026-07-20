@@ -1,13 +1,10 @@
 # DESIGN — Feedback-Driven Samplers: MCMC / Nested / Nuisance (V2, D13)
 
-**Status**: design accepted 2026-07-16; **D13.1–D13.5b shipped, verified, and archived**
-(samplers + nuisance + Dynesty/MultiNest). **D13.6 was briefly mis-marked done with an
-uncommitted diagnostics tail** — see the 2026-07-17 review below; it is back to
-in-progress until that tail is committed. **D13.7** (review fixes) is open.
-**Review**: [`D13_SAMPLERS_REVIEW_2026-07-17.md`](D13_SAMPLERS_REVIEW_2026-07-17.md) —
-architecture verdict is positive; four findings need fixing before D13.6 closes
-(pool-dispatch fail-loud, feedback-drop logging, `nuisance_optimize` re-run default,
-missing MCMC ESS).
+**Status**: design accepted 2026-07-16; **D13.1–D13.7 closed** (samplers + nuisance +
+Dynesty/MultiNest + diagnostics + review fixes). **Review**:
+[`D13_SAMPLERS_REVIEW_2026-07-17.md`](D13_SAMPLERS_REVIEW_2026-07-17.md) — architecture
+verdict positive; §2 findings fixed in D13.7 (fail-loud pool dispatch, feedback-drop
+logging, `re_run_physics` V1-true default, MCMC ESS).
 **Date**: 2026-07-16 (from the post-D12 capability review in this repo's session notes)
 **Scope**: migrate the V1 sampler science (MCMC family, nested sampling, nuisance
 profiling) onto the V2 distributed execution model. **V1 `Sampling` YAML surface is
@@ -119,8 +116,11 @@ implementation. Port V1 semantics: per-sample profiling over declared nuisance
 variables using the expression-based `NuisanceExpressionRegistry`
 (V1 `Module/nuisance_LogLikelihood.py`, compile-once — map onto the shared V2
 `ExpressionContext`), plus `nuisance_passCondition` gating. Runs Worker-side as an
-execution-plan step between likelihood terms; no calculator re-runs inside the inner
-loop (V1 contract).
+execution-plan step between likelihood terms. **Re-run policy (D13.7c):** V1
+re-executed each Profile1D probe as a full sample (`NAttempt` cards), so the
+V2 default is `re_run_physics: true` (calc+opera per probe). Set `false` for
+pure expression-only nuisances. Expression registries still compile once (no
+recompile in the inner loop).
 
 ## 4. YAML surface (unchanged)
 
@@ -148,8 +148,8 @@ Sampling:
 | D13.3 | Ensemble family: `EnsembleMCMC` (stretch), `DEMCMC`, `PT` | D13.2 | **done** 2026-07-17: half-ensemble barriers + PT exchange; methods EnsembleMCMC/Ensemble/DEMCMC/PTMCMC/PT/PTEnsemble; worker-count trajectory test. Golden moments / wall-clock gate progressive under D13.6. |
 | D13.4 | `nuisance_optimize` Worker step + pass-condition | — (parallel to D13.2) | **done** 2026-07-17: Profile1D on Worker; ExpressionContext registries; flowchart + sample log; tests green. Full HinoLLP golden progressive under D13.6. |
 | D13.5 | Dynesty bridge (`RedisEvaluationPool`) + checkpoint wrap | D13.1 | **done** 2026-07-17: vendored dynesty 3.0.0 + UUID channel; RedisEvaluationPool; DynestySampler; `DATABASE/dynesty_result.csv` + Jarvis-PLOT `dynesty_runplot` jplot (V1 path, no `dynesty.plotting`). Full card golden / native resume progressive under D13.6. |
-| D13.6 | Acceptance & docs closure | D13.2–5 | **in-progress** 2026-07-17: YAML_REFERENCE §6.10–6.13 + samplers_catalog hierarchy committed. `diagnostics_export.py` (`sampler_summary.json`, `chain_history.csv`, nested CSV contract) + `tests/test_d13_acceptance.py` + the wiring in `core.py`/`dynesty_sampler.py`/`mcmc_sampler.py` reviewed and passing but **still uncommitted** — see review §0. Commit before re-marking done. |
-| D13.7 | Review fixes (see `D13_SAMPLERS_REVIEW_2026-07-17.md` §2) | D13.6 | **todo**: (a) `RedisEvaluationPool.map` fail-loud instead of silent local fallback on dispatch-signal miss; (b) log dropped/unmatched `hep:feedback` records; (c) resolve `Module/profile1d.py` `re_run_physics` default against V1's actual behavior + document in YAML_REFERENCE; (d) add per-chain ESS to MCMC diagnostics (closes design goal 6). |
+| D13.6 | Acceptance & docs closure | D13.2–5 | **done** 2026-07-20: `diagnostics_export.py` + acceptance tests + MCMC/nested wiring committed (`f10889b`); DATABASE `sampler_summary.json` / `chain_history.csv` contract live. |
+| D13.7 | Review fixes (see `D13_SAMPLERS_REVIEW_2026-07-17.md` §2) | D13.6 | **done** 2026-07-20: (a) pool map fail-loud on ambiguous dispatch; (b) unmatched feedback warning; (c) `re_run_physics` default **true** (V1 NAttempt parity) + YAML_REFERENCE §6.13; (d) per-chain `ess_logl` / `ess_logl_mean` in MCMC summary. |
 
 **Rollback**: unregistered methods keep erroring with the supported list — each WP only
 *adds* Distributor registrations. **Out of scope**: multinest, HMC/NUTS gradients,
