@@ -868,6 +868,44 @@ Common Bounds keys from §6.11 still apply (`num_chains`, `num_iters`, …). PT 
 temperature ladder from Bounds (see engine config contract). Summary includes
 `swap_attempts` / `swap_accepts` when PT is active.
 
+### 6.12b `Sampling.FeedbackReturn` (optional, D13.8)
+
+Controls the **flat** `hep:feedback` payload Workers publish for barrier samplers.
+Archive / DataRecorder still receives the full nested sample (including `status`).
+
+Default for Dynesty / MultiNest / MCMC family:
+
+```json
+{ "uuid": "…", "logL": -12.34 }
+```
+
+Unusable points: likelihood writes `LogL = -inf`; wire carries `"logL": "-inf"`
+(decoded to IEEE −∞). **No nested `observables`, no `status` on feedback.**
+
+| Key | Default | Notes |
+|-----|---------|--------|
+| `mode` | `minimal` | `minimal` \| `fields` \| `all_flat` |
+| `fields` | `[]` | top-level sibling keys when `mode: fields` |
+| `include_logl` | `true` | always emit `logL` (or −∞) |
+
+```yaml
+Sampling:
+  Method: Dynesty
+  # optional — already minimal
+  FeedbackReturn:
+    mode: minimal
+
+  Method: AdaptiveLevelSet
+  AdaptiveLevelSet:
+    target_expression: "delta_chi2"
+  # default auto: mode=fields, fields from target symbols
+  FeedbackReturn:
+    mode: fields
+    fields: [delta_chi2]
+```
+
+Alias: `feedback_return`. See [`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md).
+
 ### 6.13 `nuisance_optimize` (Worker step, not a Sampling.Method)
 
 Declared under `Sampling.Nuisance` (or top-level `Nuisance`); inserted as an
