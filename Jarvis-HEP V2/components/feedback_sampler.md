@@ -62,11 +62,12 @@ class MySampler(FeedbackSampler):
     def absorb_generation(self, results: Sequence[Mapping[str, Any]]) -> None:
         """Fold barrier feedback into method state.
 
-        Each record has at least: uuid, status ("Completed"|"Failed"), and a
-        **projected** ``observables`` map (see FeedbackReturn design — default
-        is only ``LogL``; not the full DataRecorder bag).
-        Default physics-safe policy for Failed: reject the proposal
-        (self._on_failure = "reject"; set "halt" to abort).
+        Each record has at least: ``uuid`` and a **projected** ``observables``
+        map (see FeedbackReturn design — default is only ``LogL``; not the full
+        DataRecorder bag). **No ``status``** on feedback; missing LogL / target
+        fields mean reject (archive still stores sample status).
+        Default physics-safe policy for missing science values: reject the
+        proposal (self._on_failure = "reject"; set "halt" to abort).
         """
 ```
 
@@ -93,14 +94,17 @@ Core drives this via `Jarvis2Core.run_adaptive_scan` (same path as AdaptiveLevel
 Archive / DataRecorder still receives the **full** sample via `submit_result`.
 `hep:feedback` is sampler-owned and **projected** before publish:
 
+Wire shape: **`{uuid, observables}` only** — no sample `status` on this channel.
+
 | Mode | `observables` content | Typical users |
 |------|----------------------|---------------|
 | `minimal` (default) | `{LogL}` only | Dynesty, MultiNest, MCMC family |
 | `fields` | named keys (+ LogL if enabled) | AdaptiveLevelSet target, optimizers |
 | `all` | full map (escape hatch) | debug |
 
-Policy lives in `worker_config["feedback_return"]`, resolved from
-`Sampling.FeedbackReturn` YAML or `Sampler.feedback_return_spec()`. Full design:
+Missing `LogL` / required fields ⇒ treat as failed proposal. Policy lives in
+`worker_config["feedback_return"]`, resolved from `Sampling.FeedbackReturn` YAML
+or `Sampler.feedback_return_spec()`. Full design:
 [`DESIGN_FEEDBACK_RETURN_2.0.md`](../DESIGN_FEEDBACK_RETURN_2.0.md).
 
 ### 3.2 Custom control loops

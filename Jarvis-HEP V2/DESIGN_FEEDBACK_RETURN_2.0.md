@@ -17,37 +17,40 @@ Today the Worker dual-writes after each sample:
 
 | Path | Redis | Payload | Consumer |
 |------|-------|---------|----------|
-| Archive | `hep:archive_queue` | full `to_info_dict()` (params, observables, paths, …) | Archiver → SAMPLE + `samples.hdf5` |
+| Archive | `hep:archive_queue` | full `to_info_dict()` (params, observables, **status**, paths, …) | Archiver → SAMPLE + `samples.hdf5` |
 | Feedback | `hep:feedback` | `{uuid, status, observables: **full**}` | Sampler control process |
 
 Archive is correct: it is the DataRecorder path. Feedback is not:
 
-- Comments call it a “light” record, but it copies **every** observable.
-- Dynesty / MultiNest / MCMC only need **`uuid` + `LogL`** (+ `status`).
+- Comments call it a “light” record, but it copies **every** observable **and** `status`.
+- Dynesty / MultiNest / MCMC only need **`uuid` + `LogL`**.
 - AdaptiveLevelSet (and future optimizers) need **selected** target fields, not the whole bag.
+- **Sample `status` is for persistence / ops, not for sampler science** — the control
+  process should not depend on Worker lifecycle status to accept/reject a proposal.
 - Full observables on the barrier channel waste bandwidth and hide the real contract.
 
 **Goal**: make feedback **sampler-owned and declarative**. Default minimal; opt-in for
 arbitrary keys; stamp the policy into Worker config at scan start so Workers project
-observables before `rpush`.
+observables before `rpush`. **Do not put `status` on the feedback wire.**
 
 ---
 
 ## 2. Principles
 
 1. **Two channels, two jobs**
-   - Archive = truth for persistence / analysis / DataRecorder.
-   - Feedback = barrier inputs for the **active sampler only**.
+   - Archive = truth for persistence / analysis / DataRecorder (includes `status`).
+   - Feedback = barrier inputs for the **active sampler only** (science scalars only).
 2. **Default = minimal** for every feedback-driven sampler:  
-   `{uuid, status, LogL}` (LogL may be absent on Failed).
-3. **Extension is first-class**, not a hack: samplers and YAML may request extra
+   `{uuid, observables: {LogL}}` (LogL omitted when unavailable / failed).
+3. **No `status` on feedback.** Sampler failure is inferred from **missing science
+   values** (no `LogL`, missing target field), not from sample lifecycle status.
+4. **Extension is first-class**, not a hack: samplers and YAML may request extra
    observable names (or `all` for debug).
-4. **Policy is decided on the control process**, stamped once into `worker_config`,
+5. **Policy is decided on the control process**, stamped once into `worker_config`,
    applied identically by every Worker for that scan.
-5. **Wire format stays compatible**: keep top-level keys `uuid`, `status`,
-   `observables` (a **projected** map). Consumers already read that shape; only the
-   map shrinks.
-6. **No per-task negotiation** in v1 of this design: one policy per Worker pool /
+6. **Wire format**: top-level **`uuid` + `observables`** only (`observables` is a
+   projected map). Drop `status` from the published feedback payload.
+7. **No per-task negotiation** in v1 of this design: one policy per Worker pool /
    scan. (Per-task override is a non-goal until a sampler proves it needs it.)
 
 ---
@@ -67,12 +70,17 @@ observables before `rpush`.
 }
 ```
 
-**Always present on the wire (outside `observables`):**
+**Always present on the wire:**
 
 | Key | Type | Notes |
 |-----|------|--------|
 | `uuid` | str | required |
-| `status` | str | `Completed` / `Failed` / … |
+
+**Not on the feedback wire:**
+
+| Key | Where it lives instead |
+|-----|------------------------|
+| `status` | Archive / DataRecorder only (`submit_result` / `to_info_dict`) |
 
 **Inside `observables` after projection:**
 
@@ -80,10 +88,10 @@ observables before `rpush`.
 |------|----------|
 | `minimal` | `{LogL: float}` when available (and `include_logl`) |
 | `fields` | requested names that exist on the sample, plus LogL if `include_logl` |
-| `all` | shallow copy of full `sample.observables` |
+| `all` | shallow copy of full `sample.observables` (still no top-level `status`) |
 
 Missing requested fields are **omitted** (not null-filled). Consumers must tolerate
-absence (Failed samples already do).
+absence.
 
 ### 3.2 LogL extraction rule (Worker projection)
 
@@ -92,20 +100,45 @@ Same defensive rule control already uses when reading:
 1. If `observables["LogL"]` exists → use it.
 2. Else if any keys match `LogL*` (excluding the total) → sum them into a single
    projected `LogL` for the feedback map.
-3. Else → omit `LogL` (MCMC/Dynesty treat as failure / −inf path).
+3. Else → omit `LogL`.
 
-Projection **does not invent** fake LogL for Failed status; Failed records may omit
-LogL entirely.
+**Failed / unusable samples:** do **not** invent a fake LogL. Project an empty or
+partial `observables` map (typically `{}` under `minimal`). The sampler treats
+**missing LogL** (or missing required target field) as reject / −∞ / `f=None`.
 
-### 3.3 Wire example
+If the sample completed physics but Likelihood failed to write LogL, the same
+“missing LogL” path applies — which is what the sampler needs for its barrier,
+independent of whether archive records `status: Failed` or `Completed`.
+
+### 3.3 Failure semantics (replacing `status` on feedback)
+
+| Situation | Feedback body | Sampler absorb |
+|-----------|---------------|----------------|
+| Success with LogL | `{uuid, observables: {LogL: x, …}}` | use LogL / target fields |
+| Failed or no LogL | `{uuid, observables: {}}` or without `LogL` | reject / −∞ / `f=None` |
+| Success, non-LogL target only | `{uuid, observables: {delta_chi2: …}}` | ALS uses target keys |
+
+Implementation note: existing code that branches on `record["status"] == "Failed"`
+must be updated to **value presence** checks (`LogL` / target keys). Archive still
+carries real status for humans and DataRecorder.
+
+### 3.4 Wire example
 
 **Default (Dynesty / MCMC):**
 
 ```json
 {
   "uuid": "a1b2…",
-  "status": "Completed",
   "observables": { "LogL": -12.34 }
+}
+```
+
+**Failed / missing LogL:**
+
+```json
+{
+  "uuid": "a1b2…",
+  "observables": {}
 }
 ```
 
@@ -114,7 +147,6 @@ LogL entirely.
 ```json
 {
   "uuid": "…",
-  "status": "Completed",
   "observables": {
     "LogL": -2.99,
     "delta_chi2": 3.84
@@ -122,7 +154,8 @@ LogL entirely.
 }
 ```
 
-**Debug / `mode: all`:** current behavior (full map).
+**Debug / `mode: all`:** full observables map under `observables`, still **no**
+top-level `status`.
 
 ---
 
@@ -189,7 +222,6 @@ def project_feedback_observables(
     observables: Mapping[str, Any],
     *,
     spec: Mapping[str, Any],
-    status: str,
 ) -> dict[str, Any]:
     mode = str(spec.get("mode") or "minimal").lower()
     include_logl = bool(spec.get("include_logl", True))
@@ -209,21 +241,21 @@ def project_feedback_observables(
 
 # _stage_and_submit:
 info = sample.to_info_dict()
-self._redis.submit_result(info)          # FULL — unchanged
+self._redis.submit_result(info)          # FULL (incl. status) — unchanged
 if self._publish_feedback:
     self._redis.publish_feedback({
         "uuid": sample.uuid,
-        "status": sample.status,
+        # no status
         "observables": project_feedback_observables(
             sample.observables,
             spec=self._feedback_return,
-            status=sample.status,
         ),
     })
 ```
 
-`RedisQueue.publish_feedback` stays a thin transport; **projection lives in the
-Worker** so the archive path never accidentally shrinks.
+`RedisQueue.publish_feedback` stays a thin transport (validate `uuid` only);
+**projection lives in the Worker** so the archive path never accidentally shrinks.
+Optional: strip any accidental `status` key if a caller passes one.
 
 ---
 
@@ -263,28 +295,28 @@ Document in `YAML_REFERENCE_2.0.md` §6 (Sampling).
 
 ---
 
-## 7. Consumer contracts (no change required if defaults correct)
+## 7. Consumer contracts
 
-| Consumer | Reads | After this design |
+| Consumer | Today | After this design |
 |----------|-------|-------------------|
-| `RedisEvaluationPool` | `uuid`, `LogL` via extract | works with `minimal` |
-| `MCMCSampler._extract_logl` | `status`, `LogL` / `LogL*` | works with `minimal` |
-| `AdaptiveLevelSet.absorb` | target keys in observables | needs `fields` or `all` |
-| Archiver / DATABASE | archive payload only | **unchanged** |
+| `RedisEvaluationPool` | `status`→−1e300; else `LogL` | **missing LogL** → −1e300 / fail path; else `LogL` |
+| `MCMCSampler._extract_logl` | `status==Failed` → None | **missing LogL** → None (reject) |
+| `FeedbackSampler._failure_policy_halt` | `status==Failed` | redefine on missing science values, or drop halt-on-status; archive remains source of Failed counts |
+| `AdaptiveLevelSet.absorb` | `status` + target keys | **missing target / LogL** → `f=None` |
+| Archiver / DATABASE | full info incl. status | **unchanged** |
 
-If ALS is misconfigured as `minimal` while `target_expression` is not `LogL`,
-target eval returns `None` / fails conservatively — same as missing keys today.
-Prefer auto-fields from the expression (§4.2) so the default ALS card keeps working.
+Absorb helpers should not read `record.get("status")` for science decisions.
 
 ---
 
 ## 8. Non-goals
 
-- Changing archive / DataRecorder schema.
+- Changing archive / DataRecorder schema (status stays there).
 - Streaming intermediate calculator observables mid-workflow onto feedback.
 - Per-sample dynamic field lists (v1).
 - Compressing archive payloads.
 - Agent / D8 surfaces.
+- Putting sample lifecycle status back on the feedback channel for “convenience”.
 
 ---
 
@@ -292,29 +324,33 @@ Prefer auto-fields from the expression (§4.2) so the default ALS card keeps wor
 
 | Case | Expect |
 |------|--------|
-| Unit: `project_feedback_observables` minimal / fields / all | map shapes |
+| Unit: `project_feedback_observables` minimal / fields / all | map shapes; no status key |
 | Unit: LogL sum fallback when only `LogL_a`/`LogL_b` | single `LogL` in projection |
-| Worker + fakeredis: Dynesty pool drain | feedback JSON has only uuid/status/LogL keys under observables |
+| Worker + fakeredis: Dynesty pool drain | feedback JSON keys ⊆ `{uuid, observables}`; observables ⊆ `{LogL}` |
+| Worker: Failed sample | feedback has uuid, empty/no LogL; archive still has status Failed |
 | Worker: ALS fields mode | target key present; unrelated bulky keys absent |
 | Archive side: `submit_result` still full | Archiver tests unchanged |
-| YAML `mode: all` | parity with pre-change feedback body |
+| YAML `mode: all` | full observables under `observables`, still no top-level status |
 | Default resolution without YAML | Dynesty → minimal; ALS → fields(symbols) |
+| Consumer unit: MCMC/Dynesty/ALS | no dependency on feedback `status` |
 
 ---
 
 ## 10. Key Decisions
 
-1. **Default minimal (`uuid`+`status`+`LogL`)** for all feedback methods unless they
-   declare otherwise — matches Dynesty/MCMC reality and cuts barrier traffic.
-2. **Keep `observables` key** on the wire (projected map) — zero churn for absorb
-   helpers; only the map content shrinks.
-3. **Policy stamped in `worker_config`**, not per-task — one scan, one contract;
+1. **Default minimal (`uuid` + `LogL`)** for all feedback methods unless they declare
+   otherwise — matches Dynesty/MCMC reality and cuts barrier traffic.
+2. **`status` is not part of feedback.** Persistence keeps status on archive;
+   samplers use missing LogL / missing target fields as the failure signal.
+3. **Keep `observables` key** on the wire (projected map) — extension for optimizers
+   without inventing a second field bag; only the map content shrinks.
+4. **Policy stamped in `worker_config`**, not per-task — one scan, one contract;
    Workers stay simple.
-4. **Projection in Worker, not RedisQueue** — archive path cannot be accidentally
+5. **Projection in Worker, not RedisQueue** — archive path cannot be accidentally
    filtered; transport stays dumb.
-5. **YAML override + sampler defaults** — optimizers keep an open interface;
+6. **YAML override + sampler defaults** — optimizers keep an open interface;
    stock nested/MCMC cards need no new keys.
-6. **ALS auto-fields from `target_expression`** — preserves current ALS cards without
+7. **ALS auto-fields from `target_expression`** — preserves current ALS cards without
    forcing users to list FeedbackReturn.
 
 ---
@@ -323,8 +359,8 @@ Prefer auto-fields from the expression (§4.2) so the default ALS card keeps wor
 
 None blocking. Optional later:
 
-- Should `mode: fields` warn when a requested key is missing on >N% of Completed
-  samples? (nice-to-have monitor, not required for v1.)
+- Should `mode: fields` warn when a requested key is missing on >N% of samples?
+  (nice-to-have monitor, not required for v1.)
 - Rename wire field to `feedback` later? Rejected for now — keep `observables`.
 
 ---
@@ -333,19 +369,19 @@ None blocking. Optional later:
 
 | WP | Title | Depends | Accept |
 |----|-------|---------|--------|
-| **D13.8a** | Spec helpers: `project_feedback_observables`, `resolve_feedback_return`, unit tests | — | pure functions green |
-| **D13.8b** | Worker applies `worker_config["feedback_return"]`; stamp from `build_worker_config` | D13.8a | Dynesty feedback body minimal under fakeredis |
-| **D13.8c** | Sampler defaults: Dynesty/MCMC minimal; ALS fields(symbols) | D13.8b | ALS e2e still fills target `f` |
+| **D13.8a** | Spec helpers: `project_feedback_observables`, `resolve_feedback_return`, unit tests | — | pure functions green; no status in payload |
+| **D13.8b** | Worker applies `worker_config["feedback_return"]`; stamp from `build_worker_config`; drop status from `publish_feedback` | D13.8a | Dynesty feedback body = uuid + LogL only under fakeredis |
+| **D13.8c** | Consumer cleanup: MCMC / pool / ALS / failure policy use missing values not status; sampler defaults (Dynesty/MCMC minimal; ALS fields) | D13.8b | ALS e2e still fills target `f`; Failed → reject without status |
 | **D13.8d** | YAML_REFERENCE + feedback_sampler / redis_queue / worker component docs | D13.8b | docs match wire contract |
 
-**Rollback**: set `FeedbackReturn.mode: all` globally in YAML or default mode temporarily
-to restore pre-change payloads.
+**Rollback**: set `FeedbackReturn.mode: all` for observables map size only — status
+still stays off the feedback channel once D13.8b lands.
 
 ---
 
 ## 13. Relation to existing docs
 
-- Supersedes the informal “light record = full observables” wording in
+- Supersedes the informal “light record = full observables + status” wording in
   [`components/adaptive_voronoi_contour.md`](components/adaptive_voronoi_contour.md) §5
   and [`components/feedback_sampler.md`](components/feedback_sampler.md) §3 absorb note.
 - Complements D13.7b (unmatched feedback logging): smaller payloads, same drain.

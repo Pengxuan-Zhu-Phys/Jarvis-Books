@@ -56,7 +56,7 @@ Docs/
 > Human stop path includes **interrupt → runtime checkpoint** then teardown.
 > **D13 samplers closed** (D13.1–D13.7). Open hygiene: **D13.8** projected feedback
 > return ([`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md) — default
-> uuid+LogL; optimizers may request fields). Next: **D14 cluster**
+> uuid+LogL, no status; optimizers may request fields). Next: **D14 cluster**
 > ([`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md)), then
 > **D15 reuse/analysis** ([`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md)).
 > **D8 stays parked.**
