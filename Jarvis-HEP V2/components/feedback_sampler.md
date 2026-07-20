@@ -3,11 +3,12 @@
 **Role**: shared base for barrier-synchronized, feedback-driven samplers. Owns the
 propose → Redis publish → `hep:feedback` drain → absorb → checkpoint loop so each
 method only ports its science hooks.
-**Status**: ✅ **Implemented** (D13.1, 2026-07-16). Consumers:
-[`AdaptiveLevelSetSampler`](adaptive_voronoi_contour.md); **MCMC / AMMCMC / AM / DRAM**
-(D13.2) and **Ensemble / DEMCMC / PT** (D13.3) via `mcmc_sampler.py`. Next: dynesty
-pool (D13.5), nuisance step (D13.4).
+**Status**: ✅ **Implemented** (D13.1–D13.7). Consumers:
+[`AdaptiveLevelSetSampler`](adaptive_voronoi_contour.md); **MCMC / ensemble**;
+**Dynesty / MultiNest** (via pool on the same channel).
 **Design refs**: [`../DESIGN_SAMPLERS_2.0.md`](../DESIGN_SAMPLERS_2.0.md) §3.2,
+[`../DESIGN_FEEDBACK_RETURN_2.0.md`](../DESIGN_FEEDBACK_RETURN_2.0.md) (projected
+feedback payload — default `uuid+LogL`),
 [checkpoint.md](checkpoint.md), [redis_queue.md](redis_queue.md),
 [sampler.md](sampler.md), [samplers_catalog.md](samplers_catalog.md).
 **Maintainer constraint**: **D8 stays parked** — nothing here may depend on agent verbs
@@ -61,7 +62,9 @@ class MySampler(FeedbackSampler):
     def absorb_generation(self, results: Sequence[Mapping[str, Any]]) -> None:
         """Fold barrier feedback into method state.
 
-        Each record has at least: uuid, status ("Completed"|"Failed"), observables.
+        Each record has at least: uuid, status ("Completed"|"Failed"), and a
+        **projected** ``observables`` map (see FeedbackReturn design — default
+        is only ``LogL``; not the full DataRecorder bag).
         Default physics-safe policy for Failed: reject the proposal
         (self._on_failure = "reject"; set "halt" to abort).
         """
@@ -84,6 +87,21 @@ while True:
 ```
 
 Core drives this via `Jarvis2Core.run_adaptive_scan` (same path as AdaptiveLevelSet).
+
+### 3.1b Feedback return contract (D13.8 design)
+
+Archive / DataRecorder still receives the **full** sample via `submit_result`.
+`hep:feedback` is sampler-owned and **projected** before publish:
+
+| Mode | `observables` content | Typical users |
+|------|----------------------|---------------|
+| `minimal` (default) | `{LogL}` only | Dynesty, MultiNest, MCMC family |
+| `fields` | named keys (+ LogL if enabled) | AdaptiveLevelSet target, optimizers |
+| `all` | full map (escape hatch) | debug |
+
+Policy lives in `worker_config["feedback_return"]`, resolved from
+`Sampling.FeedbackReturn` YAML or `Sampler.feedback_return_spec()`. Full design:
+[`DESIGN_FEEDBACK_RETURN_2.0.md`](../DESIGN_FEEDBACK_RETURN_2.0.md).
 
 ### 3.2 Custom control loops
 

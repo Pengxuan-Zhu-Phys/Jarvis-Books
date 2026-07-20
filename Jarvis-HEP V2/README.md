@@ -22,8 +22,9 @@ Docs/
 ├── archive/                        ← completed WPs moved out of the plan (full ledger notes + WP details)
 │   └── V2_PLAN_ARCHIVE_2026-07-14.md ← D0–D7 all, D9/D10/D11 done rows; frozen history, read on demand only
 ├── DESIGN_PORTAL_IO_2.0.md         ← Portal formats + HEP FileOperation for SAMPLE save
-├── DESIGN_SAMPLERS_2.0.md          ← D13 (todo): MCMC/nested/nuisance on the feedback channel
-├── DESIGN_CLUSTER_EXECUTION_2.0.md ← D14 (todo): remote worker pools, SLURM, broker auth/AOF
+├── DESIGN_SAMPLERS_2.0.md          ← D13: MCMC/nested/nuisance on the feedback channel
+├── DESIGN_FEEDBACK_RETURN_2.0.md   ← D13.8: projected hep:feedback (default uuid+LogL)
+├── DESIGN_CLUSTER_EXECUTION_2.0.md ← D14: remote worker pools, SLURM, broker auth/AOF
 ├── DESIGN_RESULTS_ANALYSIS_2.0.md  ← D15 (todo): warm-start cache, Jarvis2 analyze, Portal formats
 ├── DESIGN_SAMPLE_COORDINATION_2.0.md ← **accepted**: uuid key; task=u_coords; feedback=logL; stage opt-in
 ├── DESIGN_SAMPLE_PROGRESS_MONITOR.md ← monitor stage-on-heartbeat (aligned with coordination design)
@@ -53,8 +54,9 @@ Docs/
 > FileOperation, CSV + scan perf, D1.1 `op_count` contract.
 > **D10 + D9.4/9.6 done.** **D8 Agent Bridge parked** (JSON API / run_state / agent stop-ack).
 > Human stop path includes **interrupt → runtime checkpoint** then teardown.
-> **D13 samplers closed** (D13.1–D13.7: FeedbackSampler, MCMC/ensemble, nuisance,
-> Dynesty/MultiNest, DATABASE diagnostics, review fixes). Next: **D14 cluster**
+> **D13 samplers closed** (D13.1–D13.7). Open hygiene: **D13.8** projected feedback
+> return ([`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md) — default
+> uuid+LogL; optimizers may request fields). Next: **D14 cluster**
 > ([`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md)), then
 > **D15 reuse/analysis** ([`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md)).
 > **D8 stays parked.**
