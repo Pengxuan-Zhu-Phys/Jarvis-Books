@@ -489,7 +489,7 @@ Unknown Bounds key → **error** (P0 Nested).
 
 Same static Nested allow-list; force static semantics in contract (mirror sampler).
 
-#### Bridson / Random / Grid / CSV / AdaptiveLevelSet
+#### Bridson / Random / Grid / CSV / AdaptiveBridson
 
 P0: L1 only (+ method-specific required keys already enforced late today, pulled
 forward). P1: close Bounds/Point number surfaces and unify naming messages.

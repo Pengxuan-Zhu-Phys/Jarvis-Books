@@ -24,6 +24,7 @@ Docs/
 ├── DESIGN_PORTAL_IO_2.0.md         ← Portal formats + HEP FileOperation for SAMPLE save
 ├── DESIGN_SAMPLERS_2.0.md          ← D13: MCMC/nested/nuisance on the feedback channel
 ├── DESIGN_FEEDBACK_RETURN_2.0.md   ← D13.8: projected hep:feedback (default uuid+LogL)
+├── DESIGN_YAML_VALIDATION_2.0.md   ← D13.9: early task-YAML gate (contracts + Jarvis2 validate)
 ├── DESIGN_CLUSTER_EXECUTION_2.0.md ← D14: remote worker pools, SLURM, broker auth/AOF
 ├── DESIGN_RESULTS_ANALYSIS_2.0.md  ← D15 (todo): warm-start cache, Jarvis2 analyze, Portal formats
 ├── DESIGN_SAMPLE_COORDINATION_2.0.md ← **accepted**: uuid key; task=u_coords; feedback=logL; stage opt-in
@@ -49,19 +50,23 @@ Docs/
 ## Read in this order
 
 > **Current status (2026-07-21):** branch `jarvis2`. Prototype + single-host Redis science path
-> closed: **D0–D12 done** (ledger archive); **D13 closed including D13.8**.
+> closed: **D0–D12 done** (ledger archive); **D13 closed through D13.10**.
 >
-> **D13 samplers (done):** D13.1–D13.7 (FeedbackSampler, MCMC/Ensemble, nuisance, Dynesty,
+> **D13 samplers + gates (done):** D13.1–D13.7 (FeedbackSampler, MCMC/Ensemble, nuisance, Dynesty,
 > MultiNest static wrap, diagnostics, review fixes) + **D13.8** flat `hep:feedback`
 > (`{uuid, logL}`, `-inf` for unusable) — design
-> [`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md).
+> [`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md) + **D13.9** early YAML
+> validation (`task_validation` + `contracts/*`; `Jarvis2 validate`) — design
+> [`DESIGN_YAML_VALIDATION_2.0.md`](DESIGN_YAML_VALIDATION_2.0.md) + **D13.10** Nested UX freeze
+> (vendored dynesty **3.1.0**; Method=engine — Dynesty always Dynamic, MultiNest always static;
+> `Bounds.dynamic` rejected), **AdaptiveBridson** (renames AdaptiveLevelSet, no alias), and
+> `Jarvis2 check` smoke layout (`workers=1`, `SAMPLE/test/<uuid>/` flat, pack off; CSV-or-N).
 >
-> **Post-D13 polish (landed, not a new D-row):** nested production hygiene (Redis-only logL,
-> UUID channel, archive catch-up before `samples.csv`, clean nested CSV + MultiNest parity);
-> component multi-sink logs under `logs/<scan>/` (`core` / `factory` / `sampler` / `archiver` /
-> `datarecorder` / `worker-NN`); process labels `Jarvis-HEP.*` (dots only); control archive ‰ at
-> DEBUG; Dynesty/MultiNest `Results.summary()` → `sampler.log`; Sampling YAML templates in
-> `Jarvis-HEP-v2/jarvishep2/project_template/bin/sampling/`.
+> **Earlier post-D13 polish (still landed):** nested production hygiene (Redis-only logL, UUID
+> channel, archive catch-up before `samples.csv`, clean nested CSV + MultiNest parity);
+> component multi-sink logs under `logs/<scan>/`; process labels `Jarvis-HEP.*`; control
+> archive ‰ at DEBUG; Dynesty/MultiNest `Results.summary()` → `sampler.log`; Sampling YAML
+> templates in `Jarvis-HEP-v2/jarvishep2/project_template/bin/sampling/`.
 >
 > **Parked:** **D8 Agent Bridge** (JSON API / `run_state` / agent stop-ack). Human stop still
 > does **interrupt → runtime checkpoint** then teardown.
