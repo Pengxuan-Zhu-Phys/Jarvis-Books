@@ -1,17 +1,22 @@
 # V2 Distributed Runtime — Development Plan (Agent Execution Playbook)
 
-Last updated: 2026-07-16. Branch `jarvis2` @ **`61116a4`** (interrupt checkpoint + polish).
+Last updated: 2026-07-21. Branch `jarvis2` (post-D13.9 + sampler UX polish).
 Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
 **Priority note (maintainer):** **D8 Agent Bridge stays parked** (D8.1/8.2/8.4 + agent stop-ack;
-re-confirmed 2026-07-16). **D9–D12 closed.** Next phase designed and open:
-**D13 samplers → D14 cluster → D15 reuse/analysis** (see §2 map + §3 rows; designs
-`DESIGN_SAMPLERS_2.0.md` / `DESIGN_CLUSTER_EXECUTION_2.0.md` / `DESIGN_RESULTS_ANALYSIS_2.0.md`).
-**D13 closed (2026-07-20)**: D13.1–D13.7 done — diagnostics export committed,
-review fixes landed (fail-loud pool dispatch, unmatched-feedback logging,
-`re_run_physics` default documented as V1-true, MCMC ESS). See
+re-confirmed 2026-07-16). **D9–D12 closed. D13 closed through D13.9** (YAML validation gate —
+[`DESIGN_YAML_VALIDATION_2.0.md`](DESIGN_YAML_VALIDATION_2.0.md); flat feedback D13.8 —
+[`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md)).
+D13.1–D13.7: diagnostics export, review fixes — see
 [`D13_SAMPLERS_REVIEW_2026-07-17.md`](D13_SAMPLERS_REVIEW_2026-07-17.md).
-Next pick: **D14.1** (cluster worker template — no hard dependency on D13).
-Do not start Agent JSON verbs until D8 is unparked.
+**Post-D13 polish (2026-07-21):**
+- **D13.9** early config validation (`task_validation` + `contracts/*`; `Jarvis2 validate`);
+- vendored **dynesty 3.1.0** + UUID patches; Method=engine for Dynesty/MultiNest (no `Bounds.dynamic`);
+- **AdaptiveBridson** renames AdaptiveLevelSet (legacy name removed);
+- **check-modules** UX: CSV-or-N-samples, workers=1, `SAMPLE/test/<uuid>/` flat, no tar pack;
+- narrowed Sampling templates under `project_template/bin/sampling/`.
+Next phase open: **D14 cluster → D15 reuse/analysis** (designs
+`DESIGN_CLUSTER_EXECUTION_2.0.md` / `DESIGN_RESULTS_ANALYSIS_2.0.md`).
+Next pick: **D14.1** (cluster worker template). Do not start Agent JSON verbs until D8 is unparked.
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -96,7 +101,7 @@ user-visible behavior.
 | **D7** | Acceptance | slow-regime gates: worker scaling, archive latency, 256-Worker chaos, parity |
 | **D8** | Agent Bridge (machine-readable control surface for Jarvis-Agent) | additive `--json` verbs (`--validate`/`--results`/`--status`/`--version-json`), `run_state.json` lifecycle file, SIGINT/SIGTERM graceful-stop contract; frozen human CLI untouched. Design: [`DESIGN_AGENT_BRIDGE_2.0.md`](DESIGN_AGENT_BRIDGE_2.0.md) |
 | **D9** | Architecture Hardening (behavior-preserving refactors) | token resolution single-owner, dead async twins removed, `CalculatorModule`/`TaskFactory`/`Jarvis2Core` de-godded, sampler/IO registries (extension points for MCMC + SLHA), `Sample.info` single source of truth. Current baseline: 236 collected (235 passed, 1 flowchart-export skip) + golden parity; D9.4/D9.6 remain partial. Design + WP details: [`DESIGN_PRINCIPLES_REVIEW_2.0.md`](DESIGN_PRINCIPLES_REVIEW_2.0.md) §4 |
-| **D10** | Adaptive Level-Set Sampler (first feedback-driven sampler, 2 ≤ d ≤ 5) | opt-in `hep:feedback` result channel (zero cost when off), `AdaptiveLevelSetSampler`: low-discrepancy gen-0 → crossing detection on a neighbor graph (exact Delaunay ridges d≤3 / approximate kNN d=4–5) → barrier-synchronized edge refinement → `levelset.json`; registered `stateless=False`; deterministic across worker counts; checkpoint at generation barriers; d≥6 rejected. Design: [`components/adaptive_voronoi_contour.md`](components/adaptive_voronoi_contour.md) |
+| **D10** | AdaptiveBridson Sampler (first feedback-driven sampler, 2 ≤ d ≤ 5) | opt-in `hep:feedback` result channel (zero cost when off), `AdaptiveBridsonSampler`: low-discrepancy gen-0 → crossing detection on a neighbor graph (exact Delaunay ridges d≤3 / approximate kNN d=4–5) → barrier-synchronized edge refinement → `levelset.json`; registered `stateless=False`; deterministic across worker counts; checkpoint at generation barriers; d≥6 rejected. Design: [`components/adaptive_voronoi_contour.md`](components/adaptive_voronoi_contour.md) |
 | **D11** | User Interface & Integration Closure | one-intent CLI (`run/check/monitor/plot/portal/operas`) with compatibility aliases; truthful `RunOutcome` and machine-readable failures; Portal HEP formats exposed and discoverable; Operas validation/runtime parity; scan-driven PLOT + flowchart + D10 overlay. Review: [`USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md`](USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md) |
 | **D12** | Calculator V1 parity + user-experience alignment ("V1 用户无感迁移") | unmodified **Eggbox Calculator card** (historical file `Example_Bridson_process.yaml` = `Calculators` external program, not Operas, not a runtime mode) runs end-to-end with golden parity; V1-style core log rendering; flowchart.{json,png} export; `EnvReqs.V2` grouped settings; `Jarvis2 project …`; Jarvis-Examples-owned official catalog. Review: [`PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md) §4.0 naming |
 | **D13** | Feedback-driven samplers: MCMC / Nested / Nuisance (V1 science surface on the V2 runtime) | unmodified V1 `Example_DRAM_Operas.yaml` + `Example_Dynesty_Operas.yaml` run end-to-end with convergence/evidence parity vs captured V1 goldens; `FeedbackSampler` base extracted from ALS; `nuisance_optimize` Worker step implemented; worker-count-independent chains. **Closed 2026-07-20** (D13.1–D13.7). Design: [`DESIGN_SAMPLERS_2.0.md`](DESIGN_SAMPLERS_2.0.md); review: [`D13_SAMPLERS_REVIEW_2026-07-17.md`](D13_SAMPLERS_REVIEW_2026-07-17.md). |
@@ -129,6 +134,8 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D13.6 | D13 acceptance + docs closure (YAML_REFERENCE §6 methods, samplers_catalog, DATABASE chain columns) | D13 | D13.2–D13.5 | **done** | 2026-07-20 | Diagnostics export + acceptance tests committed (`f10889b`); DATABASE `sampler_summary.json` / `chain_history.csv` live. |
 | D13.7 | D13 review fixes: fail-loud pool dispatch, feedback drop logging, nuisance re-run default, MCMC ESS | D13 | D13.6 | **done** | 2026-07-20 | (a) `RedisEvaluationPool.map` fail-loud on ambiguous dispatch; (b) unmatched `hep:feedback` warning; (c) `re_run_physics` default **true** (V1 NAttempt full-pipeline parity) + YAML_REFERENCE §6.13; (d) per-chain `ess_logl` / `ess_logl_mean` in MCMC summary. |
 | D13.8 | Configurable flat feedback return (`{uuid, logL}` default; −∞ for unusable; flat extra fields) | D13 | D13.7 | **done** | 2026-07-20 | Implemented: `feedback_return.py`, Worker projection, Redis flat wire, likelihood `LogL=-inf` fallback, consumers (pool/MCMC/ALS). Design: [`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md). |
+| D13.9 | Task YAML validation gate (early fail; Method/Variables/Bounds/Archiver; `Jarvis2 validate`) | D13 | D13.8 | **done** | 2026-07-21 | Pure `task_validation` + `contracts/*`; run/check path validates before Redis; `--strict` / `--json`; dead-key warnings. Design: [`DESIGN_YAML_VALIDATION_2.0.md`](DESIGN_YAML_VALIDATION_2.0.md). (Design doc originally labeled “D14”; plan **D14** remains cluster execution.) |
+| D13.10 | Nested UX freeze + AdaptiveBridson + check-modules inspect layout | D13 | D13.9 | **done** | 2026-07-21 | (a) vendored dynesty **3.1.0**; (b) Method=engine — Dynesty always Dynamic, MultiNest always static; `Bounds.dynamic` rejected (`JV2-BND-012`); (c) Sampling Simple/Full templates narrowed; (d) **AdaptiveBridson** renames AdaptiveLevelSet (no alias); (e) `Jarvis2 check`: workers=1, `SAMPLE/test/<uuid>/` flat, pack off; CSV-or-N-samples smoke. |
 
 | D14.1 | Worker template over Redis + `Jarvis2 worker start --connect`                           | D14       | —                | todo                                   |            | `DESIGN_CLUSTER_EXECUTION_2.0.md` §3/§4. Template `hep:worker:template:<scan>` (JSON, version-guarded); two pools on one host drain a live scan with DATABASE parity. |
 | D14.2 | Remote-aware watchdog + `<host>:<n>` worker ids                                         | D14       | D14.1            | todo                                   |            | Sweep foreign dead workers, never respawn; pool-local D12.7 orphan reaping. |
@@ -141,10 +148,16 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D15.4 | Portal File / HepMC / LHE exposure + V2 fixtures                                        | D15       | Portal release   | todo                                   |            | Same model as Portal 1.4.0 SLHA work; one real fixture per format. |
 
 **Post-D12 polish already landed (no open WP; status only):** CLI `-v` / `ps` / `kill` /
-logging flags; `logs/<scan>/` layout; FileOperation SAMPLE process; Archiver logger; full
-`samples.csv` + scan performance log; **sample `op_count` single-increment contract**
-(`submit_result` only — see `components/redis_queue.md` §5). Baseline docs:
-`README.md` + `components/cli.md`.
+logging flags; FileOperation SAMPLE process; full `samples.csv` + scan performance log;
+**sample `op_count` single-increment contract** (`submit_result` only — see
+`components/redis_queue.md` §5).
+
+**Post-D13 polish already landed (no open WP; status only):** D13.8 flat feedback wire;
+nested production hygiene (archive catch-up, MultiNest CSV parity, toy-logL disabled);
+component multi-sink `logs/<scan>/{core,factory,sampler,archiver,datarecorder,worker-NN}.log`
++ `Jarvis-HEP.*` presentation labels; control archive ‰ at DEBUG; nested
+`Results.summary()` → sampler.log; `project_template/bin/sampling/` Dynesty/MultiNest
+YAML templates. Baseline docs: `README.md` + `components/cli.md`.
 
 **Next pick order (current):** **D14** (cluster), then D15 (reuse/analysis).
 **D8 stays fully deferred** (maintainer decision, re-confirmed 2026-07-16) — do not start

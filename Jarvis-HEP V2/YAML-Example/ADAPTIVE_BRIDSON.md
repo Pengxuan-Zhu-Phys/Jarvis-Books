@@ -1,9 +1,9 @@
-# YAML Example — AdaptiveLevelSet
+# YAML Example — AdaptiveBridson
 
-Public-facing task-YAML example for **`Sampling.Method: AdaptiveLevelSet`**
+Public-facing task-YAML example for **`Sampling.Method: AdaptiveBridson`**
 (feedback-driven level-set tracer, 2 ≤ d ≤ 5).
 
-- **As-built code**: `jarvishep2/Sampling/adaptive_level_set.py`
+- **As-built code**: `jarvishep2/Sampling/adaptive_bridson.py`
 - **Design**: [`components/adaptive_voronoi_contour.md`](../components/adaptive_voronoi_contour.md)
 - **Full key inventory** (all methods): [`YAML_REFERENCE_2.0.md`](../YAML_REFERENCE_2.0.md)
 
@@ -32,10 +32,10 @@ EnvReqs:
 
 Sampling:
   # ============================================================
-  # AdaptiveLevelSet — Sampling block (complete for this method)
+  # AdaptiveBridson — Sampling block (complete for this method)
   # ============================================================
 
-  Method: AdaptiveLevelSet       # REQUIRED for this recipe
+  Method: AdaptiveBridson       # REQUIRED for this recipe
                                  # (registered stateless=False; uses hep:feedback)
 
   Seed: 42                       # int; alias: seed; default 0
@@ -57,8 +57,8 @@ Sampling:
           max: 5000.0
           # mean / stddev        # Normal / Log-Normal
           # location / scale     # Logit (defaults 0 / 1)
-          # num: …               # unused by AdaptiveLevelSet (Grid-only)
-          # length: …            # unused by AdaptiveLevelSet
+          # num: …               # unused by AdaptiveBridson (Grid-only)
+          # length: …            # unused by AdaptiveBridson
                                  # (u-domain is always the unit cube [0,1]^d)
     - name: m12
       distribution:
@@ -72,8 +72,8 @@ Sampling:
     # d = 4–5 → kNN neighbor graph (proximity-approximate)
     # d < 2 or d > 5 → ValueError at set_config
 
-  AdaptiveLevelSet:              # REQUIRED sub-block (name matches Method)
-                                 # alias accepted: adaptive_level_set
+  AdaptiveBridson:              # REQUIRED sub-block (name matches Method)
+                                 # alias accepted: adaptive_bridson
 
     # ---- required ----------------------------------------------------------
     target_expression: "LogL"    # REQUIRED (non-empty string)
@@ -151,13 +151,13 @@ Likelihood:
 
 ---
 
-## Sampling key table (AdaptiveLevelSet)
+## Sampling key table (AdaptiveBridson)
 
 ### Shared `Sampling` keys
 
 | Key | Required | Type / values | Default | Notes |
 |-----|----------|---------------|---------|--------|
-| `Method` | **yes** | `AdaptiveLevelSet` | — | Case-sensitive method name |
+| `Method` | **yes** | `AdaptiveBridson` | — | Case-sensitive method name |
 | `Seed` | no | int | `0` | Alias `seed`; seeds all generations |
 | `selection` | no | sympy bool string | none | Physical-param filter before submit |
 | `Variables` | **yes** | list of maps | — | Length **2–5**; each needs `name` + `distribution` |
@@ -165,10 +165,10 @@ Likelihood:
 | `Variables[].description` | no | string | — | Documentation only |
 | `Variables[].distribution.type` | **yes** | `Flat` / `Log` / `Normal` / `Log-Normal` / `Logit` | — | Same catalog as other samplers |
 | `Variables[].distribution.parameters` | **yes** | map | — | Bounds / mean / etc. per type |
-| `AdaptiveLevelSet` | **yes** | map | — | Alias `adaptive_level_set` |
+| `AdaptiveBridson` | **yes** | map | — | Alias `adaptive_bridson` |
 | `LogLikelihood` | no | list | — | Alias of top-level `Likelihood.expressions` |
 
-### `Sampling.AdaptiveLevelSet` keys
+### `Sampling.AdaptiveBridson` keys
 
 | Key | Required | Type | Default | Notes |
 |-----|----------|------|---------|--------|
@@ -194,8 +194,8 @@ Likelihood:
 | `EnvReqs.V2.workers` | Worker process count (factory uses 1 when ≤ 0) |
 | `EnvReqs.V2.batch_size` | Sampler submit-group size (default 256 after normalize) |
 
-Distributed AdaptiveLevelSet always uses the internal Redis runtime (local service required).
-Workers set `publish_feedback: true` automatically when `Method: AdaptiveLevelSet` (no YAML flag).
+Distributed AdaptiveBridson always uses the internal Redis runtime (local service required).
+Workers set `publish_feedback: true` automatically when `Method: AdaptiveBridson` (no YAML flag).
 
 ---
 
@@ -236,14 +236,14 @@ EnvReqs:
     workers: 2
     batch_size: 8
 Sampling:
-  Method: AdaptiveLevelSet
+  Method: AdaptiveBridson
   Seed: 7
   Variables:
     - name: x
       distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
     - name: y
       distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
-  AdaptiveLevelSet:
+  AdaptiveBridson:
     target_expression: "r2"
     target_value: 0.04          # circle radius 0.2 about (0.5, 0.5)
     contour_precision: 0.05

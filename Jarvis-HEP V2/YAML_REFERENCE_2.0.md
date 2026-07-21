@@ -135,7 +135,7 @@ EnvReqs:
 
 # ---- sampling (required for a runnable task) --------------------------------
 Sampling:
-  Method: Bridson                # Bridson | Random | Grid | CSV | AdaptiveLevelSet
+  Method: Bridson                # Bridson | Random | Grid | CSV | AdaptiveBridson
   # mode: check_modules          # special task type; replaces Method (needs `data`)
   # data: "&J/points.csv"        # check_modules input CSV (alias: points_csv)
   Seed: 42                       # int (alias: seed); default 0
@@ -163,7 +163,7 @@ Sampling:
   #   uuid_column: uuid          #   default "uuid"; missing column -> fresh uuid4 per row
   #   delimiter: ","             #   default ","
   #   encoding: utf-8            #   default utf-8
-  # AdaptiveLevelSet:            # AdaptiveLevelSet method: REQUIRED sub-block (§6.9)
+  # AdaptiveBridson:            # AdaptiveBridson method: REQUIRED sub-block (§6.9)
   #   target_expression: "LogL"  #   REQUIRED sympy over returned observables
   #   target_value: -2.9957      #   REQUIRED level-set constant
   #   contour_precision: 0.01    #   default 0.01 (u-space edge length)
@@ -327,21 +327,21 @@ detail (error types, aliases, code citations).
 | `Sampling.CSV.uuid_column` | [6.6](#66-csv) | no | `uuid` |
 | `Sampling.CSV.delimiter` | [6.6](#66-csv) | no | `,` |
 | `Sampling.CSV.encoding` | [6.6](#66-csv) | no | `utf-8` |
-| `Sampling.AdaptiveLevelSet` / `adaptive_level_set` | [6.9](#69-adaptivelevelset) | **yes** (ALS) | — |
-| `Sampling.AdaptiveLevelSet.target_expression` | [6.9](#69-adaptivelevelset) | **yes** | — |
-| `Sampling.AdaptiveLevelSet.target_value` | [6.9](#69-adaptivelevelset) | **yes** | — |
-| `Sampling.AdaptiveLevelSet.contour_precision` | [6.9](#69-adaptivelevelset) | no | `0.01` |
-| `Sampling.AdaptiveLevelSet.function_tolerance` | [6.9](#69-adaptivelevelset) | no | `0.05` |
-| `Sampling.AdaptiveLevelSet.initial_radius` | [6.9](#69-adaptivelevelset) | no | `0.08` |
-| `Sampling.AdaptiveLevelSet.refinement_factor` | [6.9](#69-adaptivelevelset) | no | `0.5` (d≤3) / `0.65` (d≥4) |
-| `Sampling.AdaptiveLevelSet.max_generations` | [6.9](#69-adaptivelevelset) | no | `25` |
-| `Sampling.AdaptiveLevelSet.max_points` | [6.9](#69-adaptivelevelset) | no | `5000` (d≤3) / `20000` (d≥4) |
-| `Sampling.AdaptiveLevelSet.max_new_per_generation` | [6.9](#69-adaptivelevelset) | no | `max_points // 10` |
-| `Sampling.AdaptiveLevelSet.k_ref` | [6.9](#69-adaptivelevelset) | no | `4` |
-| `Sampling.AdaptiveLevelSet.neighbor_graph` | [6.9](#69-adaptivelevelset) | no | `auto` |
-| `Sampling.AdaptiveLevelSet.knn_k` | [6.9](#69-adaptivelevelset) | no | `4 * d` |
-| `Sampling.AdaptiveLevelSet.slice_pairs` | [6.9](#69-adaptivelevelset) | no | all pairs (d≥4) |
-| `Sampling.AdaptiveLevelSet.simplify_tolerance` | [6.9](#69-adaptivelevelset) | no | off |
+| `Sampling.AdaptiveBridson` / `adaptive_bridson` | [6.9](#69-adaptivebridson) | **yes** (ALS) | — |
+| `Sampling.AdaptiveBridson.target_expression` | [6.9](#69-adaptivebridson) | **yes** | — |
+| `Sampling.AdaptiveBridson.target_value` | [6.9](#69-adaptivebridson) | **yes** | — |
+| `Sampling.AdaptiveBridson.contour_precision` | [6.9](#69-adaptivebridson) | no | `0.01` |
+| `Sampling.AdaptiveBridson.function_tolerance` | [6.9](#69-adaptivebridson) | no | `0.05` |
+| `Sampling.AdaptiveBridson.initial_radius` | [6.9](#69-adaptivebridson) | no | `0.08` |
+| `Sampling.AdaptiveBridson.refinement_factor` | [6.9](#69-adaptivebridson) | no | `0.5` (d≤3) / `0.65` (d≥4) |
+| `Sampling.AdaptiveBridson.max_generations` | [6.9](#69-adaptivebridson) | no | `25` |
+| `Sampling.AdaptiveBridson.max_points` | [6.9](#69-adaptivebridson) | no | `5000` (d≤3) / `20000` (d≥4) |
+| `Sampling.AdaptiveBridson.max_new_per_generation` | [6.9](#69-adaptivebridson) | no | `max_points // 10` |
+| `Sampling.AdaptiveBridson.k_ref` | [6.9](#69-adaptivebridson) | no | `4` |
+| `Sampling.AdaptiveBridson.neighbor_graph` | [6.9](#69-adaptivebridson) | no | `auto` |
+| `Sampling.AdaptiveBridson.knn_k` | [6.9](#69-adaptivebridson) | no | `4 * d` |
+| `Sampling.AdaptiveBridson.slice_pairs` | [6.9](#69-adaptivebridson) | no | all pairs (d≥4) |
+| `Sampling.AdaptiveBridson.simplify_tolerance` | [6.9](#69-adaptivebridson) | no | off |
 
 ### 3.3 `Mapper` / `LibDeps` / `Calculators` / `Operas` / `Likelihood`
 
@@ -486,7 +486,7 @@ used by the executor, not a supported task interface.
 | Family | Methods |
 |---|---|
 | Stateless | `Bridson`, `Random`, `Grid`, `CSV` |
-| Contour | `AdaptiveLevelSet` (§6.9) |
+| Contour | `AdaptiveBridson` (§6.9) |
 | MCMC | `MCMC`, `AMMCMC`, `AM`, `DRAM` |
 | Ensemble / PT | `EnsembleMCMC`, `Ensemble`, `DEMCMC`, `PTMCMC`, `PT`, `PTEnsemble` |
 | Nested | `Dynesty`, `MultiNest` (§6.10) |
@@ -637,23 +637,58 @@ Sampling:
     variables: [x, y]
 ```
 
-### 6.7 `check_modules` (`Sampling.mode: check_modules`)
+### 6.7 `check_modules` (`Jarvis2 check` / `Sampling.mode: check_modules`)
 
-A fixed-point calculator smoke path — runs the calculator/opera/likelihood chain on rows from
-a CSV instead of proposing new points. Independent of `Sampling.Method`, but see the ordering
-gotcha in Appendix A.12: a stray invalid `Sampling.Method` value still breaks bootstrap even
-in this mode.
+Smoke path for the calculator/opera/likelihood chain. **Two sources of points** (in order):
+
+1. **CSV fixed-point replay** when the resolved file exists.
+2. Else **sampler-drawn smoke points** (`n_samples`, default **10**) from `Sampling.Method`
+   (V1-like assembly-line: Bridson/Random/Grid use `propose_next`; Nested/MCMC draw unit-cube
+   `u` and run the Worker plan).
+
+CSV path resolution:
+
+| Priority | Source |
+|---|---|
+| 1 | `Sampling.data` / `Sampling.points_csv` (task YAML) |
+| 2 | `EnvReqs.V2.check_modules.data` (default environment YAML) |
+| 3 | Built-in default `&J/data/check_modules_points.csv` |
 
 | Key | Required | Notes |
 |---|---|---|
-| `data` (alias `points_csv`) | **yes** | CSV with columns `uuid,x,y` — **the x/y pair is hard-coded** (`core.py:157`, Appendix A.7) |
+| `Sampling.data` (alias `points_csv`) | no | Overrides default CSV; if the file is missing → sampler fallback |
+| `EnvReqs.V2.check_modules.data` | no | Default CSV path from `deps/environment_default.yaml` |
+| `EnvReqs.V2.check_modules.n_samples` | no | Default `10` — used only when CSV is missing |
 
-Minimal recipe (adapted from `tests/parity_project/check_modules.yaml`):
+At start the control log prints which path was used, e.g.  
+`check-modules: using fixed points from CSV -> …` or  
+`check-modules: CSV not found … drawing 10 smoke point(s) from Sampling.Method=…`.
+
+**Always-on runtime policy for `Jarvis2 check` / `--check-modules` (not YAML):**
+
+| Setting | Value | Why |
+|---|---|---|
+| Workers | **1** | simple, inspectable smoke |
+| Sample root | **`outputs/<scan>/SAMPLE/test/<uuid>/`** | flat uuid dirs (no `00000N/` buckets) |
+| Numbered buckets | **off** (`sample_directory.enabled=false`) | direct inspect under `test/` |
+| Bucket pack (tar.gz) | **off** | never tar during check |
+
+Full `Jarvis2 run` is unchanged (multi-worker, `SAMPLE/00000N/<uuid>/`, optional pack).
+
+Coordinate columns for CSV rows follow `Sampling.Variables` names when present (not hard-coded
+`x,y` only). Minimal dedicated check card:
 
 ```yaml
 Sampling:
   mode: check_modules
   data: "&J/data/check_modules_points.csv"
+```
+
+Or run a normal scan card with smoke points only:
+
+```bash
+Jarvis2 check bin/Example_MultiNest_Operas_Quick.yaml
+# → CSV if present under EnvReqs default path; else 10 MultiNest-dim unit-cube points
 ```
 
 ### 6.8 Likelihood Expression Semantics
@@ -668,19 +703,19 @@ functions listed in the shared-language catalog are available through
 `MissingExpressionVariablesError` (the Sample fails). See Appendix A.6 for the remaining
 undeclared-symbol collision risk.
 
-### 6.9 AdaptiveLevelSet
+### 6.9 AdaptiveBridson
 
-Feedback-driven level-set tracer (`jarvishep2/Sampling/adaptive_level_set.py`). Registered
+Feedback-driven level-set tracer (`jarvishep2/Sampling/adaptive_bridson.py`). Registered
 `stateless=False`; runs only on the internal Redis runtime and automatically enables Worker
 `publish_feedback` (no YAML flag). Full annotated recipe and tables:
-[`YAML-Example/ADAPTIVE_LEVEL_SET.md`](YAML-Example/ADAPTIVE_LEVEL_SET.md).
+[`YAML-Example/ADAPTIVE_BRIDSON.md`](YAML-Example/ADAPTIVE_BRIDSON.md).
 
 **Constraints**
 
 | Constraint | Rule |
 |---|---|
 | Dimension | `2 ≤ len(Variables) ≤ 5` else `ValueError` at `set_config` |
-| Sub-block | `Sampling.AdaptiveLevelSet` (alias `adaptive_level_set`) **required** mapping |
+| Sub-block | `Sampling.AdaptiveBridson` (alias `adaptive_bridson`) **required** mapping |
 | Gen-0 | d ≤ 4 Bridson Poisson-disk on unit cube; d = 5 Sobol |
 | Neighbor graph | `auto` → Delaunay (d ≤ 3) / kNN (d ≥ 4); explicit `delaunay` / `knn` allowed |
 | Output | `<task_result_dir>/levelset.json` plus normal SAMPLE/DATABASE archive |
@@ -689,13 +724,13 @@ Feedback-driven level-set tracer (`jarvishep2/Sampling/adaptive_level_set.py`). 
 
 | Key | Required | Default | Notes |
 |---|---|---|---|
-| `Method` | **yes** | — | must be `AdaptiveLevelSet` |
+| `Method` | **yes** | — | must be `AdaptiveBridson` |
 | `Variables` | **yes** | — | length 2–5; same distribution catalog as §6.2 |
 | `Seed` / `seed` | no | `0` | Master `SeedSequence` for all generations |
 | `selection` | no | — | physical-param filter before submit (dropped, not failures) |
 | `LogLikelihood` | no | — | alias of `Likelihood.expressions` (§6.8) |
 
-**Keys under `Sampling.AdaptiveLevelSet`**
+**Keys under `Sampling.AdaptiveBridson`**
 
 | Key | Required | Default | Notes |
 |---|---|---|---|
@@ -722,14 +757,14 @@ EnvReqs:
     workers: 2
     batch_size: 8
 Sampling:
-  Method: AdaptiveLevelSet
+  Method: AdaptiveBridson
   Seed: 7
   Variables:
     - name: x
       distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
     - name: y
       distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
-  AdaptiveLevelSet:
+  AdaptiveBridson:
     target_expression: "r2"
     target_value: 0.04
     contour_precision: 0.05
@@ -753,25 +788,27 @@ Both methods use the **vendored dynesty 3.x** stack + Redis evaluation pool (UUI
 They are **not** Fortran MultiNest / pymultinest — V1 already used that naming for static
 `NestedSampler`.
 
-| Method | Engine default | Force |
-|---|---|---|
-| `Dynesty` | `DynamicNestedSampler` | `Bounds.dynamic: false` → static |
-| `MultiNest` | `NestedSampler` (static) | always static; ignores `dynamic: true` |
+| Method | Engine (fixed — no YAML switch) |
+|---|---|
+| `Dynesty` | always `DynamicNestedSampler` |
+| `MultiNest` | always static `NestedSampler` |
+
+**Do not set `Bounds.dynamic` / `Bounds.Dynamic`** — validation rejects those keys
+(`JV2-BND-012`). Choose the Method instead of a flag.
 
 YAML surface is aligned with the [official dynesty API](https://dynesty.readthedocs.io/en/stable/api.html):
 
 ```yaml
 Sampling:
-  Method: Dynesty          # or MultiNest
+  Method: Dynesty          # or MultiNest (static NestedSampler)
   selection: "x > 0"       # optional; rejects before physics when false
   Variables: [...]
   Bounds:
     nlive: 500             # required in practice; min 2
     rseed: 21              # RNG seed (also Sampling.Seed)
-    dynamic: true          # Dynesty only (default true); MultiNest ignores
     dlogz: 0.1             # evidence threshold alias:
-                           #   static  → run_nested.dlogz
-                           #   dynamic → run_nested.dlogz_init
+                           #   MultiNest → run_nested.dlogz
+                           #   Dynesty   → run_nested.dlogz_init
 
     # --- NestedSampler / DynamicNestedSampler constructor (official keys) ---
     # Prefer nested block; flat Bounds.bound / Bounds.sample / … also accepted.
@@ -793,16 +830,16 @@ Sampling:
       use_pool: null
       # history_filename / save_evaluation_history also accepted
 
-    # --- run_nested (official keys; filtered by static vs dynamic) ---
+    # --- run_nested (official keys; filtered by Method engine) ---
     run_nested:
       print_progress: true   # default true → Jarvis logger
       maxcall: 40000
       maxiter: null
-      # static only:
+      # MultiNest (static) only:
       # dlogz: 0.1
       # logl_max: .inf
       # add_live: true
-      # dynamic only:
+      # Dynesty (dynamic) only:
       # dlogz_init: 0.01
       # nlive_init / nlive_batch / maxbatch / n_effective / use_stop / …
       # checkpoint_file / checkpoint_every / resume (both)
@@ -813,26 +850,28 @@ Sampling:
 1. Constructor kwargs: union of flat official keys + `Bounds.sampler` / `Bounds.constructor`.
    HEP always injects `loglikelihood`, `prior_transform`, `ndim`, `pool`, `rstate` (stripped
    if a user pastes them). Unknown keys are **ignored with a warning**, never crash.
-2. `run_nested` kwargs: filtered to the live `run_nested` signature. Static vs dynamic
-   use different evidence keys (`dlogz` vs `dlogz_init`); a mis-named `dlogz` on Dynamic
-   is remapped to `dlogz_init` automatically.
+2. `run_nested` kwargs: filtered to the live `run_nested` signature. MultiNest uses
+   `dlogz`; Dynesty uses `dlogz_init` (a top-level `Bounds.dlogz` is remapped to
+   `dlogz_init` for Dynesty).
 3. Outputs: `DATABASE/dynesty_result.csv` or `DATABASE/multinest_result.csv` + stock
    Jarvis-PLOT `dynesty_runplot` jplot under `images/<scan>/`.
 
-**Minimal V1-compatible card (still valid):**
+**Minimal everyday card (recommended):**
 
 ```yaml
 Sampling:
-  Method: Dynesty
+  Method: Dynesty          # or MultiNest (static NestedSampler)
+  Seed: 21
   Variables: [...]
   Bounds:
-    nlive: 1600
-    rseed: 21
-    dlogz: 0.1
+    nlive: 100
+    dlogz: 0.5             # Dynesty → dlogz_init; MultiNest → static dlogz
     run_nested:
       print_progress: true
-      maxcall: 40000
+  LogLikelihood: [...]
 ```
+
+Scaffold templates: `project_template/bin/sampling/Sampling_{Dynesty,MultiNest}_{Simple,Full}.yaml`.
 
 ### 6.11 MCMC family: `MCMC` / `AMMCMC` / `AM` / `DRAM`
 
@@ -895,8 +934,8 @@ Sampling:
   FeedbackReturn:
     mode: minimal
 
-  Method: AdaptiveLevelSet
-  AdaptiveLevelSet:
+  Method: AdaptiveBridson
+  AdaptiveBridson:
     target_expression: "delta_chi2"
   # default auto: mode=fields, fields from target symbols
   FeedbackReturn:
@@ -1108,7 +1147,7 @@ At Worker startup, every Operas input expression is `sympify`/`lambdify` compile
 operator is resolved once. Each Sample evaluates those cached callables and invokes the cached
 operator. Likelihood expressions use the same compile-once-per-Worker lifecycle. Calculator
 Dump-variable expressions use the same class with a Worker-process cache, compiling on first
-use; AdaptiveLevelSet targets and sampler selections use control-process contexts.
+use; AdaptiveBridson targets and sampler selections use control-process contexts.
 
 **Shared expression language:**
 
@@ -1126,7 +1165,7 @@ use; AdaptiveLevelSet targets and sampler selections use control-process context
 `Gauss` is the V1 unnormalised Gaussian kernel; `Normal` includes `1/(σ√(2π))`;
 `LogGauss` omits the normalisation term; `Heaviside(0) = 0.5`. The mechanism is
 `ExpressionContext → CompiledExpression` for Operas, Likelihood, Calculator/Portal, Selection,
-and AdaptiveLevelSet; the YAML structures remain unchanged. See
+and AdaptiveBridson; the YAML structures remain unchanged. See
 [`V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md`](V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md)
 for the source audit and
 [`OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md`](OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md)
@@ -1206,12 +1245,21 @@ Two very different regimes coexist:
   problems, unknown `${LibDeps:…}`, opera `operator` missing/not callable, top-level
   `Runtime`, and unsupported `EnvReqs.V2` keys.
 
-There is **no schema validation layer** (the designed `ConfigLoader` + jsonschema was dropped;
-see `components/config_schema.md`). The small `EnvReqs.V2` surface is intentionally checked
-at load time so obsolete Runtime/Redis settings cannot silently change a run.
+**D13.9 config gate (as-built):** after `load_task_yaml`, every scan/check path runs
+`jarvishep2.task_validation.validate_task_config` **before Redis/Workers**. Failures are
+coded (`JV2-*`) with YAML paths and abort with exit 2. Closed surfaces include
+`Sampling.Method` / `Variables` (distribution types case-sensitive), Nested
+`Sampling.Bounds` allow-lists (Dynesty/MultiNest), `EnvReqs.V2` + Archiver/Cleanup
+unknown keys and illegal present values, Bridson `length`/`Radius`/`MaxAttempt`,
+Random `Point number`, CSV `path`. Dead keys (`execution.*.save`, …) are **warnings**
+(promoted by `--strict`). Offline: `Jarvis2 validate TASK.yaml [--strict] [--json]`.
 
-The planned Agent Bridge `--validate` verb (`DESIGN_AGENT_BRIDGE_2.0.md` §4.2, WP-D8.4) will
-surface the "silently coerced" list above as warnings without changing this runtime behavior.
+Design: [`DESIGN_YAML_VALIDATION_2.0.md`](DESIGN_YAML_VALIDATION_2.0.md).
+Loader notes: `components/config_schema.md`.
+
+Remaining soft coercions (if any still exist inside `normalize_*` for **omitted**
+keys only) apply defaults; **present-but-illegal** operational knobs hard-fail at the gate.
+Full Agent JSON envelope remains D8 (parked); D13.9 ships human + minimal `--json` issues list.
 
 ---
 
@@ -1255,7 +1303,7 @@ surface the "silently coerced" list above as warnings without changing this runt
    - Only a **missing/empty** `Sampling.Method` (with `Sampling.mode` not `check_modules`)
      falls through `init_sampler_from_config`'s falsy-method branch (no exception there) and
      is later caught by `run()`'s own `else:` branch, whose message historically named only
-     `Bridson` even though Random/Grid/CSV/AdaptiveLevelSet are equally valid choices.
+     `Bridson` even though Random/Grid/CSV/AdaptiveBridson are equally valid choices.
    - Net effect: the *rarer* mistake (forgetting `Sampling.Method` entirely) gets the *worse*
      message; the *common* mistake (a typo) already gets a fine one.
 10. **Silent-default normalization hides typos** (§13). At minimum, log a warning naming the
@@ -1274,7 +1322,7 @@ surface the "silently coerced" list above as warnings without changing this runt
     and resolves `Sampling.Method` via `Distributor.set_method` *before* `run()` ever checks
     `Sampling.mode`/`--check-modules`. A check-modules task doesn't use `Sampling.Method` at
     all, but if one is present (e.g. left over from copy-pasting a real scan YAML) and set to
-    anything other than Bridson/Random/Grid/CSV/AdaptiveLevelSet, bootstrap fails with
+    anything other than Bridson/Random/Grid/CSV/AdaptiveBridson, bootstrap fails with
     `Distributor.set_method`'s `NotImplementedError` before the check-modules path is ever
     reached. Two independent-looking knobs (`mode` and `Method`) have a hidden ordering
     coupling.

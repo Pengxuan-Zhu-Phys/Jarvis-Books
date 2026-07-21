@@ -2,14 +2,16 @@
 
 **Role**: the concrete sampling algorithms. Each proposes `u_coords` (or replays rows), builds
 light task dicts, and submits them to Redis via the [sampler base](sampler.md).
-**Status**: **As-built** @ D13.6 (stateless + ALS + MCMC/ensemble + Dynesty/MultiNest + diagnostics).
+**Status**: **As-built** @ D13.10 (stateless + AdaptiveBridson + MCMC/ensemble + Dynesty 3.1 / MultiNest + validation).
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §11;
 [`../DESIGN_SAMPLERS_2.0.md`](../DESIGN_SAMPLERS_2.0.md); [sampler.md](sampler.md),
-[checkpoint.md](checkpoint.md), [feedback_sampler.md](feedback_sampler.md).
+[checkpoint.md](checkpoint.md), [feedback_sampler.md](feedback_sampler.md),
+[adaptive_voronoi_contour.md](adaptive_voronoi_contour.md).
 **Reuses V1**: none by import (engines copied under `Sampling/Source/`, not imported).
 
 > **Out of scope (still):** RobustAM, DREAM*, Slice/ESS, MALA/HMC/NUTS, RLTPMCMC, DNN, Diver,
-> Fortran MultiNest. Nested YAML surface is official dynesty 3.x (see YAML_REFERENCE §6.10).
+> Fortran MultiNest. Nested YAML: Method=engine (Dynesty=always Dynamic, MultiNest=always static);
+> vendored dynesty **3.1.0** (see YAML_REFERENCE §6.10). No `Bounds.dynamic`.
 
 ---
 
@@ -23,10 +25,10 @@ SamplingVirtial (sampler.py)               # base: build_sample + Redis submit
       ├─ CSVSampler (csv_sampler.py)  method="CSV"
       ├─ Bridson  (bridson.py)        method="Bridson"
       └─ FeedbackSampler (feedback_sampler.py)   # propose → hep:feedback → absorb
-           ├─ AdaptiveLevelSetSampler (adaptive_level_set.py)
+           ├─ AdaptiveBridsonSampler (adaptive_bridson.py)
            ├─ MCMCSampler (mcmc_sampler.py)  # MCMC/AM/DRAM + Ensemble/DE/PT
-           ├─ DynestySampler (dynesty_sampler.py)
-           └─ MultiNestSampler (multinest_sampler.py)  # static NestedSampler
+           ├─ DynestySampler (dynesty_sampler.py)      # always DynamicNestedSampler
+           └─ MultiNestSampler (multinest_sampler.py)  # always static NestedSampler
 SeededOperaSampler (seeded_sampler.py)     # SamplingVirtial directly (test/acceptance)
 ```
 
@@ -123,8 +125,10 @@ selection compile-count caching, distributed submission counts, export/import ro
 
 - **FeedbackSampler** (D13.1) — shared propose → Redis → `hep:feedback` → absorb base.
   Porting guide: [feedback_sampler.md](feedback_sampler.md).
-- **AdaptiveLevelSetSampler** (`method="AdaptiveLevelSet"`, D10, 2 ≤ d ≤ 5) — **shipped** on
-  `FeedbackSampler`. Full spec: [adaptive_voronoi_contour.md](adaptive_voronoi_contour.md).
+- **AdaptiveBridsonSampler** (`method="AdaptiveBridson"`, D10, 2 ≤ d ≤ 5) — **shipped** on
+  `FeedbackSampler` (`adaptive_bridson.py`). Config: `Sampling.AdaptiveBridson`.
+  Full spec: [adaptive_voronoi_contour.md](adaptive_voronoi_contour.md).
+  Tests: `tests/test_adaptive_bridson.py`.
 - **MCMC / AMMCMC / AM / DRAM** (D13.2) — **shipped** on `FeedbackSampler`
   (`mcmc_sampler.py` + `Sampling/Source/MCMC/` engines). V1 Bounds surface
   (`num_chains`/`chains`, `num_iters`/`steps`, `proposal_scale`, adapt/dr keys).
@@ -132,11 +136,10 @@ selection compile-count caching, distributed submission counts, export/import ro
 - **Ensemble / DEMCMC / PT** (D13.3) — **shipped**: stretch (`EnsembleMCMC`/`Ensemble`),
   DE (`DEMCMC`), parallel tempering (`PTMCMC`/`PT`/`PTEnsemble`). Half-ensemble
   barriers; control-side temperature swaps. Tests: `tests/test_ensemble_samplers.py`.
-- **Dynesty** (D13.5) — **shipped** (`dynesty_sampler.py` + vendored
-  `Sampling/Source/Dynesty` 3.0.0 with UUID channel + RedisEvaluationPool).
-  **YAML = official dynesty 3.x API**: `Bounds.sampler` / flat constructor keys
-  (`bound`, `sample`, `walks`, …) + `Bounds.run_nested` (static `dlogz` /
-  dynamic `dlogz_init` alias map). Default DynamicNestedSampler.
+- **Dynesty** (D13.5 / D13.10) — **shipped** (`dynesty_sampler.py` + vendored
+  `Sampling/Source/Dynesty` **3.1.0** with UUID channel + RedisEvaluationPool).
+  Always **DynamicNestedSampler** (no `Bounds.dynamic`). Official constructor /
+  `run_nested` pass-through; `Bounds.dlogz` → `dlogz_init`.
   Post-run: `DATABASE/dynesty_result.csv` + Jarvis-PLOT `dynesty_runplot`.
   Tests: `tests/test_dynesty_sampler.py`, `tests/test_nested_yaml_kwargs.py`.
 - **MultiNest** — **shipped** as **static** NestedSampler wrapper

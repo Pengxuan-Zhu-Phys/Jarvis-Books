@@ -1,17 +1,17 @@
-# Component — Adaptive Level-Set Sampler (`jarvishep2/Sampling/adaptive_level_set.py`)
+# Component — AdaptiveBridson Sampler (`jarvishep2/Sampling/adaptive_bridson.py`)
 
 **Role**: a feedback-driven sampler (2 ≤ d ≤ 5) that traces a target level-set
-(`f(observables) = target_value`) efficiently: a global low-discrepancy pass explores
-`[0,1]^d`, then **crossing detection on a neighbor graph** over the evaluated points
+(`f(observables) = target_value`) efficiently: a global **Bridson-like** low-discrepancy pass
+explores `[0,1]^d`, then **crossing detection on a neighbor graph** over the evaluated points
 identifies where the level-set passes, and refinement batches are spent **only** near those
 crossings until the level-set is resolved to a preset precision. The neighbor graph is
-**exact Delaunay adjacency for d ≤ 3** (the Bridson–Voronoi flagship) and an **approximate
-kNN graph for d = 4–5** (the pragmatic "details reasonable, not perfect" regime).
-**Status**: ✅ **Implemented** on `jarvis2` — `adaptive_level_set.py`,
-`hep:feedback` channel, `Distributor` registration `AdaptiveLevelSet` (`stateless=False`).
-Target expressions use shared `ExpressionContext`. YAML inventory: §6.9 of
+**exact Delaunay adjacency for d ≤ 3** and an **approximate kNN graph for d = 4–5**.
+**Status**: ✅ **Implemented** on `jarvis2` — `adaptive_bridson.py`,
+`hep:feedback` channel, `Distributor` registration **`AdaptiveBridson` only** (`stateless=False`).
+Former name `AdaptiveLevelSet` is **not** accepted. Target expressions use shared
+`ExpressionContext`. YAML inventory: §6.9 of
 [`YAML_REFERENCE_2.0.md`](../YAML_REFERENCE_2.0.md) and
-[`YAML-Example/ADAPTIVE_LEVEL_SET.md`](../YAML-Example/ADAPTIVE_LEVEL_SET.md).
+[`YAML-Example/ADAPTIVE_BRIDSON.md`](../YAML-Example/ADAPTIVE_BRIDSON.md).
 Milestone **D10**: D10.1–D10.5 **done** (2026-07-16: Hausdorff §9.1–9.8; d=3 sphere /
 d=4 proximity shell / d=5 Sobol gen-0; resume-safe `run_adaptive`).
 **Origin**: maintainer's Bridson + Voronoi adaptive-contour idea, elaborated in two external
@@ -72,7 +72,7 @@ drafts.
 | C3 | `UMapper.from_config(...)`, `self._umapper.map` + inverse | No `UMapper` class; use `Sampling/variables.load_variables` + `sampling_utils.map_u_to_physical` for the sampler-side u→x it needs (exporting physical coords, `selection`). No inverse mapping is required — all geometry stays in u-space |
 | C4 | `Bridson(radius=…).generate_batch(n)` | No such class API. Reuse the **module-level `Bridson_sampling(dims, radius, k, hypersphere_sample)`** function from `Sampling/bridson.py` for generation-0 (d ≤ 4); refinement candidates are drawn per-edge (§4.4), not via a local Bridson instance |
 | C5 | `__init__(self, config)` | V2 samplers are no-arg constructed by a `Distributor` factory and configured via `set_config(config)` |
-| C6 | Inherit `SamplingVirtial`; add a `match` case in `Distributor` | Inherit **`FeedbackSampler`** (D13.1; sits on `CheckpointedSampler` so checkpoint heartbeat + resume come free); register via **`Distributor.register("AdaptiveLevelSet", factory, stateless=False, resume="implemented")`** — the registry landed with D9.2, no `match` edits exist anymore |
+| C6 | Inherit `SamplingVirtial`; add a `match` case in `Distributor` | Inherit **`FeedbackSampler`** (D13.1; sits on `CheckpointedSampler` so checkpoint heartbeat + resume come free); register via **`Distributor.register("AdaptiveBridson", factory, stateless=False, resume="implemented")`** — the registry landed with D9.2, no `match` edits exist anymore |
 | C7 | `Variables: [m0, m12]` in the YAML example | Wrong shape — `Sampling.Variables` is a list of mappings (`name` + `distribution`), per `YAML_REFERENCE_2.0.md` §6.2. Corrected recipe in §6 |
 | C8 | Results consumed ad-hoc from `hep:results` inside the loop | The archive queue has exactly one consumer (the Archiver); a sampler pulling from it would race the persistence path. A **new opt-in feedback channel** is required (§5) — the only new runtime infrastructure this sampler needs |
 | C9 | Refinement whenever "new results" arrive (timeout-polled) | Non-deterministic: refinement decisions would depend on worker-race arrival order, breaking seeded reproducibility (a V2 hard invariant). Corrected to **generation barriers** (§4.1): propose generation *g*, wait for *all* of generation *g*, then refine. Slightly lower worker utilization at generation edges; exact reproducibility for free |
@@ -109,10 +109,10 @@ class NeighborGraph(Protocol):
 class DelaunayGraph:      # d ≤ 3: exact adjacency = voronoi.ridge_points (qhull "QJ")
 class KNNGraph:           # d = 4–5: symmetric union of knn_k nearest-neighbor edges (cKDTree)
 
-class AdaptiveLevelSetSampler(FeedbackSampler):   # D13.1: FeedbackSampler → CheckpointedSampler
-    method = "AdaptiveLevelSet"
+class AdaptiveBridsonSampler(FeedbackSampler):   # D13.1: FeedbackSampler → CheckpointedSampler
+    method = "AdaptiveBridson"
 
-    # --- config (set_config, from Sampling.AdaptiveLevelSet) ---
+    # --- config (set_config, from Sampling.AdaptiveBridson) ---
     _target_expression: str            # REQUIRED
     _target_value: float               # REQUIRED
     _contour_precision: float          # default 0.01   (u-space max crossing-edge length)
@@ -268,7 +268,7 @@ The only piece V2 lacks today. **Spec:**
 
 ```yaml
 Sampling:
-  Method: AdaptiveLevelSet
+  Method: AdaptiveBridson
   Seed: 42                            # int (alias seed); drives ALL generations (§7)
   Variables:                          # 2–5 entries (ValueError otherwise)
     - name: m0
@@ -276,7 +276,7 @@ Sampling:
     - name: m12
       distribution: {type: Log,  parameters: {min: 100.0, max: 3000.0}}
     # - name: tanb   …                # add up to 5; d ≥ 4 switches to proximity mode (§1.1)
-  AdaptiveLevelSet:
+  AdaptiveBridson:
     target_expression: "LogL"         # REQUIRED; sympy over returned observables (A.6 caveat)
     target_value: -2.9957             # REQUIRED; e.g. 95% CL in ΔLogL
     contour_precision: 0.008          # u-space; default 0.01
@@ -343,7 +343,7 @@ implementation, add the block to `YAML_REFERENCE_2.0.md` (new §6.9 + Key Index 
 
 ---
 
-## 9. Tests (`tests/test_adaptive_level_set.py`)
+## 9. Tests (`tests/test_adaptive_bridson.py`)
 
 1. **Synthetic parity (d=2)**: circle / ellipse / two disjoint blobs via an opera-only `f`;
    Hausdorff distance of the polyline to the analytic contour < 2×`contour_precision`

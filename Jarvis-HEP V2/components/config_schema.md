@@ -10,12 +10,11 @@ rejected; Redis internalized).
 **Reuses V1**: none by import. V1-shaped `EnvReqs.Check_default_dependencies` path is retained as
 the external defaults entry point; only `EnvReqs.V2` from that file is consumed by V2.
 
-> **As-built:** there is **no `config.py`, no `ConfigLoader`, no jsonschema validation**, and no
-> V1 environment checks (`check_ROOT` / `check_PYTHON_env` / …). Config handling is three small
-> modules: YAML load + `EnvReqs` merge + path normalization (`task_config.py`), internal block
-> normalization with defaults (`runtime_config.py`), and Worker-blueprint assembly
-> (`worker_config.py`). Validation is light (type coercion + defaulting + focused hard errors),
-> not schema-based.
+> **As-built (D13.9):** no V1 `config.py` / full-document jsonschema / env checks
+> (`check_ROOT` / …). Config path is: YAML load + `EnvReqs` merge (`task_config.py`) →
+> **pure validation gate** (`task_validation.py` + `contracts/`) → internal normalization
+> (`runtime_config.py`) → Worker blueprint (`worker_config.py`). The gate hard-fails science
+> and operational typos **before Redis**; see [`DESIGN_YAML_VALIDATION_2.0.md`](../DESIGN_YAML_VALIDATION_2.0.md).
 
 ---
 
@@ -45,7 +44,12 @@ Optional merge sources (task values always win):
 | `sampling_method(config)` | `Sampling.Method`. |
 | `is_check_modules_task(config)` | `Sampling.mode == check_modules`. |
 | `resolve_sampling_path(config, raw)` | resolve `&J/`, abspath, or task-yaml-relative path. |
-| `check_modules_points_path(config)` | resolve `Sampling.data`/`points_csv` for check-modules. |
+| `resolve_check_modules_csv(config)` | CSV path resolution (task → EnvReqs.V2.check_modules → default); `(path\|None, raw_spec)`. |
+| `check_modules_n_samples(config)` | smoke count when CSV missing (default 10). |
+| `check_modules_points_path(config)` | hard-require existing CSV (raises if missing). |
+
+**`EnvReqs.V2` also accepts** `check_modules: {data, n_samples}`, `sample_directory`, `cleanup`,
+`archiver`, `redis`, `factory`, `worker` (whitelist in `SUPPORTED_ENVREQS_V2_KEYS`).
 
 ## 2. `runtime_config.py`
 
@@ -87,12 +91,25 @@ load_task_yaml(path)
    → merge EnvReqs defaults + task EnvReqs.V2
    → config["Runtime"] internal adapter (mode=redis, workers, batch_size, …)
    → stamp task paths
-get_runtime_block / get_archiver_config / get_watchdog_config …
-build_worker_config(config, …) → picklable blueprint → Worker (spawn)
+validate_task_config(config)          # D13.9 pure gate (JV2-* codes)
+   → errors → ConfigValidationError / exit 2 (no Redis)
+   → warnings logged after init_logger; --strict promotes to errors
+[if check-modules]
+   _apply_check_modules_runtime_policy()
+   → workers=1; SAMPLE/test/<uuid>/ flat; pack off
+bootstrap Redis / Workers / Archiver …
 ```
 
-Fail-fast errors are explicit `ValueError` / `FileNotFoundError` (top-level Runtime, bad/missing
-defaults file, unsupported EnvReqs.V2 keys, missing check-modules CSV) — not schema messages.
+CLI:
+- `Jarvis2 validate TASK.yaml [--strict] [--json]` — config only, no Redis.
+- `Jarvis2 run TASK.yaml` — full scan (validation default on).
+- `Jarvis2 check TASK.yaml` — smoke: 1 worker, `SAMPLE/test/<uuid>/`, no tar; CSV points or N draws.
+
+`Jarvis2Core.load_task_yaml(..., validate=True)` is the default for `run` / `check`.
+
+Fail-fast errors: loader `ValueError` / `FileNotFoundError` (top-level Runtime, bad defaults
+path, unsupported EnvReqs.V2 keys) **plus** gate `ConfigValidationError` (Method, Variables,
+Bounds, Archiver/Cleanup, …). Nested: `Bounds.dynamic` → `JV2-BND-012` (Method selects engine).
 
 ---
 
@@ -109,5 +126,9 @@ defaults file, unsupported EnvReqs.V2 keys, missing check-modules CSV) — not s
 
 - `tests/test_task_config_compat.py` — EnvReqs merge, worker/workers alias, reject top-level Runtime,
   unsupported V2 keys.
+- `tests/test_task_validation.py` — D13.9 gate (Variables, Nested Bounds, Archiver, check_modules,
+  CLI `validate`, golden sampling templates).
+- `tests/test_check_modules_resolve.py` — CSV resolution + sampler N-sample fallback.
+- `tests/test_core_run_distributed.py` — check-modules e2e under `SAMPLE/test/` flat uuid.
 - Also exercised through `tests/test_cli.py`, `tests/test_d0_integration.py`,
   `tests/test_distributed_acceptance.py`, and calculator/clone_shadow suites.

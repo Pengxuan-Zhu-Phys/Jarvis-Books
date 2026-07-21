@@ -30,7 +30,7 @@ Docs/
 ├── DESIGN_SAMPLE_PROGRESS_MONITOR.md ← monitor stage-on-heartbeat (aligned with coordination design)
 ├── YAML_REFERENCE_2.0.md           ← as-built task-YAML reference (every key, defaults, gaps)
 ├── YAML-Example/                   ← public YAML recipes (per method)
-│   └── ADAPTIVE_LEVEL_SET.md       ← AdaptiveLevelSet: full Sampling block + key tables
+│   └── ADAPTIVE_BRIDSON.md         ← AdaptiveBridson: full Sampling block + key tables
 ├── CODE_REVIEW_2.0.md              ← functional-completeness review (scope gaps, tests, risks)
 ├── DEVELOPMENT_REVIEW_2026-07-10.md ← current development status, bugs, priorities, next phases
 ├── USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md ← current UI + PLOT/Portal/Operas review
@@ -48,19 +48,29 @@ Docs/
 
 ## Read in this order
 
-> **Current status (2026-07-16):** code baseline `jarvis2` (see recent commits: D9.4/9.6, D10.4/10.5,
-> interrupt checkpoint; working tree may have benchmark JSON / `checkpoints/` dirt).
-> Prototype closed; **D11 + D12 done**. Post-D12 polish: version/ps/kill/logging flags, logs layout,
-> FileOperation, CSV + scan perf, D1.1 `op_count` contract.
-> **D10 + D9.4/9.6 done.** **D8 Agent Bridge parked** (JSON API / run_state / agent stop-ack).
-> Human stop path includes **interrupt → runtime checkpoint** then teardown.
-> **D13 samplers closed** (D13.1–D13.7). Open hygiene: **D13.8** projected feedback
-> return ([`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md) — flat
-> `{uuid, logL}` default, `-inf` for unusable; optimizers add flat fields). Next: **D14 cluster**
-> ([`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md)), then
-> **D15 reuse/analysis** ([`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md)).
-> **D8 stays parked.**
-> CLI: [components/cli.md](components/cli.md). Broker contract: [components/redis_queue.md](components/redis_queue.md).
+> **Current status (2026-07-21):** branch `jarvis2`. Prototype + single-host Redis science path
+> closed: **D0–D12 done** (ledger archive); **D13 closed including D13.8**.
+>
+> **D13 samplers (done):** D13.1–D13.7 (FeedbackSampler, MCMC/Ensemble, nuisance, Dynesty,
+> MultiNest static wrap, diagnostics, review fixes) + **D13.8** flat `hep:feedback`
+> (`{uuid, logL}`, `-inf` for unusable) — design
+> [`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md).
+>
+> **Post-D13 polish (landed, not a new D-row):** nested production hygiene (Redis-only logL,
+> UUID channel, archive catch-up before `samples.csv`, clean nested CSV + MultiNest parity);
+> component multi-sink logs under `logs/<scan>/` (`core` / `factory` / `sampler` / `archiver` /
+> `datarecorder` / `worker-NN`); process labels `Jarvis-HEP.*` (dots only); control archive ‰ at
+> DEBUG; Dynesty/MultiNest `Results.summary()` → `sampler.log`; Sampling YAML templates in
+> `Jarvis-HEP-v2/jarvishep2/project_template/bin/sampling/`.
+>
+> **Parked:** **D8 Agent Bridge** (JSON API / `run_state` / agent stop-ack). Human stop still
+> does **interrupt → runtime checkpoint** then teardown.
+>
+> **Next pick:** **D14 cluster** ([`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md),
+> start **D14.1**), then **D15 reuse/analysis**
+> ([`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md)).
+>
+> CLI: [components/cli.md](components/cli.md). Broker: [components/redis_queue.md](components/redis_queue.md).
 > Ledger: [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). Project crypto:
 > [`components/project_tools.md`](components/project_tools.md) + `Jarvis-HEP-v2/INSTALL.md`.
 
@@ -69,7 +79,7 @@ Docs/
    long-lived process), §0.1 the single-runtime-path rule, §11 what is reused from V1, §12 what
    is retired, §13 the consolidated open questions.
 2. [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md) — **the execution playbook (open work only).**
-   Prefer **D11 / D12**; **D8 Agent Bridge parked**. Completed ledger history is in `archive/`.
+   Prefer **D14** next; **D8 Agent Bridge parked**. Completed ledger history is in `archive/`.
 3. [`components/`](components/) — **per-class design docs** (one file per class: Sample,
    RedisQueue, Logger, UMapper, Workflow, Worker, Calculator, Factory, Sampler, Archiver, Core,
    the module/IO backends, the samplers, and the V1-style helper subsystems — CLI, expression

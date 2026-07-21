@@ -13,9 +13,10 @@ console logging flags. Entry: `Jarvis2 = jarvishep2.client:main`.
 | Invocation | Routes to | Notes |
 |------------|-----------|-------|
 | `Jarvis2 -v` / `--version` | `dispatch_version` | logo + Author + Version (**no** scan init) |
-| `Jarvis2 run <task.yaml> [flags]` | `Jarvis2Core.run` | preferred run intent |
+| `Jarvis2 run <task.yaml> [flags]` | `Jarvis2Core.run` | full scan; validates YAML first |
 | `Jarvis2 <task.yaml>` | → `run` | legacy alias via `normalize_argv` |
-| `Jarvis2 check <task.yaml>` | `check_modules` | fixed-point smoke |
+| `Jarvis2 check <task.yaml>` | `check_modules` | smoke: **1 worker**, `SAMPLE/test/<uuid>/` flat, **no tar**; CSV or N draws |
+| `Jarvis2 validate <task.yaml> [--strict] [--json]` | `dispatch_validate` | D13.9 config gate only (no Redis) |
 | `Jarvis2 monitor` | `dispatch_monitor` | one Redis snapshot |
 | `Jarvis2 plot <plot.yaml>` | `plot_bridge` | JarvisPLOT scene |
 | `Jarvis2 portal …` | Portal CLI (V2 registry) | same as `jportal` |
@@ -59,9 +60,11 @@ There is **no** `cleanup` subcommand (removed); use `ps` / `kill` only.
 | `--console-level` | `INFO` | stderr level |
 | `--log-level` | `INFO` | file level under `logs/<scan>/` |
 | `--silence` / `-s` | off | no console output (files still written) |
+| `--strict` | off | validation warnings → errors |
 
 Propagated to Worker and Archiver processes. Style templates: `jarvishep2/card/logging.yaml`
-(see [logger.md](logger.md)).
+(see [logger.md](logger.md)). Config validation: [config_schema.md](config_schema.md) +
+[`DESIGN_YAML_VALIDATION_2.0.md`](../DESIGN_YAML_VALIDATION_2.0.md).
 
 ### Project subcommands (encrypt/decrypt usage)
 
