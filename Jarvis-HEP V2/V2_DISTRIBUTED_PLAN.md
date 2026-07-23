@@ -14,9 +14,13 @@ D13.1–D13.7: diagnostics export, review fixes — see
 - **AdaptiveBridson** renames AdaptiveLevelSet (legacy name removed);
 - **check-modules** UX: CSV-or-N-samples, workers=1, `SAMPLE/test/<uuid>/` flat, no tar pack;
 - narrowed Sampling templates under `project_template/bin/sampling/`.
-Next phase open: **D14 cluster → D15 reuse/analysis** (designs
-`DESIGN_CLUSTER_EXECUTION_2.0.md` / `DESIGN_RESULTS_ANALYSIS_2.0.md`).
-Next pick: **D14.1** (cluster worker template). Do not start Agent JSON verbs until D8 is unparked.
+Next phase open: **D14 cluster → D15 reuse/analysis + plot scenes → D16 skills**.
+New 2026-07-21: [`DESIGN_PHYSICS_PLOT_SCENES_2.0.md`](DESIGN_PHYSICS_PLOT_SCENES_2.0.md)
+(D15.5–7 — auto plot YAML must match real physics analysis; evidence: maintainer's iDM
+hand edits) and [`DESIGN_SKILLS_LIBRARY_2.0.md`](DESIGN_SKILLS_LIBRARY_2.0.md) (D16 —
+YAML complexity is the #1 adoption barrier; **v1 shipped under `skills/`**, D16.1 done).
+Next pick: **D14.1**; **D15.5** and **D16.2** are independent and may run in parallel.
+Do not start Agent JSON verbs until D8 is unparked.
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 Scope: **V2 only** — a fully independent line (new branch + git **worktree** + **`Jarvis2`** CLI). V1 (`Jarvis`, thread pool) is **frozen at 1.7.4, bug-fix only** (design §0.1); never land V2 work on the V1 line.
@@ -54,6 +58,9 @@ and execute it safely.
    never let completed entries accumulate here. One-off reports (acceptance runs, dated
    reviews) superseded by a newer review also go to `archive/` once nothing active links to
    them.
+   **Skills rule (D16, binding from D16.4):** a user-facing WP is not `done` until the
+   affected skill in `skills/` exists or is updated — same standing as YAML_REFERENCE
+   updates. See [`DESIGN_SKILLS_LIBRARY_2.0.md`](DESIGN_SKILLS_LIBRARY_2.0.md) §5.
 7. **V1 is frozen and separate — do not touch it.** The thread-pool runtime is **V1
    (`Jarvis`, 1.7.4), bug-fix only**: never add V2 features to it, never backport V2 to it.
    V2 lives on its own branch/worktree with the **`Jarvis2`** CLI (design §0.1). Verify V2
@@ -107,6 +114,7 @@ user-visible behavior.
 | **D13** | Feedback-driven samplers: MCMC / Nested / Nuisance (V1 science surface on the V2 runtime) | unmodified V1 `Example_DRAM_Operas.yaml` + `Example_Dynesty_Operas.yaml` run end-to-end with convergence/evidence parity vs captured V1 goldens; `FeedbackSampler` base extracted from ALS; `nuisance_optimize` Worker step implemented; worker-count-independent chains. **Closed 2026-07-20** (D13.1–D13.7). Design: [`DESIGN_SAMPLERS_2.0.md`](DESIGN_SAMPLERS_2.0.md); review: [`D13_SAMPLERS_REVIEW_2026-07-17.md`](D13_SAMPLERS_REVIEW_2026-07-17.md). |
 | **D14** | Cluster execution + broker durability | `Jarvis2 worker start --connect` remote pools (template over Redis, `<host>:<n>` ids, no-respawn foreign watchdog); broker `requirepass` + AOF + broker-restart resume; SLURM/HTCondor submitters render Phase-1 pools; shared-FS invariant documented. Design: [`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md) |
 | **D15** | Result reuse + analysis closure | `--warm-start` point cache (fingerprint-miss-by-default, `cached_from` provenance); `Jarvis2 analyze` corner/best-fit/posterior via JarvisPLOT scenes; Portal File/HepMC/LHE exposure + fixtures. Design: [`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md) |
+| **D16** | User skills library ("一句话一个技能" — kill the YAML complexity barrier) | v1 shipped 2026-07-21 (9 skills + index under `skills/`, every card `Jarvis2 validate`-verified); in-package shipping + `Jarvis2 skill list/show`; card CI; per-milestone coverage growth. Design: [`DESIGN_SKILLS_LIBRARY_2.0.md`](DESIGN_SKILLS_LIBRARY_2.0.md) |
 
 ---
 
@@ -119,7 +127,8 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 > — D0.1–D0.5, D1.1–D1.2, D2.1–D2.3, D3.1–D3.3, D4.1–D4.2, D5.1–D5.2, D6.1–D6.2,
 > D7.1 (2026-06-28/29); D9.1–D9.3, D9.5, D9.7–D9.8 (2026-07-10); D10.1–D10.2
 > (2026-07-11); D11.4a–D11.4d (2026-07-13); D9.4/D9.6, D10.3–D10.5, D11.1–D11.5,
-> D12.0–D12.8 (2026-07-14…16); D13.1–D13.5b (2026-07-16/17); plus the pre-V2 M0/M1
+> D12.0–D12.8 (2026-07-14…16); D13.1–D13.5b (2026-07-16/17); D13.6–D13.10
+> (2026-07-20/21); plus the pre-V2 M0/M1
 > row. This table
 > keeps only open work: todo / in-progress / partial / blocked.
 
@@ -131,12 +140,6 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D8.3 | Control-process graceful stop (SIGINT/SIGTERM → checkpoint → clean exit)              | D8        | —                | **partial** (human path enough)        | 2026-07-16 | Interactive stop (`64d7486`) + **interrupt checkpoint** (`_save_interrupt_checkpoint` before teardown; tests `test_graceful_stop.py`). Agent pieces (run_state interrupted, stop-ack) + D8.2 still **parked**. |
 | D8.4 | Strict-validate diagnostics (silent-coercion warnings, dead keys, unknown keys)       | D8        | D8.1             | **deferred**                           | 2026-07-14 | **Parked** with D8.1. |
 
-| D13.6 | D13 acceptance + docs closure (YAML_REFERENCE §6 methods, samplers_catalog, DATABASE chain columns) | D13 | D13.2–D13.5 | **done** | 2026-07-20 | Diagnostics export + acceptance tests committed (`f10889b`); DATABASE `sampler_summary.json` / `chain_history.csv` live. |
-| D13.7 | D13 review fixes: fail-loud pool dispatch, feedback drop logging, nuisance re-run default, MCMC ESS | D13 | D13.6 | **done** | 2026-07-20 | (a) `RedisEvaluationPool.map` fail-loud on ambiguous dispatch; (b) unmatched `hep:feedback` warning; (c) `re_run_physics` default **true** (V1 NAttempt full-pipeline parity) + YAML_REFERENCE §6.13; (d) per-chain `ess_logl` / `ess_logl_mean` in MCMC summary. |
-| D13.8 | Configurable flat feedback return (`{uuid, logL}` default; −∞ for unusable; flat extra fields) | D13 | D13.7 | **done** | 2026-07-20 | Implemented: `feedback_return.py`, Worker projection, Redis flat wire, likelihood `LogL=-inf` fallback, consumers (pool/MCMC/ALS). Design: [`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md). |
-| D13.9 | Task YAML validation gate (early fail; Method/Variables/Bounds/Archiver; `Jarvis2 validate`) | D13 | D13.8 | **done** | 2026-07-21 | Pure `task_validation` + `contracts/*`; run/check path validates before Redis; `--strict` / `--json`; dead-key warnings. Design: [`DESIGN_YAML_VALIDATION_2.0.md`](DESIGN_YAML_VALIDATION_2.0.md). (Design doc originally labeled “D14”; plan **D14** remains cluster execution.) |
-| D13.10 | Nested UX freeze + AdaptiveBridson + check-modules inspect layout | D13 | D13.9 | **done** | 2026-07-21 | (a) vendored dynesty **3.1.0**; (b) Method=engine — Dynesty always Dynamic, MultiNest always static; `Bounds.dynamic` rejected (`JV2-BND-012`); (c) Sampling Simple/Full templates narrowed; (d) **AdaptiveBridson** renames AdaptiveLevelSet (no alias); (e) `Jarvis2 check`: workers=1, `SAMPLE/test/<uuid>/` flat, pack off; CSV-or-N-samples smoke. |
-
 | D14.1 | Worker template over Redis + `Jarvis2 worker start --connect`                           | D14       | —                | todo                                   |            | `DESIGN_CLUSTER_EXECUTION_2.0.md` §3/§4. Template `hep:worker:template:<scan>` (JSON, version-guarded); two pools on one host drain a live scan with DATABASE parity. |
 | D14.2 | Remote-aware watchdog + `<host>:<n>` worker ids                                         | D14       | D14.1            | todo                                   |            | Sweep foreign dead workers, never respawn; pool-local D12.7 orphan reaping. |
 | D14.3 | Broker auth (`requirepass`) + AOF knob + broker-restart resume                          | D14       | —                | todo                                   |            | Password never logged; checkpoint stays authoritative — wiped broker must resume from checkpoint (§13.5). |
@@ -146,6 +149,14 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D15.2 | `Jarvis2 analyze`: corner / marginals / best-fit via JarvisPLOT scenes                  | D15       | —                | todo                                   |            | Reads DATABASE only; reduced mode without chain columns; zero drawing code in HEP. |
 | D15.3 | Posterior weighting mode (nested weights / MCMC post-burn-in)                            | D15       | D13.6, D15.2     | todo                                   |            | Reproduces V1 golden analysis numbers. |
 | D15.4 | Portal File / HepMC / LHE exposure + V2 fixtures                                        | D15       | Portal release   | todo                                   |            | Same model as Portal 1.4.0 SLHA work; one real fixture per format. |
+| D15.5 | Physics plot scenes I: `SceneMeta` (log axes, limits, latex labels, robust color clamp, best-fit, no-clobber) | D15 | — | todo |            | [`DESIGN_PHYSICS_PLOT_SCENES_2.0.md`](DESIGN_PHYSICS_PLOT_SCENES_2.0.md) §3/§4. Accept: regenerated iDM scene reproduces the maintainer's hand edits without hand edits; failed/−inf rows excluded; hand-edited files never overwritten. |
+| D15.6 | Physics plot scenes II: method-aware (nested posterior-weighted, MCMC post-burn-in, profile-likelihood contours) | D15 | D15.5 | todo |            | Nested dead-point scatter demoted to `enable: false`; every emitted scene smoke-rendered via stock `jplot` in tests. |
+| D15.7 | `Scan.plot` block + `Variables[].latex` in validation contracts + YAML_REFERENCE | D15 | D15.5 | todo |            | Optional additive keys (invariant 1); `Jarvis2 validate` coverage. |
+
+| D16.1 | Skills library v1 (9 skills + index + template, cards validate-verified) | D16 | — | **done** | 2026-07-21 | Shipped with the design commit under `Jarvis-Books/Jarvis-HEP V2/skills/`. Cards for first-scan/MCMC/nested/external-calculator verified with `Jarvis2 validate` on `2daf417`. |
+| D16.2 | Ship skills in-package + `Jarvis2 skill list / show <name>` | D16 | — | todo |            | Copy under `jarvishep2/skills/`; plain-text CLI; appears in `--help`. |
+| D16.3 | Card CI: extract skill ```yaml blocks, `Jarvis2 validate --strict` complete cards | D16 | D16.2 | todo |            | Broken skill card fails the suite; partial snippets markable `no-validate`. |
+| D16.4 | Coverage growth: SLHA calculator / EnvReqs tuning / cluster (post-D14) / analyze (post-D15.2) skills | D16 | D16.3 | todo |            | Binding rule (design §5): user-facing WPs are not done without their skill update. |
 
 **Post-D12 polish already landed (no open WP; status only):** CLI `-v` / `ps` / `kill` /
 logging flags; FileOperation SAMPLE process; full `samples.csv` + scan performance log;

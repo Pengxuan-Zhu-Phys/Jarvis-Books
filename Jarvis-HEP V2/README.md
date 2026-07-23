@@ -25,13 +25,18 @@ Docs/
 ├── DESIGN_SAMPLERS_2.0.md          ← D13: MCMC/nested/nuisance on the feedback channel
 ├── DESIGN_FEEDBACK_RETURN_2.0.md   ← D13.8: projected hep:feedback (default uuid+LogL)
 ├── DESIGN_YAML_VALIDATION_2.0.md   ← D13.9: early task-YAML gate (contracts + Jarvis2 validate)
+├── DESIGN_ADAPTIVE_BRIDSON_LIVE_BAND.md ← AdaptiveBridson **final** algorithm flow (outer/core + endpoints)
 ├── DESIGN_CLUSTER_EXECUTION_2.0.md ← D14: remote worker pools, SLURM, broker auth/AOF
 ├── DESIGN_RESULTS_ANALYSIS_2.0.md  ← D15 (todo): warm-start cache, Jarvis2 analyze, Portal formats
+├── DESIGN_PHYSICS_PLOT_SCENES_2.0.md ← D15.5–7 (todo): physics-grade auto plot YAML (log axes, posterior weights, profile contours)
+├── DESIGN_SKILLS_LIBRARY_2.0.md    ← D16: kill the YAML complexity barrier — one intent, one runnable card
+├── skills/                         ← **user skills library v1** (9 skills, cards validate-verified)
+│   └── README.md                   ← "我想……" index; start here as a user
 ├── DESIGN_SAMPLE_COORDINATION_2.0.md ← **accepted**: uuid key; task=u_coords; feedback=logL; stage opt-in
 ├── DESIGN_SAMPLE_PROGRESS_MONITOR.md ← monitor stage-on-heartbeat (aligned with coordination design)
 ├── YAML_REFERENCE_2.0.md           ← as-built task-YAML reference (every key, defaults, gaps)
 ├── YAML-Example/                   ← public YAML recipes (per method)
-│   └── ADAPTIVE_BRIDSON.md         ← AdaptiveBridson: full Sampling block + key tables
+│   └── ADAPTIVE_BRIDSON.md         ← AdaptiveBridson: minimal + full YAML recipes
 ├── CODE_REVIEW_2.0.md              ← functional-completeness review (scope gaps, tests, risks)
 ├── DEVELOPMENT_REVIEW_2026-07-10.md ← current development status, bugs, priorities, next phases
 ├── USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md ← current UI + PLOT/Portal/Operas review
@@ -74,6 +79,13 @@ Docs/
 > **Next pick:** **D14 cluster** ([`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md),
 > start **D14.1**), then **D15 reuse/analysis**
 > ([`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md)).
+>
+> **New 2026-07-21 (maintainer feedback):** auto plot YAML must match real physics
+> analysis — [`DESIGN_PHYSICS_PLOT_SCENES_2.0.md`](DESIGN_PHYSICS_PLOT_SCENES_2.0.md)
+> (D15.5–7); and the YAML complexity barrier gets a **user skills library** —
+> [`DESIGN_SKILLS_LIBRARY_2.0.md`](DESIGN_SKILLS_LIBRARY_2.0.md), **v1 shipped under
+> [`skills/`](skills/README.md)** (D16.1 done; D16.2 CLI + card CI open). D15.5 and
+> D16.2 are parallel-safe with D14.1.
 >
 > CLI: [components/cli.md](components/cli.md). Broker: [components/redis_queue.md](components/redis_queue.md).
 > Ledger: [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md). Project crypto:
