@@ -225,10 +225,18 @@ Calculators:
         - cmd: "cp -r ${source}/* ${path}/"    # ${source}/${path} tokens available
           cwd: "${path}"
       # NOTE: PackIDs are stable slots (001…N) whose directories persist across
-      # samples, Workers, and runs. Each NEW Worker re-runs installation on an
-      # already-populated pack directory, so installation commands MUST be
-      # idempotent (plain overwrite-copy like the above is fine; V1 cards
-      # already assume this).
+      # samples, Workers, and runs, so installation commands MUST be idempotent
+      # (plain overwrite-copy like the above is fine; V1 cards already assume this).
+      #
+      # SINCE f106b65 — install REUSE: a pack keeps `.jarvis_install_stamp.json`
+      # and `installation` is **skipped** when the stored fingerprint still
+      # matches (module name, basepath, source path + root stat, command list).
+      # ⚠ The fingerprint does NOT see edits to files *inside* the source tree
+      # (a directory's mtime is unchanged by child content edits), so after
+      # editing your calculator source you must force a reinstall:
+      #     JARVIS_FORCE_CALC_INSTALL=1 Jarvis2 run card.yaml
+      # (or delete the pack dirs). Fix tracked as D13.11 — see
+      # `CODE_REVIEW_2026-07-23.md` §1.1.
       initialization:            # post-install commands (once per pack)
         - cmd: "./configure"
           cwd: "${path}"

@@ -1,6 +1,6 @@
 # V2 Distributed Runtime — Development Plan (Agent Execution Playbook)
 
-Last updated: 2026-07-21. Branch `jarvis2` (post-D13.9 + sampler UX polish).
+Last updated: 2026-07-23. Branch `jarvis2` @ `2daf417` (post-D13.10 + convert; code review filed).
 Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
 **Priority note (maintainer):** **D8 Agent Bridge stays parked** (D8.1/8.2/8.4 + agent stop-ack;
 re-confirmed 2026-07-16). **D9–D12 closed. D13 closed through D13.9** (YAML validation gate —
@@ -19,7 +19,12 @@ New 2026-07-21: [`DESIGN_PHYSICS_PLOT_SCENES_2.0.md`](DESIGN_PHYSICS_PLOT_SCENES
 (D15.5–7 — auto plot YAML must match real physics analysis; evidence: maintainer's iDM
 hand edits) and [`DESIGN_SKILLS_LIBRARY_2.0.md`](DESIGN_SKILLS_LIBRARY_2.0.md) (D16 —
 YAML complexity is the #1 adoption barrier; **v1 shipped under `skills/`**, D16.1 done).
-Next pick: **D14.1**; **D15.5** and **D16.2** are independent and may run in parallel.
+**Code review 2026-07-23** ([`CODE_REVIEW_2026-07-23.md`](CODE_REVIEW_2026-07-23.md)):
+one **high-severity** finding — calculator install reuse ignores source-code edits and
+silently runs stale programs — plus three medium fixes and a `run_adaptive` refactor,
+filed as **D13.11–D13.13**.
+Next pick: **D13.11** (bug fixes, ahead of new features); then **D14.1**; **D15.5** and
+**D16.2** remain parallel-safe.
 Do not start Agent JSON verbs until D8 is unparked.
 Audience: **AI coding agents** (Claude Code, Codex, Grok, …) and maintainers.
 Status: active execution plan for [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
@@ -140,6 +145,9 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D8.3 | Control-process graceful stop (SIGINT/SIGTERM → checkpoint → clean exit)              | D8        | —                | **partial** (human path enough)        | 2026-07-16 | Interactive stop (`64d7486`) + **interrupt checkpoint** (`_save_interrupt_checkpoint` before teardown; tests `test_graceful_stop.py`). Agent pieces (run_state interrupted, stop-ack) + D8.2 still **parked**. |
 | D8.4 | Strict-validate diagnostics (silent-coercion warnings, dead keys, unknown keys)       | D8        | D8.1             | **deferred**                           | 2026-07-14 | **Parked** with D8.1. |
 
+| D13.11 | Review fixes @2daf417: install fingerprint, feedback-drop log, slot-release atomicity, atomic CSV write | D13 | — | todo |            | [`CODE_REVIEW_2026-07-23.md`](CODE_REVIEW_2026-07-23.md) §1. **(1) HIGH — install reuse ignores source edits**: fingerprint stats only the source *root dir*, so editing calculator code silently reuses the old install and produces results from stale code (verified empirically, §1.1). Make the fingerprint content-aware, or make reuse opt-in defaulting to reinstall; log the reuse decision with `installed_at_utc`; document `JARVIS_FORCE_CALC_INSTALL`. (2) port the D13.7b unmatched-`hep:feedback` warning into `FeedbackSampler.wait_for_generation` — it only landed in `RedisEvaluationPool`, so every MCMC/ensemble/PT/AdaptiveBridson barrier still drops stray records silently (§1.2). (3) `Worker._force_release_pack` pops the pack before releasing and swallows failures → slot leaks past the watchdog sweep; keep until confirmed, log, and make release atomic via Lua (§1.3). (4) `convert_hdf5_to_csv` + `samples.csv` exporters write in place → Ctrl-C leaves a truncated CSV that skip-if-exists makes permanent; use tmp+`os.replace` like `write_install_stamp` already does (§1.4). (5) rename adaptive `timeout` → `generation_timeout` + document the per-generation semantic (§1.5). |
+| D13.12 | Decompose `AdaptiveBridson.run_adaptive` (959-line method, 9 exit points) | D13 | D13.11 | todo |            | `CODE_REVIEW_2026-07-23.md` §3. `adaptive_bridson.py` is 4 068 lines; the main loop inlines gen-0 bootstrap, fill passes, root correction, gap bridging, and advance/converge into one scope with nine inline `return`s. Extract each seam behind an explicit `LoopDecision` (continue / advance / stop-with-reason) so exit conditions become individually testable. Behavior-preserving; existing `test_adaptive_bridson.py` is the gate. Do before the next feature lands in that file. |
+| D13.13 | Doc/design debt: install-reuse design doc + `convert` in `components/cli.md` | D13 | — | todo |            | `CODE_REVIEW_2026-07-23.md` §2.2. Install reuse shipped with no design doc and no mention of its only escape hatch; `Jarvis2 convert` is missing from `cli.md` (all 10 other subcommands are there). YAML_REFERENCE §9.4's now-false idempotency note was corrected on 2026-07-23. |
 | D14.1 | Worker template over Redis + `Jarvis2 worker start --connect`                           | D14       | —                | todo                                   |            | `DESIGN_CLUSTER_EXECUTION_2.0.md` §3/§4. Template `hep:worker:template:<scan>` (JSON, version-guarded); two pools on one host drain a live scan with DATABASE parity. |
 | D14.2 | Remote-aware watchdog + `<host>:<n>` worker ids                                         | D14       | D14.1            | todo                                   |            | Sweep foreign dead workers, never respawn; pool-local D12.7 orphan reaping. |
 | D14.3 | Broker auth (`requirepass`) + AOF knob + broker-restart resume                          | D14       | —                | todo                                   |            | Password never logged; checkpoint stays authoritative — wiped broker must resume from checkpoint (§13.5). |

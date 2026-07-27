@@ -85,8 +85,19 @@ Jarvis2 run my_card.yaml
 
 ## 常见坑
 
-- **installation 命令必须幂等**：工作目录跨扫描复用，新 Worker 会对已存在的目录
-  重跑安装（覆盖式 `cp -r` 天然安全，`mkdir` 记得加 `-p`）。
+- **⚠ 改了程序源码后结果没变？** 安装会被**复用**：pack 目录里的
+  `.jarvis_install_stamp.json` 指纹只看 source **根目录**的 stat，
+  看不见你对目录内文件内容的修改 → `installation` 被跳过 → 跑的还是旧程序，
+  而且**没有任何提示**。改完源码请强制重装：
+
+  ```bash
+  JARVIS_FORCE_CALC_INSTALL=1 Jarvis2 run my_card.yaml
+  ```
+
+  （或直接删掉 `calculators/MyCalc/00*` 目录。修复已立项 D13.11，
+  见 `../CODE_REVIEW_2026-07-23.md` §1.1。）
+- **installation 命令必须幂等**：工作目录跨扫描复用，可能对已存在的目录重跑安装
+  （覆盖式 `cp -r` 天然安全，`mkdir` 记得加 `-p`）。
 - **程序留了旧输出** → 在 `execution.commands` 前面加一条 `"rm -f output.json"`，
   或在 initialization 里清理。
 - **`Command failed [execution#...]`** → 进 `SAMPLE/.../<uuid>/` 看该点日志
