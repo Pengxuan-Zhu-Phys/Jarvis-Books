@@ -50,15 +50,24 @@ Three aggravating factors:
 3. The reuse decision is logged at INFO into the per-sample log — invisible in a
    10 000-point scan.
 
-**Recommended fix**: make the fingerprint reflect content. A recursive walk collecting
-`(relpath, size, mtime_ns)` for the source tree, hashed, is cheap for a typical calculator
-directory (thousands of files at most, one `os.scandir` sweep per pack install — and only
-on the install path, not per sample). If a full walk is judged too expensive for very
-large trees, the fallback must be **fail-safe, not fail-silent**: reuse only when an
-explicit opt-in (`Calculators.Modules[].reuse_install: true`) is set, defaulting to V1's
-always-reinstall behavior. Either way, log the reuse decision at the control-process level
-with the stamp's `installed_at_utc`, so "reusing install from 2026-07-19" is visible in the
-run header.
+> **⚠ Correction (2026-07-23, maintainer)** — the mechanism above is accurate, but the
+> conclusion this review originally drew from it was wrong. It recommended making the
+> fingerprint content-aware; **automatic source-change detection is explicitly not a
+> goal** (hashing an arbitrary calculator tree — multi-GB grids, build outputs, network
+> mounts — is exactly the hidden cost this runtime avoids elsewhere, and any heuristic is
+> still a guess). The root-dir stat is fine as designed.
+>
+> The real defect is narrower: **the operator has no place to control whether a
+> calculator reinstalls.** The only lever is the undocumented, all-or-nothing
+> `JARVIS_FORCE_CALC_INSTALL=1`, and nothing on disk says what is installed or when.
+>
+> **Accepted fix**: a JSON control file in the *calculator folder* (outside any PackID
+> dir) that records install state and carries a `reinstall` flag the operator flips.
+> Full design — including the epoch mechanism that makes one flip fan out to **all** packs
+> exactly once, and the two-file/two-writer split that keeps it race-free without locking
+> — in [`DESIGN_CALC_INSTALL_CONTROL_2.0.md`](DESIGN_CALC_INSTALL_CONTROL_2.0.md).
+> The three aggravating factors above stand unchanged and are fixed by that design
+> (documented flag, corrected §9.4, control-process run-header visibility).
 
 ### 1.2 Unmatched feedback records are silently discarded in the sampler base (severity: medium)
 
@@ -220,7 +229,7 @@ Registered as **D13.11** (bug fixes) and **D13.12** (refactor) in
 
 | # | Item | Severity |
 |---|---|---|
-| 1 | Content-aware install fingerprint (or opt-in reuse defaulting to reinstall) + visible reuse log + document `JARVIS_FORCE_CALC_INSTALL` | **high** |
+| 1 | Operator-facing install control file (`jarvis_install.json` + epoch) per [`DESIGN_CALC_INSTALL_CONTROL_2.0.md`](DESIGN_CALC_INSTALL_CONTROL_2.0.md) + run-header visibility + document the flag | **high** |
 | 2 | Port the D13.7b unmatched-feedback warning into `FeedbackSampler.wait_for_generation` | medium |
 | 3 | Slot-release: keep in `_held_calc_packs` until confirmed, log failures, make release atomic (Lua) | medium |
 | 4 | Atomic tmp+rename in `convert_hdf5_to_csv` and the `samples.csv` exporters | medium |

@@ -231,12 +231,15 @@ Calculators:
       # SINCE f106b65 — install REUSE: a pack keeps `.jarvis_install_stamp.json`
       # and `installation` is **skipped** when the stored fingerprint still
       # matches (module name, basepath, source path + root stat, command list).
-      # ⚠ The fingerprint does NOT see edits to files *inside* the source tree
-      # (a directory's mtime is unchanged by child content edits), so after
-      # editing your calculator source you must force a reinstall:
+      # The fingerprint intentionally does NOT scan the source tree for content
+      # edits, so **after editing your calculator source you must ask for a
+      # reinstall** — otherwise the scan keeps running the previously installed
+      # program. Planned control (D13.11): set `"reinstall": true` in
+      #     <calculator folder>/jarvis_install.json     (outside the PackID dirs)
+      # and rerun; one flip reinstalls every pack of that module exactly once.
+      # Until D13.11 lands the only lever is the all-or-nothing env var:
       #     JARVIS_FORCE_CALC_INSTALL=1 Jarvis2 run card.yaml
-      # (or delete the pack dirs). Fix tracked as D13.11 — see
-      # `CODE_REVIEW_2026-07-23.md` §1.1.
+      # Design: `DESIGN_CALC_INSTALL_CONTROL_2.0.md`.
       initialization:            # post-install commands (once per pack)
         - cmd: "./configure"
           cwd: "${path}"

@@ -85,17 +85,18 @@ Jarvis2 run my_card.yaml
 
 ## 常见坑
 
-- **⚠ 改了程序源码后结果没变？** 安装会被**复用**：pack 目录里的
-  `.jarvis_install_stamp.json` 指纹只看 source **根目录**的 stat，
-  看不见你对目录内文件内容的修改 → `installation` 被跳过 → 跑的还是旧程序，
-  而且**没有任何提示**。改完源码请强制重装：
+- **⚠ 改了程序源码，必须主动要求重装。** 安装是**复用**的：指纹只认配置变化
+  （命令、路径、source 位置），**故意不去扫描源码内容**。所以你改完程序直接重跑，
+  跑的还是上次装进 pack 目录的旧版本，而且没有提示。
 
   ```bash
-  JARVIS_FORCE_CALC_INSTALL=1 Jarvis2 run my_card.yaml
+  JARVIS_FORCE_CALC_INSTALL=1 Jarvis2 run my_card.yaml   # 当前唯一开关（全局生效）
   ```
 
-  （或直接删掉 `calculators/MyCalc/00*` 目录。修复已立项 D13.11，
-  见 `../CODE_REVIEW_2026-07-23.md` §1.1。）
+  D13.11 落地后会改成更好用的方式：在 **calculator 文件夹**（`00*` 之外）的
+  `jarvis_install.json` 里把 `"reinstall"` 设为 `true`，重跑一次即可——
+  该模块的所有 pack 都会重装一次。设计见
+  `../DESIGN_CALC_INSTALL_CONTROL_2.0.md`。
 - **installation 命令必须幂等**：工作目录跨扫描复用，可能对已存在的目录重跑安装
   （覆盖式 `cp -r` 天然安全，`mkdir` 记得加 `-p`）。
 - **程序留了旧输出** → 在 `execution.commands` 前面加一条 `"rm -f output.json"`，
