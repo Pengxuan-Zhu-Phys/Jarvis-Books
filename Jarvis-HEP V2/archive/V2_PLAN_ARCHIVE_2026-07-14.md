@@ -71,6 +71,7 @@ Statuses here are frozen history; the live plan only tracks open work.
 | D13.8 | Configurable flat feedback return (`{uuid, logL}` default; −∞ for unusable; flat extra fields) | D13 | D13.7 | **done** | 2026-07-20 | Implemented: `feedback_return.py`, Worker projection, Redis flat wire, likelihood `LogL=-inf` fallback, consumers (pool/MCMC/ALS). Design: [`DESIGN_FEEDBACK_RETURN_2.0.md`](DESIGN_FEEDBACK_RETURN_2.0.md). |
 | D13.9 | Task YAML validation gate (early fail; Method/Variables/Bounds/Archiver; `Jarvis2 validate`) | D13 | D13.8 | **done** | 2026-07-21 | Pure `task_validation` + `contracts/*`; run/check path validates before Redis; `--strict` / `--json`; dead-key warnings. Design: [`DESIGN_YAML_VALIDATION_2.0.md`](DESIGN_YAML_VALIDATION_2.0.md). (Design doc originally labeled “D14”; plan **D14** remains cluster execution.) |
 | D13.10 | Nested UX freeze + AdaptiveBridson + check-modules inspect layout | D13 | D13.9 | **done** | 2026-07-21 | (a) vendored dynesty **3.1.0**; (b) Method=engine — Dynesty always Dynamic, MultiNest always static; `Bounds.dynamic` rejected (`JV2-BND-012`); (c) Sampling Simple/Full templates narrowed; (d) **AdaptiveBridson** renames AdaptiveLevelSet (no alias); (e) `Jarvis2 check`: workers=1, `SAMPLE/test/<uuid>/` flat, pack off; CSV-or-N-samples smoke. |
+| D17.1–D17.5 | Strict task-card validation (vocabulary, zones, numeric, error UX, corpus gate) | D17 | — | **done** | 2026-07-31 | Commit `69085f4`. Verified by re-measurement (design §7): **example corpus 21→55 passing**, the remaining 10 are `JV2-MTH-003` for methods V2 genuinely lacks (DNN/RLTPMCMC), not schema gaps. `Calculators.path` ×35 / `deps_source` / `Operas.Modules[].selection` now declared — schema no longer contradicts `worker_config.py`'s "Tolerate it". `x-jarvis-zone` in 25 files; dynesty `run_nested`/`sampler` pass through; **Portal is now the I/O authority** (simulated Portal adding `HepMC` → accepted; unknown-to-Portal → `JV2-SCH-002` listing Portal's real formats). AdaptiveBridson typo → error + "Did you mean 'initial_radius'?". Numeric union: `1e-5`/`1.0e-5`/`'0.08'` pass, `'abc'`/`'many'` reject. `run` and `validate` both exit **2** with **zero side effects** (no `outputs/`, no `logs/`). `tests/test_task_schema_corpus.py` added; 19 schema tests green. |
 
 ---
 
@@ -565,5 +566,20 @@ Statuses here are frozen history; the live plan only tracks open work.
 - **Accept**: all gates green; numbers recorded in `docs/benchmarks/` and the ledger.
 - **Rollback**: n/a (gate only).
 
----
+### WP-D13.11 — 2026-07-29 — Code-review fixes
 
+- **Goal**: close review findings §1.1–§1.5 without changing the sampler science surface.
+- **Implemented**: control-process-owned `jarvis_install.json` with monotone
+  `reinstall_epoch` and per-pack stamp fan-out; unmatched-feedback warnings in the
+  sampler base; Lua-atomic calculator release with held-pack retention on errors;
+  tmp + `os.replace` CSV exports; `generation_timeout` with legacy `timeout` alias and
+  per-generation documentation.
+- **Tests**: targeted D13.11 tests passed (39 tests); compileall and `git diff --check`
+  passed. Full suite: 608 passed, 8 pre-existing failures in distributed timing,
+  layer-concurrency path normalization, plot CLI compatibility, and legacy layer index.
+- **Notes**: no source-tree content hashing was added. `jarvis_install.json` is written
+  only by the control process; Workers write only their pack stamp. Pack summaries are
+  refreshed best-effort during control-process shutdown.
+- **Out of scope**: D13.12, D13.13, D8/Agent JSON.
+
+---

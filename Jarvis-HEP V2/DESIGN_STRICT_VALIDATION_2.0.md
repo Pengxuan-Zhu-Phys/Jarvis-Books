@@ -1,6 +1,6 @@
 # DESIGN — Strict Task-Card Validation (V2, D17)
 
-**Status**: design accepted 2026-07-31 (maintainer); implementation `todo`
+**Status**: design accepted 2026-07-31; **implemented and verified 2026-07-31** (`69085f4`) — see §7
 **Date**: 2026-07-31
 **Requirement (maintainer)**: *"让 coding agent 按照严格 json schema 的形式进行校验，即如果出现
 了非法的 key and/or value type，提出明显的日志提醒，并退出。"*
@@ -187,3 +187,73 @@ users.)
 3. **Warning fatigue** — if `Calculators.path` warns on all 35 cards forever, users learn
    to ignore warnings. Prefer *declaring* tolerated V1 keys in the schema (silent, valid)
    over warning about them, and reserve warnings for things that genuinely deserve a fix.
+
+
+---
+
+## 7. Implementation verification (2026-07-31, `69085f4`)
+
+Every acceptance criterion was re-measured against the running code, using the same
+scripts that produced §0's numbers.
+
+**The gate: the corpus went green.**
+
+```
+65 real Jarvis-Examples cards:   通过 55  报错 10      (before: 通过 21  报错 44)
+remaining 10 = JV2-MTH-003 only  (DNN, RLTPMCMC, … — methods V2 genuinely does not
+                                  implement; correct rejections, not schema gaps)
+```
+
+`Calculators.path` (×35), `deps_source`, `Operas.Modules[].selection` are now declared —
+the schema no longer contradicts `worker_config.py`'s "Tolerate it (do not error)".
+
+| requirement | result |
+|---|---|
+| §2 zones declared | `x-jarvis-zone` in 25 schema files |
+| §2 delegated: dynesty pass-through | `Bounds.{run_nested,sampler}` with arbitrary keys → accepted |
+| §2 delegated: Portal authority | simulated a Portal upgrade adding `HepMC` → **accepted**; a format Portal does *not* have → `JV2-SCH-002` listing Portal's real formats. The manifest is no longer an allowlist. |
+| §1/§2 AdaptiveBridson (the one uncovered migrated method) | `initial_radiuz` → error **+ "Did you mean 'initial_radius'?"** |
+| §3 numeric union | `1e-5` (YAML string) ✅, `1.0e-5` ✅, `'0.08'` ✅, `'abc'` ✗, `max_points: 'many'` ✗ |
+| §4 exit code | `run` **2**, `validate` **2** |
+| §4 zero side effects | after a failed `run`: no `outputs/`, no `logs/` — nothing created |
+| §4 one-pass | two typos in one block reported together |
+| §5 regression test | `tests/test_task_schema_corpus.py` (19 schema tests green) |
+
+### 7.1 Three follow-ups (none blocking — filed as D17.6)
+
+1. **Multiple typos lose both the key name and the "did you mean".**
+   `task_schema.py:117` matches only the singular form:
+   ```python
+   re.search(r"\('([^']+)' was unexpected\)", error.message)
+   ```
+   jsonschema emits `('a', 'b' were unexpected)` for 2+ keys, so the regex misses and the
+   suggestion degrades to the literal placeholder:
+   ```
+   1 typo : Remove or rename 'initial_radiuz'. Did you mean 'initial_radius'? …
+   2 typos: Remove or rename 'the unexpected key'. Allowed keys: …      ← help lost
+   ```
+   The user gets *less* help exactly when they made *more* mistakes. Match both forms and
+   run `get_close_matches` per key.
+
+2. **`anyOf` numeric errors are not actionable** — a side effect of the §3 fix. Making
+   numeric fields a number-or-numeric-string union means jsonschema reports the generic
+   parent error:
+   ```
+   message : 'abc' is not valid under any of the given schemas
+   suggestion: Use one complete accepted form for this object; inspect the listed schema alternatives.
+   example : (none)
+   ```
+   §4 requires an editable instruction. Special-case the numeric union in
+   `_schema_error_guidance`: *"expected a number (e.g. `0.05` or `1.0e-5`), got the string
+   `'abc'`"*.
+
+3. **The gate test is not hermetic.** `test_task_schema_corpus.py:14` globs
+   `Path(__file__).parents[2] / "Jarvis-Examples/*/bin/*.yaml"` and then asserts
+   `len(cards) >= 65` with no skip guard — so on any checkout where Jarvis-Examples is not
+   a sibling directory (a clean CI runner), the gate fails for the wrong reason and
+   reads as a schema regression. Either vendor a corpus snapshot under `tests/fixtures/`
+   or `skipUnless` the directory exists **and** run it in a job that checks out both
+   repos. A gate that cannot run everywhere is not yet a gate.
+
+Minor: the `Allowed keys:` list inlines all 27 AdaptiveBridson keys into one line. With
+"did you mean" already naming the fix, consider truncating the dump.
