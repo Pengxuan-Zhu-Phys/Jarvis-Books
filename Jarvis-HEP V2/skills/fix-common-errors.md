@@ -41,6 +41,7 @@ Jarvis2 validate my_card.yaml --strict # 把警告也当错误（推荐提交前
 | `sampler method 'Xxx' …` + 一串可用名 | Method 拼写错 | 从报错列出的名单里照抄；选法见 [choose-sampler](choose-sampler.md) |
 | `JV2-SCH-001` + `Additional properties are not allowed` | 键名拼错或该块不认识这个键 | 按提示里的 **Did you mean** 改；`Allowed keys` 列出了该块全部合法键 |
 | `JV2-SCH-001` + `is not valid under any of the given schemas` | 值的类型不对（如整数位给了字符串） | 对照 YAML_REFERENCE 改成正确类型。数字可以写 `0.05` 或 `1.0e-5`；注意 YAML 里 **`1e-5` 会被当成字符串**（少个小数点），虽然目前能通过，仍建议写 `1.0e-5` |
+| `JV2-ENC-001`（卡片里有中文/非 ASCII） | 任务卡的**键名和字符串值只能用 ASCII** | 把中文改成英文；**注释里的中文完全不受限制**（`# 这是暗物质扫描` 随便写），想写说明就写在注释里 |
 | `JV2-SCH-002`（不支持的 IO 格式） | Portal 没有这个格式的适配器 | 报错会列出 **Portal 当前真实支持的格式**，照着选；升级 Jarvis-Portal 后新格式会自动可用，无需改 HEP |
 | `JV2-BND-012`（Bounds.dynamic 被拒） | 嵌套采样没有 dynamic 开关 | 删掉该键；动态=`Dynesty`，静态=`MultiNest` |
 | `unsupported EnvReqs.V2 setting(s): …` | V2 块里写了不支持的键 | 报错列出全部支持键；对照 YAML_REFERENCE §5 |

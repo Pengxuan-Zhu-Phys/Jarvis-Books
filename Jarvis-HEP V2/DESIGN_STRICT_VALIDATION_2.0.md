@@ -257,3 +257,75 @@ the schema no longer contradicts `worker_config.py`'s "Tolerate it (do not error
 
 Minor: the `Allowed keys:` list inlines all 27 AdaptiveBridson keys into one line. With
 "did you mean" already naming the fix, consider truncating the dump.
+
+---
+
+## 8. ASCII-only task cards (maintainer decision, 2026-07-31)
+
+**Decision**: *"YAML 中明确不支持中文，若有中文直接退出。"* Non-ASCII text in a task card
+is an error, reported like any other strict violation and exiting before anything starts.
+
+### 8.1 Corpus impact: none
+
+Measured across everything shipped — 65 `Jarvis-Examples` cards, 7 `project_template`
+cards, 6 `parity_project` cards:
+
+```
+78 份卡片，0 份含非 ASCII  →  0 份会被新规则拒绝
+```
+
+Unlike D17's strictness (which needed the vocabulary completed first), **this rule can
+ship immediately**: nothing in the corpus breaks, so there is no migration phase and the
+gate test stays green on day one.
+
+### 8.2 Scope — and what stays legal
+
+| location | rule | why |
+|---|---|---|
+| **keys** | ASCII only → error | already an error today, but as a confusing *"additional properties"*; this gives it an honest message |
+| **string values** | ASCII only → error | `Scan.name` **currently passes with Chinese and becomes a directory name** — the most damaging case, since it propagates into paths, tar members, and HDF5 attributes |
+| **comments** | **unrestricted** ✅ | YAML comments are discarded by the parser and never reach validation (verified). Users keep documenting cards in Chinese — the skills library tells them to |
+
+The hint on every violation should say exactly that: *put the Chinese in a `#` comment,
+which is fully supported.* That turns a refusal into a one-line fix.
+
+### 8.3 ASCII, not "CJK"
+
+Ban **all non-ASCII**, not Chinese specifically:
+
+1. **Homoglyphs.** A Cyrillic `а` (U+0430) inside `nаme:` is visually identical to ASCII
+   `a`. Under a CJK-only rule it slips through and produces a baffling "unknown key
+   `nаme`" against an allowed list that appears to contain it. One ASCII rule kills the
+   entire class.
+2. **No "is this Chinese enough" ambiguity** — one predictable rule, one message.
+3. Paths, tar members, and HDF5 attribute names are safest as ASCII regardless of script.
+
+**No field is exempt** — maintainer, 2026-07-31: *"scan.name 也不允许用中文，英文是唯一
+YAML 语言."* That closes the one open question in this section: free-text fields
+(`description`, …) follow the same rule as everything else. English is the task card's
+only language; anything a user wants to write in Chinese goes in a `#` comment, which
+stays fully supported.
+
+`Scan.name` is the sharpest case and is explicitly covered: it passes validation today
+and then becomes a directory name, propagating into paths, tar members, and HDF5
+attributes.
+
+### 8.4 Where it runs, and what it prints
+
+- **Before schema validation**, on the parsed document, so a Chinese key produces
+  `JV2-ENC-001` instead of a confusing `JV2-SCH-001 additional properties` error.
+- New code **`JV2-ENC-001`**, one issue per offending location, with the YAML path and
+  the character positions.
+- Same exit contract as the rest of D17: **exit 2, nothing started, nothing on disk.**
+
+### 8.5 This supersedes the CJK table fix — if diagnostics escape non-ASCII
+
+Note the trap: banning Chinese does **not** by itself fix D17.6's misaligned summary
+table, because the error *reporting* the Chinese must display it, and that string is
+exactly what overflows the box-drawing width.
+
+Resolve it by **escaping non-ASCII in diagnostics** — render the offending text as
+`\uXXXX` (or as a caret position under an ASCII-only excerpt) so every line the table
+prints is ASCII by construction. Then the table's character count equals its display
+width, and D17.6 item (1) (`unicodedata.east_asian_width` plumbing) can be **dropped
+entirely** rather than implemented. One rule replaces two mechanisms.
