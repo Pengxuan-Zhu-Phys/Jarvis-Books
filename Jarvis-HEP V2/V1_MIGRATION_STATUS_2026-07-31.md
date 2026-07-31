@@ -127,3 +127,78 @@ EnvReqs/LibDeps）**全部由 HEP 自己拥有**，没有任何外部组件参�
 2. **D17.8**（注入键幻影报错 + 编码错误压制 schema 错误）——同属校验体验，一起做省一次上下文
 3. **D14.1 集群执行**——真正的新能力，也是 plan 里 next pick
 4. D13.15（8 个失败测试）建议在开 D14 之前清掉，否则新工作没有干净的基线
+
+---
+
+## 6. 第二轮排查（2026-08-01）：按"用户能写进 YAML 的东西"逐项核对
+
+第一轮是**模块名层面**的对比，会漏掉"模块在、功能是空的"这类——LibDeps 就是这么被漏掉的
+（`library.py` 存在，所以看起来已覆盖）。这一轮改为核对用户真正会写的 YAML 键。
+
+### 6.1 `Utils.interpolations_1D` — 能力已迁移，但**迁移路径没告诉用户**
+
+**15/65 张真实卡片**用了这个块。V1 的语义是：从 CSV（如 `Xenon1T2019SD_p.csv`，
+氙实验自旋相关质子截面上限）或内联 x/y 数组构造一维插值，支持 `logX`/`logY`/`kind`，
+然后把它**注册进表达式命名空间**（`core.py:351` → `self._funcs`，和 Operas 函数同一个字典），
+于是 `XenonSD2019(mchi)` 可以直接写在 LogLikelihood 或 selection 里。对暗物质唯象来说，
+"把发表的排除曲线当函数用"是日常操作。
+
+V2 当前的回应是一句硬拒绝（`task_schema.py:28`）：
+
+```
+"Utils": "Remove top-level Utils: it is not supported by V2."
+```
+
+**但能力其实在的**——已经迁进 Jarvis-Operas，而且形态更好：
+
+- `interp1.interp1_xy_flat` / `interp1_xlog_yflat` / `interp1_xflat_ylog` / `interp1_xy_log`
+  —— 正好覆盖 V1 的 `logX`/`logY` 四种组合
+- `dmddxe.*` —— 一整套已注册的直接探测实验限制（CDEX、CDMS、DAMIC、DarkSide50、
+  `AllLimitsHM2024`/`AllLimitsLM2024` …），用户不必再自己找 CSV
+- `add_interpolation_namespace(manifest_path, namespace, namespace_manifest, …)`
+  —— 用户仍可注册**自己的**曲线数据
+
+所以这不是功能缺失，是**迁移路径缺失**：用户被告知"删掉这个块"，却没被告知能力去了哪里。
+一个手上有 15 张这种卡片的用户，看到这条消息只会以为 V2 砍掉了这个功能。
+
+**建议**（WP **D18.6**）：把这条消息改成指路 —— *"`Utils.interpolations_1D` 已迁移到
+Jarvis-Operas：内置实验限制见 `Jarvis2 operas list | grep dmddxe`；自有曲线用
+`interp1.*` 或 `add_interpolation_namespace` 注册"*，并在 YAML_REFERENCE + 一篇 skill
+里写清对照写法。
+
+### 6.2 变量分布：10 种里缺 5 种
+
+| | 类型 |
+|---|---|
+| V2 支持 | `Flat` `Log` `Normal` `Log-Normal` `Logit` |
+| **V2 缺** | `Binomial` `Poisson` `Beta` `Exponential` `Gamma` |
+
+V2 的 `variables.py` 用显式白名单硬拒绝（`JV2-VAR-002`），所以 V1 卡片里写 `Poisson`
+会直接失败。**缓解因素**：65 张真实卡片里 **0 张**用到这 5 种，所以这是潜在的 V1 卡片
+兼容缺口，不影响任何现有工作流。V1 的实现是 `variables.py` 里几行 numpy 调用，
+补齐成本很低（WP **D18.7**）。
+
+### 6.3 澄清：`modes` 不是缺口（V1 死代码）
+
+`Calculators.Modules[].modes` 在 V2 schema 里被容忍但零代码消费——看着像"解析了没实现"。
+核实后：**V1 自己也只在 `Module/calculator.py:18-19` 设了个布尔标志，之后从不使用**，
+且 0 张真实卡片用它。记录在此，免得将来有人把它当缺口去"补齐"。
+
+### 6.4 已确认覆盖（本轮核实，无需再查）
+
+- **模块级 `selection`**（V1 按参数点跳过某个 calculator）——已实现
+  （`Module/calculator.py:549`，D12.1 交付）
+- `Scan` 子键（`name` / `save_dir` / `sample_directory`）——真实卡片用到的全部已声明
+- `required_modules` / `make_paraller` / `clone_shadow` / `Sampling.Nuisance`——均有代码消费
+- `Module/parameters.py`——V1 内部类，无对应 YAML 块，对应 V2 的 `Sampling.Variables`
+
+### 6.5 更新后的缺口总表
+
+| 缺口 | 严重度 | WP |
+|---|---|---|
+| LibDeps 装一次（完全没有安装引擎 + 2 个高频 token KeyError） | 高 | D18.1–18.5 |
+| `Utils.interpolations_1D` 迁移路径无指引（15 张卡片） | **中高**（能力在，是指引缺失） | D18.6 |
+| 5 种变量分布被硬拒 | 中（0 张卡片在用） | D18.7 |
+| 12 个 V1 采样器无实现 | 中（多数是 `DESIGN_SAMPLERS_2.0.md` 明列的 non-goal） | 待定 |
+| `--refs`（引用信息，写论文用） | 中低 | 待定 |
+| `--benchmark` / `--skip-library-installation` | 低（后者随 D18.4 一起） | D18.4 |
