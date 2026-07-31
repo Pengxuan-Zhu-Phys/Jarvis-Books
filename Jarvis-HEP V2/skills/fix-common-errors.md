@@ -19,12 +19,29 @@ Jarvis2 validate my_card.yaml --strict # 把警告也当错误（推荐提交前
 大多数配置类问题在这一步就能定位——报错信息里带 `JV2-…` 错误码、出错的键路径
 和修法提示。**任何时候改完 YAML，先 validate 再 run。**
 
+**校验是严格的，而且发生在一切之前。** 卡片里出现不认识的键或类型不对，
+`Jarvis2 run` 会直接以退出码 2 停下——**不连 Redis、不起 Worker、不建任何目录**，
+不会留下半个残缺的 `outputs/`。所以校验报错时你什么都不用清理，改完卡片重跑即可。
+
+拼错键会直接告诉你想写的是什么：
+
+```
+[error] JV2-SCH-001  $.Sampling.AdaptiveBridson
+        Additional properties are not allowed ('initial_radiuz' was unexpected)
+        suggestion: Remove or rename 'initial_radiuz'. Did you mean 'initial_radius'? …
+```
+
+一次会把**所有**错误报全（按路径排序），改一轮就行，不用反复试。
+
 ## 急救表
 
 | 症状（关键词） | 原因 | 修法 |
 |---|---|---|
 | `internal Redis is unavailable at 127.0.0.1:6379` | 本地 Redis 没启动 | `brew services start redis` 或 `docker run -d -p 6379:6379 redis:7`；远程 broker 用 `EnvReqs.V2.redis` |
 | `sampler method 'Xxx' …` + 一串可用名 | Method 拼写错 | 从报错列出的名单里照抄；选法见 [choose-sampler](choose-sampler.md) |
+| `JV2-SCH-001` + `Additional properties are not allowed` | 键名拼错或该块不认识这个键 | 按提示里的 **Did you mean** 改；`Allowed keys` 列出了该块全部合法键 |
+| `JV2-SCH-001` + `is not valid under any of the given schemas` | 值的类型不对（如整数位给了字符串） | 对照 YAML_REFERENCE 改成正确类型。数字可以写 `0.05` 或 `1.0e-5`；注意 YAML 里 **`1e-5` 会被当成字符串**（少个小数点），虽然目前能通过，仍建议写 `1.0e-5` |
+| `JV2-SCH-002`（不支持的 IO 格式） | Portal 没有这个格式的适配器 | 报错会列出 **Portal 当前真实支持的格式**，照着选；升级 Jarvis-Portal 后新格式会自动可用，无需改 HEP |
 | `JV2-BND-012`（Bounds.dynamic 被拒） | 嵌套采样没有 dynamic 开关 | 删掉该键；动态=`Dynesty`，静态=`MultiNest` |
 | `unsupported EnvReqs.V2 setting(s): …` | V2 块里写了不支持的键 | 报错列出全部支持键；对照 YAML_REFERENCE §5 |
 | `top-level Runtime is no longer a V2 YAML interface` | 用了旧版 Runtime 块 | 把 workers/batch_size 挪进 `EnvReqs.V2` |
