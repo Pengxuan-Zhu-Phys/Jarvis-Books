@@ -1,6 +1,6 @@
 # V2 Distributed Runtime — Development Plan (Agent Execution Playbook)
 
-Last updated: 2026-07-31. Branch `jarvis2`; D17.1–D17.7 strict-validation work is complete. D13.11 landed; suite last recorded 608 passed / 8 pre-existing failures — triage tracked in D13.15.
+Last updated: 2026-07-31. Branch `jarvis2`; D17.1–D17.8 complete. **V1 migration status + open gaps: [`V1_MIGRATION_STATUS_2026-07-31.md`](V1_MIGRATION_STATUS_2026-07-31.md)** (12 V1 samplers unmigrated; `--refs`/`--benchmark`/`--skip-library-installation` absent; **D17.9** root-zone hole). D13.11 landed; suite last recorded 608 passed / 8 pre-existing failures — triage tracked in D13.15.
 Archive: `archive/V2_PLAN_ARCHIVE_2026-07-14.md`.
 **Priority note (maintainer):** **D8 Agent Bridge stays parked** (D8.1/8.2/8.4 + agent stop-ack;
 re-confirmed 2026-07-16). **D9–D12 closed. D13 closed through D13.9** (YAML validation gate —
@@ -147,7 +147,7 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 > — D0.1–D0.5, D1.1–D1.2, D2.1–D2.3, D3.1–D3.3, D4.1–D4.2, D5.1–D5.2, D6.1–D6.2,
 > D7.1 (2026-06-28/29); D9.1–D9.3, D9.5, D9.7–D9.8 (2026-07-10); D10.1–D10.2
 > (2026-07-11); D11.4a–D11.4d (2026-07-13); D9.4/D9.6, D10.3–D10.5, D11.1–D11.5,
-> D12.0–D12.8 (2026-07-14…16); D13.1–D13.5b (2026-07-16/17); D17.1–D17.7 (2026-07-31); D13.6–D13.10
+> D12.0–D12.8 (2026-07-14…16); D13.1–D13.5b (2026-07-16/17); D17.1–D17.8 (2026-07-31); D13.6–D13.10
 > and D13.11 (2026-07-29)
 > (2026-07-20/21); plus the pre-V2 M0/M1
 > row. This table
@@ -167,7 +167,8 @@ Allowed statuses: `todo`, `in-progress`, `done`, `blocked`.
 | D13.13 | Doc/design debt: `convert` in `components/cli.md` | D13 | — | todo |            | `CODE_REVIEW_2026-07-23.md` §2.2. `Jarvis2 convert` is missing from `cli.md` (all 10 other subcommands are there). ~~Install-reuse design doc~~ — **done 2026-07-23**: [`DESIGN_CALC_INSTALL_CONTROL_2.0.md`](DESIGN_CALC_INSTALL_CONTROL_2.0.md). YAML_REFERENCE §9.4's false idempotency note corrected 2026-07-23; its final rewrite ships with D13.11. |
 
 
-| D17.8 | ASCII check: skip injected keys; stop suppressing unrelated schema errors | D17 | — | todo |            | Verification of `6e308a4` (design §8.6/§8.7). The feature itself is right — Chinese keys/values/`Scan.name`/`description` and even a Cyrillic homoglyph are all rejected, comments stay legal, corpus 0-rejections, and the escaping solved the table alignment *better* than specced (table is ASCII `+---+` by construction, so D17.6's `east_asian_width` work was correctly dropped). Two usability regressions against §4: **(1)** validation runs on the **post-`load_task_yaml`** config, so one Chinese `Scan.name` reports **three** errors — `$.Scan.name` plus the injected `$.scan_name` and `$.task_result_dir` (`task_config.py:474–477`). The user never wrote the latter two; grepping their YAML finds nothing and "position 134" points into a derived absolute path. Validate the raw parsed document before injection, or mark injected keys and skip/dedupe them. **(2)** encoding errors **suppress** schema errors: a card with Chinese *and* two typo'd keys shows only `JV2-ENC-001`, so the typos surface only on a second run — §4 requires one fix pass, not N. Suppress only the schema errors naming an offending key, not unrelated blocks. |
+
+| D17.9 | Root zone is misclassified as `delegated` — top-level block typos silently drop the block | D17 | — | todo |            | [`V1_MIGRATION_STATUS_2026-07-31.md`](V1_MIGRATION_STATUS_2026-07-31.md) §3. `task-card-v2.schema.json` carries `x-jarvis-zone: delegated` / `additionalProperties: true` at the **root**, so a typo in any top-level block name is accepted and the block silently vanishes. Measured: `Calculater:` → **the entire calculator pipeline is ignored and the scan completes normally, producing samples that never ran any physics program**; `Opera:`, `EnvReq:` (workers reverts to default), `Scam:` (output lands in `outputs/default/`) likewise. This is precisely the "looks normal, results quietly wrong" class D17 exists to eliminate. **Root cause**: `delegated` is defined in `DESIGN_STRICT_VALIDATION_2.0.md` §2 as *an external, separately-versioned package owns this vocabulary* — but every top-level block (Scan/Sampling/Calculators/Operas/EnvReqs/LibDeps) is owned by HEP itself. The classification was likely a shortcut to avoid rejecting `LibDeps`, which the runtime reads (`command_parser.py:305`) and 7 example cards use, yet the root `properties` never declares. **Fix**: declare `LibDeps` (and any other tolerated V1 top-level block) in the schema, then set the root to `closed` with did-you-mean. Note `Sampling` typos happen to be caught today only because the legacy contracts layer requires a `Method` — luck, not design. |
 
 | D14.1 | Worker template over Redis + `Jarvis2 worker start --connect`                           | D14       | —                | todo                                   |            | `DESIGN_CLUSTER_EXECUTION_2.0.md` §3/§4. Template `hep:worker:template:<scan>` (JSON, version-guarded); two pools on one host drain a live scan with DATABASE parity. |
 | D14.2 | Remote-aware watchdog + `<host>:<n>` worker ids                                         | D14       | D14.1            | todo                                   |            | Sweep foreign dead workers, never respawn; pool-local D12.7 orphan reaping. |
