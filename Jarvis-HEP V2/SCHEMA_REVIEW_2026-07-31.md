@@ -15,113 +15,124 @@ release, and `os.replace` in the CSV writer are all in, with
 `test_reinstall_epoch_fans_out_to_every_pack_once` guarding the part that was easy to get
 wrong. Nothing to add there.
 
-**Verdict on the schema subsystem: the plumbing is sound; the schemas are empty.** The
-loader, registry, manifest dispatch, and diagnostic rendering are well built — 38 files
-load, `$id`s are unique and resolvable, no manifest/disk drift, Portal alignment is
-test-guarded. But the per-method schemas that the whole structure exists to dispatch to
-**contain no per-method constraints**, so for 14 of 17 methods the layer validates nothing
-a user could get wrong. Two structural holes below.
+**Verdict on the schema subsystem: the plumbing is sound; two real gaps.** The loader,
+registry, manifest dispatch, and diagnostic rendering are well built — 38 files load,
+`$id`s are unique and resolvable, no manifest/disk drift.
+
+> **⚠ Scoped after maintainer feedback (2026-07-31).** This review first reported "0 of 17
+> method schemas constrain `Bounds`" and recommended doing the MCMC family first. Two
+> corrections: **(a) the MCMC family is not migrated yet**, so its key vocabulary is not
+> settled and writing strict schemas for it now would pin an interface that is still
+> moving — the requirement is only that the **already-available** methods are right;
+> **(b) I/O formats are not a peer of sampling methods** — their authority is the
+> **Jarvis-Portal source**, not HEP's registry, which changes what §2's finding actually
+> is. Both sections below are rewritten accordingly; the raw measurements are unchanged.
 
 ---
 
-## 1. The per-method split currently carries no per-method content
+## 1. Among the migrated methods, only `AdaptiveBridson` is unguarded
 
-`manifest.json` maps 17 methods to 17 schema files, `task_schema.py` dispatches by
-`Sampling.Method`, and `test_manifest_gives_each_sampling_method_its_own_schema` asserts
-each method has its own schema. That all works. But here is `dram.json` in full:
+Every method file has the same shape — a `$ref` to the shared `variables.json` plus
+`{"Method": {"const": "<its own name>"}}`. That const is **tautological**: the dispatcher
+selects `dram.json` *because* `Method == "DRAM"`, then asserts `Method == "DRAM"`. It can
+never fail. And `core/sampling.json` types `Bounds` as a bare `{"type": "object"}`, so no
+method schema constrains it.
 
-```json
-{"$schema":"…","$id":"…/methods/dram.json",
- "allOf":[{"$ref":"…/methods/variables.json"},
-          {"properties":{"Method":{"const":"DRAM"}}}]}
-```
+But the consequence is **not** uniform, because a second layer (the legacy contracts) also
+runs. Measured per method, with a correct card and a typo'd one:
 
-Every other method file is the same shape. Two consequences:
-
-**The `Method: const` assertion is tautological.** The dispatcher selects `dram.json`
-*because* `Sampling.Method == "DRAM"`, then validates that `Method == "DRAM"`. It cannot
-fail. (Verified: the const in every file matches its manifest key, so no card ever trips
-it.)
-
-**`Bounds` — the block that actually differs per method — is unconstrained everywhere.**
-`core/sampling.json` types it as bare `{"type": "object"}`, and **0 of 17** method schemas
-say anything about it. Measured:
-
-| method schema | constrains `Bounds`? | content beyond const + shared `required: [Variables]` |
+| method (migrated / in production) | typo'd key caught? | caught by |
 |---|---|---|
-| Bridson / Random / CSV | no | `required` / `anyOf` (real, useful) |
-| **the other 14** (DRAM, MCMC, AM, AMMCMC, Dynesty, MultiNest, PT, PTMCMC, PTEnsemble, DEMCMC, Ensemble*, Grid, AdaptiveBridson) | no | **nothing** |
-
-What that costs a user, executed against the current tree:
+| Bridson | yes | schema (`additionalProperties` on the Sampling core) + `JV2-MTH-010` |
+| Random / CSV | yes | their method schemas carry real `required`/`anyOf` content |
+| Grid | yes | schema |
+| Dynesty / MultiNest | yes | legacy contracts (`JV2-BND-001`) |
+| **AdaptiveBridson** | **no — 放行** | **nothing** |
 
 ```
-DRAM  Bounds:{chains:4,  steps:100}    → 放行  (correct card)
-DRAM  Bounds:{chainz:4,  stepz:100}    → 放行  ← every key misspelled
-DRAM  Bounds:{chains:"四", steps:100}   → 放行  ← string where an int is required
+AdaptiveBridson: {initial_radius: 0.08}                  → 放行   (correct)
+AdaptiveBridson: {initial_radiuz: 0.08, 瞎写: 1}          → 放行   ← identical outcome
 ```
 
-The scan then runs with `chains` silently falling back to its default. The user asked for
-4 chains, gets 1, and the only evidence is a number in a log line they have no reason to
-read. This is the same class of failure as the install-reuse bug in the last review:
-**the run looks completely normal and the results are quietly not what was requested.**
+`Sampling.AdaptiveBridson` is typed as a bare object, so its whole sub-block is a
+free-for-all: a misspelled `initial_radius` / `refinement_factor` / `threshold` /
+`max_points` is accepted and the sampler silently uses its default. This is the method
+driving the production iDM scans, and its keys *are* already specified in
+YAML_REFERENCE §6.9 — so closing it is transcription, not design.
 
-Coverage is also uneven *between* families, which makes it unpredictable: the legacy
-contracts layer does check nested-sampler `Bounds` (`Dynesty Bounds:{nlive:500, walkz:9}`
-→ `JV2-BND-001`), so a Dynesty typo is caught while the identical mistake in DRAM is not.
-A user cannot tell which of their mistakes the validator will find.
+**Recommendation**: give `adaptive_bridson.json` a real `AdaptiveBridson` sub-schema
+(`properties` + types + `additionalProperties: false`) from §6.9. Leave the MCMC-family
+schemas as-is until that family is actually migrated — pinning an unsettled interface is
+worse than leaving it open. Consider moving the nested-sampler `Bounds` rules from the
+contracts layer into `dynesty.json`/`multinest.json` later, so one layer owns per-method
+shape; not urgent, since they are covered today.
 
-**Recommendation**: put the per-method `Bounds` vocabulary into the per-method schemas —
-that is the one job this split exists to do. Each needs `Bounds.properties` with types and
-`additionalProperties: false` (the keys are already documented in YAML_REFERENCE §6.11–6.13,
-so this is transcription, not design). Do the MCMC family first: it is the family with no
-contract-layer coverage at all. Note the shipped schemas do use `x-jarvis-example`, so the
-diagnostic machinery for good messages is already there and unused for these keys.
+**Open question for the maintainer** (scoping, not a bug): the un-migrated MCMC family is
+nonetheless *registered in the Distributor and passes validation today*, so a user can
+write `Method: DRAM`, get a clean `Jarvis2 validate`, and launch it. If that family is not
+ready for users, it may be worth marking it experimental at the registry level (a warning
+diagnostic, or omission from the "Available:" list in `JV2-MTH-003`) rather than letting
+validation imply readiness.
 
 Also: `test_manifest_gives_each_sampling_method_its_own_schema` asserts only that the 17
-*URIs* are distinct — it passes trivially while all 17 *contents* are equivalent. It reads
-like a guard for this design intent but does not enforce it. Worth strengthening to
-"each method schema constrains at least one method-specific key" once §1 lands.
+*URIs* are distinct — it passes trivially while the contents are equivalent. It reads like
+a guard for per-method content but does not enforce any.
 
-## 2. Unknown sampling method fails **open**; unknown I/O format fails **closed**
+## 2. The manifest pins the I/O format list, which breaks the Portal-upgrade principle
 
-`_validate_selected_io` emits `JV2-SCH-002` for an unregistered format:
+I/O formats do not come from HEP's registry — their authority is the **Jarvis-Portal
+source**, and Portal is a separately-versioned package. The README states the resulting
+principle plainly: *plugin packages — upgrade them to extend HEP without a HEP release.*
+
+The validator does not honour that. `_validate_selected_io` **never consults Portal**; it
+reads `manifest["io"][direction]` and treats a name that is absent from that hardcoded map
+as a hard error:
 
 ```python
-schema_uri = formats.get(kind)
+schema_uri = formats.get(kind)          # manifest is the sole authority
 if schema_uri is None:
-    issues.append(issue("error", "JV2-SCH-002", …))   # fail closed ✓
+    issues.append(issue("error", "JV2-SCH-002",
+        f"unsupported {direction} format {raw_kind!r}; register a local schema in schema/manifest.json"))
 ```
 
-The sampling path, given the same situation, does nothing:
-
-```python
-schema_uri = manifest["sampling_methods"].get(method)
-if schema_uri is not None:
-    issues.extend(_issues_for(...))                   # else: silently no validation
-```
-
-For a *typo'd* method this is harmless — the legacy `JV2-MTH-003` check catches it against
-the Distributor registry (verified: `Method: dram` → clear error listing all 17 valid
-names, exit code 2). The hole opens for a method that **is** registered but has no manifest
-entry — i.e. the normal act of adding a sampler. Simulated by registering one:
+Simulated a Portal upgrade that adds `HepMC` (HEP source untouched, exactly the scenario
+the principle promises to support):
 
 ```
-Distributor.register("MyNewSampler", …)
-card Sampling.Bounds = {chains: "这里本该是整数", 完全瞎写的键: {...}}
-→ errors: 无   warnings: 无      ← zero diagnostics, silently unvalidated
+Portal now supports input: [CSV, DAT, JSON, SLHA, Text, TSV, Wolfram, HepMC]
+card using type: HepMC  →  JV2-SCH-002  "unsupported input format 'HepMC';
+                                         register a local schema in schema/manifest.json"
 ```
 
-And nothing fails in CI when that happens: `test_manifest_matches_builtin_portal_formats`
-guards the **Portal ↔ manifest** boundary, but there is **no equivalent test for
-Distributor ↔ manifest**. I checked all four boundaries by script — manifest↔disk,
-`$id`↔manifest, Distributor↔manifest, Portal↔manifest — and all four are clean *today*;
-three of them are held only by whoever last edited by hand.
+So a format Portal can genuinely read is rejected until someone edits HEP and ships a
+release — the coupling the plugin design exists to avoid. And
+`test_manifest_matches_builtin_portal_formats` asserts **set equality** between the
+manifest and `available_io_formats()`, which means the same Portal upgrade also turns
+HEP's test suite red without a single HEP change. That test currently enforces the
+coupling rather than the principle.
 
-**Recommendation**: (a) mirror the IO behavior — emit a diagnostic when a registered
-method has no schema, so the gap announces itself; (b) add the missing
-Distributor↔manifest test alongside the Portal one; (c) consider asserting
-manifest↔directory too (cheap, and it is the one that turns into a startup crash rather
-than a silent skip).
+**Recommendation**: invert the authority. Accept the format if **Portal** supports it
+(`available_io_formats(direction)`); use the manifest only to *enrich* validation for the
+formats HEP happens to ship a schema for. Then:
+
+- Portal-supported **and** schema present → full schema validation (today's behavior);
+- Portal-supported, **no** schema → accept; at most an info/debug note that detailed
+  checking is unavailable — never an error;
+- **not** Portal-supported → the existing hard error, now with the honest message
+  ("Portal does not provide an adapter for …", listing `available_io_formats()`), which is
+  also the message a user can act on.
+
+Change the test to a **subset** assertion (every manifest format must be Portal-supported,
+not vice versa), so adding a Portal format never breaks HEP, while a stale HEP schema for
+a format Portal dropped still fails loudly.
+
+Note the related asymmetry is *not* a defect once the categories are separated: an
+unknown **sampling method** is caught by `JV2-MTH-003` against the Distributor registry
+(verified: `Method: dram` → clear error listing all valid names, exit 2). The one case
+that still fails open is a method that **is** registered but has no manifest entry — the
+normal act of adding a sampler. Simulated by registering one, a card with garbage `Bounds`
+produced **zero** diagnostics. There is no Distributor↔manifest consistency test to catch
+that omission (Portal↔manifest has one). Worth adding, and cheap.
 
 ## 3. Minor: root schema `$id` does not follow the file-path convention
 
@@ -157,10 +168,11 @@ Registered as **D13.14** in [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md):
 
 | # | Item | Severity |
 |---|---|---|
-| 1 | Give each method schema its real `Bounds` vocabulary (`properties` + types + `additionalProperties: false`); MCMC family first | **high** — silent misconfiguration today |
-| 2 | Fail-closed for registered-method-without-schema + Distributor↔manifest test (and manifest↔directory) | medium |
-| 3 | Strengthen `test_manifest_gives_each_sampling_method_its_own_schema` to require method-specific content | low |
-| 4 | Root schema `$id`/filename consistency | cosmetic |
+| 1 | I/O validation must follow **Portal**, not the pinned manifest: accept any Portal-supported format (schema only enriches), and relax the equality test to a subset assertion | **high** — rejects valid cards + breaks HEP tests on any Portal upgrade |
+| 2 | `adaptive_bridson.json`: real sub-block schema from YAML_REFERENCE §6.9 (the only migrated method with no coverage; drives the production iDM scans) | **high** — silent default fallback today |
+| 3 | Distributor↔manifest consistency test + a diagnostic when a registered method has no schema (and manifest↔directory while at it) | medium |
+| 4 | Strengthen `test_manifest_gives_each_sampling_method_its_own_schema` to require method-specific content | low |
+| 5 | Root schema `$id`/filename consistency | cosmetic |
 
 **Separately filed as D13.15** — the plan header has recorded *"608 passed with 8
 pre-existing failures"* since 2026-07-29. That was not re-verified in this review (the
