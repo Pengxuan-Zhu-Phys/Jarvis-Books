@@ -29,6 +29,7 @@ Docs/
 ├── DESIGN_CLUSTER_EXECUTION_2.0.md ← D14: remote worker pools, SLURM, broker auth/AOF
 ├── DESIGN_RESULTS_ANALYSIS_2.0.md  ← D15 (todo): warm-start cache, Jarvis2 analyze, Portal formats
 ├── CODE_REVIEW_2026-07-23.md       ← latest code review: 1 high + 3 medium findings → D13.11–13
+├── DESIGN_STRICT_VALIDATION_2.0.md ← D17: strict card validation (illegal key/type → exit); corpus gate first
 ├── DESIGN_CALC_INSTALL_CONTROL_2.0.md ← D13.11: operator-facing calculator reinstall control (jarvis_install.json)
 ├── DESIGN_PHYSICS_PLOT_SCENES_2.0.md ← D15.5–7 (todo): physics-grade auto plot YAML (log axes, posterior weights, profile contours)
 ├── DESIGN_SKILLS_LIBRARY_2.0.md    ← D16: kill the YAML complexity barrier — one intent, one runnable card
@@ -85,7 +86,14 @@ Docs/
 > [`DESIGN_CALC_INSTALL_CONTROL_2.0.md`](DESIGN_CALC_INSTALL_CONTROL_2.0.md)
 > (`jarvis_install.json` in the calculator folder + reinstall epoch).
 >
-> **Next pick:** **D13.11** (review fixes, ahead of new features), then **D14 cluster**
+> **Strict validation (D17, maintainer request 2026-07-31):** an illegal key or wrong value
+> type must log clearly and **exit** — [`DESIGN_STRICT_VALIDATION_2.0.md`](DESIGN_STRICT_VALIDATION_2.0.md).
+> Sequencing is forced: **44 of 65 shipped example cards fail validation today**, almost all
+> because the schema omits *legitimate* keys (`Calculators.path` ×35 — which the runtime
+> explicitly tolerates). Complete the vocabulary (**D17.1**) before flipping strict (**D17.5**),
+> with the whole card corpus as the CI gate.
+>
+> **Next pick:** **D17.1**, then **D14 cluster**
 > ([`DESIGN_CLUSTER_EXECUTION_2.0.md`](DESIGN_CLUSTER_EXECUTION_2.0.md), **D14.1**), then
 > **D15 reuse/analysis** ([`DESIGN_RESULTS_ANALYSIS_2.0.md`](DESIGN_RESULTS_ANALYSIS_2.0.md)).
 >
