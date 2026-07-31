@@ -1,6 +1,6 @@
 # DESIGN — LibDeps: install-once shared dependencies (V2, D18)
 
-**Status**: design accepted 2026-07-31 (maintainer: *"对齐 V1 的 LibDeps 功能"*); implementation `todo`
+**Status**: design accepted 2026-07-31; **implemented and verified 2026-08-01** (`6657fd3`) — see §6
 **Date**: 2026-07-31
 **Scope**: bring V2's `LibDeps` block up to V1 parity — build/install shared libraries
 **once**, reuse them across every calculator and every scan, with the operator in control
@@ -158,3 +158,25 @@ resolving paths exactly as today.
    `LibDeps.path`. The control process is the only writer and the operation is
    idempotent-by-fingerprint, so the worst case is one redundant rebuild; note it rather
    than adding locking.
+
+---
+
+## 6. 实现验收（2026-08-01，`6657fd3`）
+
+用一个真实的两模块项目（`LibB` 依赖 `LibA`，安装命令写时间戳到 `BUILD_COUNT`）实跑验证，
+不看 diff 看行为。**五个 WP 全部达标**。
+
+| 要求 | 结果 |
+|---|---|
+| D18.1 `${LibDeps:path}` | ✅ 解析（原先 KeyError，36 处使用） |
+| D18.1 `${LibDeps:make_paraller}` | ✅ 解析为 `16` |
+| D18.1 `@{ROOT path}` | ✅ 未配置时报 *"configure EnvReqs.CERN_ROOT with a path"*——正是设计要求的措辞 |
+| D18.2 schema | ✅ `schema/core/libdeps.json`；含 LibDeps 的卡片校验通过 |
+| D18.3 安装引擎 | ✅ 两模块各建一次；`${LibDeps:LibA}` 在 LibB 的命令内解析成功（依赖序生效）；字符串命令直接可用 |
+| D18.3 preflight 位置 | ✅ 构建失败时 **Redis/Worker 一个都没起**（日志中零启动记录） |
+| D18.4 复用 | ✅ 第二次 run 构建次数保持 1，控制文件记 `status: reused` |
+| D18.4 `reinstall` 开关 | ✅ 置 true 后两模块各重建一次（1→2），标志自动复位，`reinstall_epoch` 0→1 |
+| D18.4 `--skip-library-installation` | ✅ 不重建，且日志写明 *"skipping installation; verified &lt;path&gt;"*（有校验路径存在，不是盲跳） |
+| 失败处理 | ✅ `Library 'LibA' command failed (exit 7); see …/logs/libtest/library-LibA.log`——点名模块、退出码、日志路径 |
+
+控制文件与 calculator 的完全同构（`schema: jarvishep2.calc_install/v2`），操作者只需学一套机制。
