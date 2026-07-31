@@ -329,3 +329,55 @@ Resolve it by **escaping non-ASCII in diagnostics** — render the offending tex
 prints is ASCII by construction. Then the table's character count equals its display
 width, and D17.6 item (1) (`unicodedata.east_asian_width` plumbing) can be **dropped
 entirely** rather than implemented. One rule replaces two mechanisms.
+
+### 8.6 Implementation verification (`6e308a4`)
+
+Re-measured against the running code.
+
+| requirement | result |
+|---|---|
+| Chinese **key** | `JV2-ENC-001`, path + character positions |
+| Chinese **`Scan.name`** (passed before!) | now rejected |
+| Chinese **`description`** (no exemption) | rejected |
+| **Cyrillic homoglyph** `nаme` (U+0430) | rejected at position 2 — and rendered `nаme`, which makes the invisible character *visible*. Unplanned benefit of the escaping rule |
+| **Comments** | a card with Chinese comments throughout **validates successfully** |
+| **Corpus** | 77 cards, **0** rejected by the ASCII rule — zero migration cost, as predicted |
+| exit code / side effects | 2, nothing created |
+| §8.5 escaping ⇒ table alignment | solved *better* than specced: the table itself is now ASCII (`+---+`) **and** contents are escaped, so it stays aligned by construction. D17.6's `east_asian_width` work was correctly dropped |
+
+D17.6 items also verified: plural typos now name **each** key with its own hint
+(`'initial_radiuz' (did you mean 'initial_radius'?); 'max_pointz' (did you mean
+'max_points'?)`); numeric errors read *"expected a number (e.g. 0.05 or 1.0e-5), got the
+string 'abc'"*; the corpus test is now `skipUnless(EXAMPLES_ROOT.is_dir())`;
+`_format_issue_summary_table([])` no longer raises.
+
+### 8.7 Two follow-ups (filed as D17.8)
+
+**(1) Derived keys produce phantom errors — the user cannot find them in their file.**
+Validation runs on the **post-`load_task_yaml`** config, which carries keys the runtime
+injected (`task_config.py:474–477`: `task_root`, `project_root`, `task_result_dir`,
+`scan_name`). One Chinese `Scan.name` therefore reports **three** errors on the real CLI
+path:
+
+```
+| 1 | JV2-ENC-001 | $.Scan.name       | … in string value '暗…'          ← the real mistake
+| 2 | JV2-ENC-001 | $.scan_name       | … in string value '暗…'          ← injected copy
+| 3 | JV2-ENC-001 | $.task_result_dir | … at position(s) 134, 135, …         ← derived path
+```
+
+The user wrote none of `scan_name` / `task_result_dir`; grepping their YAML for them
+returns nothing, and "position 134" refers to an absolute path they never typed. Report
+encoding violations only for **user-authored** keys — either validate the raw parsed
+document before injection, or mark injected keys and skip them (and dedupe values derived
+from an already-reported one).
+
+**(2) Encoding errors suppress schema errors, so fixing takes two passes.** A card with
+both Chinese *and* two typo'd keys reports only the `JV2-ENC-001`s; the typos appear only
+after the Chinese is fixed and the card re-run. §4 requires *all errors at once — a
+physicist should fix a card in one pass, not N runs*. The short-circuit is defensible for
+non-ASCII **keys** (schema would re-report them as "additional properties"), but not for
+unrelated blocks: suppress only the schema errors that name an offending key, and let the
+rest through.
+
+Neither is a correctness bug — the feature works and the corpus is green. Both are
+against the design's own §4 usability contract.
