@@ -3,70 +3,14 @@
 
 Symptoms, causes, fixes --- ordered roughly by how early in a run they bite.
 
-\section{Validation error codes}
+\section{Before anything else: read the validation report}
 \label{sec:validation-codes}
 
-Every \cli{run}/\cli{check}/\cli{validate} loads the card through one gate
-(Section~\ref{sec:cli-validate}) before anything else happens. Each finding carries a
-stable code, the exact \textsc{yaml} path, and a message; this table is every code the
-gate can raise.
-
-\begingroup
-\setlength{\tabcolsep}{0pt}
-\begin{longtable}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
-  \toprule
-  \textbf{Code} & \textbf{Path / trigger} & \textbf{Meaning} \\
-  \midrule
-  \endhead
-  \code{JV2-LOAD-001} & \code{\$} & the loaded config is not a mapping \\
-  \code{JV2-MTH-001} & \yamlkey{Sampling} & block missing or not a mapping on a
-    non-check run \\
-  \code{JV2-MTH-002} & \yamlkey{Sampling.Method} & missing on a scan run \\
-  \code{JV2-MTH-003} & \yamlkey{Sampling.Method} & set to a value \Jtwo\ does not
-    implement (Section~\ref{sec:method}) \\
-  \code{JV2-MTH-010}/\code{011} & \yamlkey{Sampling.Radius} & \sampler{Bridson}:
-    missing / not a positive number \\
-  \code{JV2-MTH-012}/\code{013} & \yamlkey{Sampling.\allowbreak{}MaxAttempt} & \sampler{Bridson}:
-    missing / not an integer $\geq 1$ \\
-  \code{JV2-MTH-020}/\code{021} & \yamlkey{Sampling."Point number"} &
-    \sampler{Random}: missing / not an integer $\geq 1$ \\
-  \code{JV2-MTH-030}/\code{031} & \yamlkey{Sampling.CSV} / \code{.path} &
-    \sampler{CSV}: block or path missing \\
-  \code{JV2-MTH-040} & \yamlkey{Sampling.data} & check-modules: neither
-    \yamlkey{Method} nor a resolvable \textsc{csv} (Section~\ref{sec:check-points-source}) \\
-  \code{JV2-VAR-001} & \yamlkey{Sampling.\allowbreak{}Variables} & required list missing, empty, or
-    not a list \\
-  \code{JV2-VAR-002} & \yamlkey{\ldots.\allowbreak{}distribution.\allowbreak{}type} & missing or not one of
-    \code{Flat}/\allowbreak\code{Log}/\allowbreak\code{Logit}/\allowbreak\code{Normal}/\allowbreak\code{Log-Normal} --- names are
-    \textbf{case-sensitive} \\
-  \code{JV2-VAR-010}--\code{037} & \yamlkey{Sampling.\allowbreak{}Variables[i]} & per-entry shape,
-    unknown keys, missing/invalid distribution parameters
-    (Chapter~\ref{ch:variables}) \\
-  \code{JV2-BND-000} & \yamlkey{Sampling.Bounds} & not a mapping \\
-  \code{JV2-BND-001} & \yamlkey{Bounds} & unknown key directly under it \\
-  \code{JV2-BND-010} & \yamlkey{Bounds.nlive} & missing or $< 2$ \\
-  \code{JV2-BND-012} & \yamlkey{Bounds.dynamic} / \code{Dynamic} & present at all ---
-    removed; switch \yamlkey{Method} instead (Section~\ref{sec:multinest-no-switch}) \\
-  \code{JV2-BND-013} & \yamlkey{Bounds.dlogz} / \code{dlogz\_init} & not a number \\
-  \code{JV2-BND-020}/\code{021} & \yamlkey{Bounds.run\_nested} & not a mapping / has
-    an unknown key \\
-  \code{JV2-BND-030}--\code{032} & \yamlkey{Bounds.sampler} & not a mapping, a
-    HEP-injected key pasted in, or an unknown constructor key
-    (Section~\ref{sec:multinest-yaml-bridge}) \\
-  \code{JV2-DEAD-001}/\code{002} & \yamlkey{Runtime.\allowbreak{}Subprocess} /
-    \yamlkey{execution.\allowbreak{}\{input,\allowbreak{}output\}[].save} & warning: dead key, silently ignored
-    at runtime \\
-  \code{JV2-OPR-001} & \yamlkey{Operas.\allowbreak{}Modules[].\allowbreak{}call\_mode} & not \code{call} or
-    \code{acall} \\
-  \bottomrule
-\end{longtable}
-\endgroup
-
-\begin{jnote}
-Every code above is a hard \code{error} except \code{JV2-DEAD-001}/\code{002}, which
-are \code{warning}s --- the card still runs, but the dead key is flagged.
-\cli{--strict} promotes those warnings to errors too (\S\ref{sec:cli-validate}).
-\end{jnote}
+Every \cli{run}/\cli{check}/\cli{validate} loads the card through one gate before
+anything starts, and its report names the failing key, the reason, and usually the
+corrected \textsc{yaml}. Section~\ref{sec:validation} shows how to read that report and
+Section~\ref{sec:code-families} maps each code family to the chapter that explains it.
+The symptoms below are the ones that survive a clean validation.
 
 \section{Startup}
 
@@ -104,7 +48,7 @@ are \code{warning}s --- the card still runs, but the dead key is flagged.
   \item[A setting is silently ignored]
         You are in the lenient half of validation --- malformed values coerce to
         defaults, malformed list entries drop (Section~\ref{sec:validation}). Diff
-        against the skeleton in Appendix~\ref{app:yaml-index}.
+        against the key index in Section~\ref{app:yaml-index}.
   \item[Fewer samples than requested]
         A \yamlkey{selection} cut: rejected candidates consume budget for every
         fixed-set method (Section~\ref{sec:selection}).

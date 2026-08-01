@@ -1,148 +1,394 @@
 \chapter{The Task Card}
 \label{ch:task-yaml}
 
-\newthought{One \textsc{yaml} file describes a whole scan.} This chapter is the top of the
-reference: how the card is loaded, what the top-level keys are, which names the loader
-reserves for itself, and --- important for debugging --- the two very different ways \Jtwo\
-reacts to a key it does not like. The following chapters then descend into each block.
+\newthought{Six keys. That is the entire top-level vocabulary of a task card}, and
+everything in Part~\ref{part:task-card} is a detail of one of them. This chapter is the
+hub: it shows the shape of a card, explains why the format is strict in some places and
+deliberately not in others, lists every key the card accepts, and --- most usefully ---
+teaches you to read the report \Jtwo\ prints when a card is wrong, because that report
+names the exact key and usually shows you the corrected \textsc{yaml}. Read this chapter
+once and you will know which of the following chapters to open, and when.
 
-\section{How the card is loaded}
+\section{The shape of a card}
+\label{sec:card-shape}
+
+A task card is one \textsc{yaml} document whose top level is a mapping. Exactly six keys
+are allowed there, all of them optional as far as the format is concerned:
+
+\begin{terminal}[the whole top-level vocabulary]
+\begin{jout}
+Scan:         name the scan and say where its outputs go
+Sampling:     which method, which variables, which likelihood
+EnvReqs:      environment checks and the V2 runtime block
+LibDeps:      external tool paths and registered executables
+Calculators:  external programs to run per point
+Operas:       in-process operators to call per point
+\end{jout}
+\end{terminal}
+
+A misspelling is not a silent no-op. \code{Calculater} is an error, reported before the
+scan can start, with the six legal names printed next to it. The leanest card that does
+useful work needs only two of the six --- a \yamlkey{Sampling} block and something to
+evaluate, exactly as in the quick start:
+
+\begin{yamlwin}
+Scan:
+  name: quickstart
+Sampling:
+  Method: Random
+  "Point number": 20
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
+  LogLikelihood:
+    - {name: LogL_Z, expression: z}
+Operas:
+  Modules:
+    - name: TrivialEggbox
+      operator: jarvishep2.testing.eggbox.eggbox2d_numpy
+      input:  [{name: x, expression: x}, {name: y, expression: y}]
+      output: [{name: z, entry: z}]
+\end{yamlwin}
+
+Everything else in Part~\ref{part:task-card} adds to that skeleton without changing its
+shape. If a card ever looks intimidating, find the six top-level keys first: the rest is
+always a subtree of one of them.
+
+\section{Strict where it knows, honest where it does not}
+\label{sec:zones}
+
+The natural worry about a format this large is that you will be punished for a typo
+somewhere deep in it. The design's answer is to be strict \emph{on purpose and only where
+that strictness is earned}. Every object in the card carries an ownership marker, and
+there are exactly three:
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Zone} & \textbf{Who owns it} & \textbf{What happens to a key you invent} \\
+    \midrule
+    closed     & \Jtwo & Error, naming the key and listing the legal ones. \\
+    delegated  & another tool & Passed through. \Jtwo\ checks only the envelope it
+                 declared, never the contents. \\
+    open       & nobody, yet & Passed through with one warning that says so, and why. \\
+    \bottomrule
+  \end{tabular}
+  \caption[The three ownership zones.]{The three ownership zones. Which one an object is
+  in decides whether an unfamiliar key is an error, a pass-through, or a warning.}
+  \label{tab:zones}
+\end{table}
+
+The distinction is worth an example, because it is the difference between two very
+similar-looking mistakes.
+
+\paragraph{A closed zone catches you.} \yamlkey{Sampling} is closed: \Jtwo\ knows every
+key that belongs there. Write \yamlkey{Sampling.Radus} and validation stops you
+immediately with the correct spelling in hand. You never get to find out at minute forty
+of a scan that your \yamlkey{Radius} was never read.
+
+\paragraph{A delegated zone gets out of your way.} \yamlkey{Sampling.Bounds} is
+delegated, because the keys inside it belong to \code{dynesty}, not to \Jtwo. Pretending
+to know that vocabulary would mean a new \code{dynesty} release could make a perfectly
+valid card fail against a stale allow-list. So \Jtwo\ validates that \yamlkey{Bounds} is a
+mapping and hands the contents on. The cost is honest and stated: a typo \emph{inside}
+\yamlkey{Bounds} is between you and \code{dynesty}
+(Chapter~\ref{ch:multinest} shows what that looks like).
+
+\begin{jnote}
+This is the whole psychology of the format. \Jtwo\ is strict about the parts it wrote and
+silent about the parts it did not, and the card tells you which is which. You are never
+guessing whether a key was understood --- either it was checked, or it was explicitly
+delegated to a tool that will check it.
+\end{jnote}
+
+\section{How a card is loaded}
 \label{sec:card-loading}
 
-\cli{Jarvis2 run <task>.yaml} performs, in order:
+\cli{Jarvis2 run}, \cli{Jarvis2 check} and \cli{Jarvis2 validate} all put the card through
+the same five layers, in this order. Knowing the order tells you which layer produced a
+complaint, and therefore what kind of fix it wants:
 
 \begin{enumerate}
   \item \textbf{Parse.} \code{yaml.safe\_load}; the top level must be a mapping.
-  \item \textbf{Resolve the project root} (the rules of
-        Section~\ref{sec:projects}).
-  \item \textbf{Resolve the scan name}: \yamlkey{Scan.name} $\rightarrow$
-        \yamlkey{scan\_name} $\rightarrow$ \code{default}.
-  \item \textbf{Resolve the output root}: the top-level \yamlkey{task\_result\_dir} if
-        given, else \file{<project-root>/outputs/<scan-name>}.
-  \item \textbf{Merge and normalize \yamlkey{EnvReqs.V2}} --- including defaults pulled
-        from a shared file via \yamlkey{EnvReqs.Check\_default\_dependencies}
-        (Chapter~\ref{ch:envreqs}).
-  \item \textbf{Phase-1 token resolution}: \marker{\&J/}, \code{\$\{Scan:\ldots\}},
-        \code{\$\{LibDeps:\ldots\}}, and registered executable names are resolved once,
-        in the control process. Per-Sample tokens pass through untouched
-        (Section~\ref{sec:tokens}).
+        Failures here are syntax, not semantics --- a stray tab, an unclosed quote.
+  \item \textbf{Character gate.} Keys and string values in your document must be
+        \textsc{ascii}. This catches the classic disaster of a curly quote or a full-width
+        colon pasted in from a chat window, which \textsc{yaml} accepts and no program
+        can use.
+  \item \textbf{Normalisation.} Historical spellings are folded to their modern
+        equivalents, defaults are filled in, and the loader stamps in the resolved paths
+        (project root, output root, scan name --- Section~\ref{sec:projects}).
+  \item \textbf{Schema.} The structure, the types, and the ownership zones of
+        Section~\ref{sec:zones}. This is where an unknown key or a string-where-a-number
+        -belongs is caught.
+  \item \textbf{Contracts.} Everything a schema cannot express: that \code{min} is below
+        \code{max}, that a required key exists \emph{for the method you chose}, that a
+        path resolves, that an operator can be imported.
 \end{enumerate}
 
-\section{Top-level keys}
-\label{sec:top-level}
+Layers 4 and 5 report into one combined report, so you never fix a schema error, re-run,
+and only then discover a contract error underneath it.
 
-\begin{table}[ht]
-  \footnotesize
-  \begingroup
-  \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
-    \toprule
-    \textbf{Key} & \textbf{Default} & \textbf{Role} \\
-    \midrule
-    \yamlkey{project\_name}    & \yamlkey{Scan.name} & label used in the run summary \\
-    \yamlkey{Scan}             & ---            & \yamlkey{name} is the only key read \\
-    \yamlkey{scan\_name}       & \code{default} & fallback when \yamlkey{Scan.name} is absent \\
-    \yamlkey{task\_result\_dir}& \file{outputs/<scan>} & override the output root \\
-    \yamlkey{run\_id}          & fresh \textsc{uuid4} & run identity in records and summary \\
-    \yamlkey{EnvReqs}          & ---            & dependency declarations + the \yamlkey{V2} runtime block (Ch.~\ref{ch:envreqs}) \\
-    \yamlkey{Sampling}         & ---            & sampler selection + configuration (Ch.~\ref{ch:sampling-block}) \\
-    \yamlkey{Mapper}           & auto-derived   & explicit u\,$\rightarrow$\,x control (Ch.~\ref{ch:variables}) \\
-    \yamlkey{LibDeps}          & ---            & tool paths + registered executables (Ch.~\ref{ch:libdeps}) \\
-    \yamlkey{Calculators}      & ---            & external programs, pools, archiver policy (Ch.~\ref{ch:calculators}) \\
-    \yamlkey{Operas}           & ---            & in-process operators (Ch.~\ref{ch:operas}) \\
-    \yamlkey{Likelihood}       & ---            & likelihood expressions (Ch.~\ref{ch:loglikelihood}) \\
-    \bottomrule
-  \end{tabular}
-  \endgroup
-  \caption{Top-level task-card keys. All blocks except \yamlkey{Sampling} are optional.}
-  \label{tab:top-level-keys}
-\end{table}
-
-Only \yamlkey{Sampling} is required for a runnable scan; the leanest useful card is
-\yamlkey{Sampling} + \yamlkey{Operas} + a likelihood, exactly as in the quick start.
-
-\begin{jwarn}
-Five names are \textbf{reserved}: \yamlkey{task\_yaml}, \yamlkey{task\_root},
-\yamlkey{project\_root}, \yamlkey{task\_result\_dir}, and \yamlkey{scan\_name} are stamped
-into the configuration by the loader and will overwrite anything you put there (only
-\yamlkey{task\_result\_dir} and \yamlkey{scan\_name} are meaningful for you to set). A
-top-level \yamlkey{Runtime} block is \emph{rejected outright} --- runtime scheduling is
-configured under \yamlkey{EnvReqs.V2}, nowhere else.
-\end{jwarn}
-
-\section{Validation: two regimes}
+\section{Reading a validation report}
 \label{sec:validation}
 
-There is no schema validator in front of the loader; each block checks what it reads. Two
-regimes coexist, and telling them apart saves debugging time:
+\cli{Jarvis2 validate <card>.yaml} runs layers 1--5 and starts nothing
+(Section~\ref{sec:cli-validate}). A card that passes says so in one line. A card that
+fails prints the same report every time, in three parts:
 
-\paragraph{Hard errors.} A missing card, a non-mapping top level, an empty
-\yamlkey{Sampling.Variables}, a missing required sampler key (\yamlkey{Radius},
-\yamlkey{Point number}, \yamlkey{num}, \yamlkey{CSV.path}, \ldots), an unknown
-\yamlkey{Sampling.Method}, an invalid \yamlkey{selection}, a bad
-\yamlkey{registered\_executables} entry, an unknown \code{\$\{LibDeps:\ldots\}} reference,
-a missing opera \yamlkey{operator}, a top-level \yamlkey{Runtime}, or an unsupported key
-under \yamlkey{EnvReqs.V2} --- all abort the run immediately, mostly with the underlying
-Python exception.
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 validate bin/Example_Bridson.yaml
+\end{jcmd}
+\termsep
+\begin{jout}
+Config validation failed (2 error(s), 0 warning(s)):
 
-\paragraph{Silent coercion.} Malformed values for \yamlkey{EnvReqs.V2.workers},
-\yamlkey{batch\_size}, the \yamlkey{Archiver} and \yamlkey{Cleanup} settings, and
-malformed entries in the \yamlkey{LibDeps}/module lists (a list item that is not a
-mapping, or has no \yamlkey{name}) are \emph{dropped or replaced by defaults without an
-error}.
+Error summary (reference only):
++---+-------------+-----------------+----------------------------------------+
+| # | Code        | YAML path       | Problem                                |
++---+-------------+-----------------+----------------------------------------+
+| 1 | JV2-SCH-001 | $               | Additional properties are not allowed  |
+| 2 | JV2-MTH-003 | Sampling.Method | 'Bridsonn' is not implemented          |
++---+-------------+-----------------+----------------------------------------+
 
-\begin{jwarn}
-Silent coercion means a typo can vanish: misspell \yamlkey{workers} inside a malformed
-sub-map and you may simply get the default. When a scan ignores a setting you are sure
-you wrote, diff your card against the annotated skeleton in
-Appendix~\ref{app:yaml-index} before suspecting the runtime.
-\end{jwarn}
+Detailed diagnostics:
+  [error] JV2-MTH-003  Sampling.Method
+          'Bridsonn' is not implemented in Jarvis-HEP V2. Available: AM,
+          AMMCMC, AdaptiveBridson, Bridson, CSV, DEMCMC, DRAM, Dynesty, ...
+          suggestion: Choose an implemented Method, then provide its
+          required configuration fields.
+          example:
+            Sampling:
+              Method: Random
+              Point number: 100
+              Variables:
+                - name: x
+                  distribution:
+                    type: Flat
+                    parameters: {min: 0.0, max: 1.0}
+\end{jout}
+\end{terminal}
 
-\section{Spelling and aliases}
-\label{sec:aliases}
+The three parts do different jobs, and the third is the one to read:
 
-The card surface keeps a few historical spellings. They are documented where they occur,
-but the recurring ones are worth one table up front:
+\begin{keylist}
+  \item[the count line] How many errors and how many warnings. Warnings do not stop the
+        run unless you passed \cli{--strict}.
+  \item[the summary table] One line per problem, for scanning. It is labelled
+        \emph{reference only} because a truncated message is not enough to fix anything.
+  \item[the detailed diagnostics] The real content: the \textbf{code}, the exact
+        \textsc{yaml} \textbf{path}, the message, and --- where the validator knows the
+        answer --- a \code{suggestion} in words and an \code{example} of correct
+        \textsc{yaml} you can paste.
+\end{keylist}
+
+That last point is the part worth internalising. For a large class of mistakes you do not
+have to come back to this book at all: the validator names the key, tells you what to do,
+and prints the fix.
+
+\subsection{The code tells you which chapter to open}
+\label{sec:code-families}
+
+Every finding carries a stable code of the form \code{JV2-<family>-<number>}. The codes
+themselves are contract-stable, so they are safe to grep for in \textsc{ci} logs --- but
+their more useful property is that \textbf{the family names the part of the card that is
+unhappy}, and therefore the chapter that explains it:
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
     \toprule
-    \textbf{Preferred} & \textbf{Accepted alias} \\
+    \textbf{Family} & \textbf{Where} & \textbf{Go to} \\
     \midrule
-    \yamlkey{EnvReqs.V2.workers} & \yamlkey{worker} (singular) \\
-    \yamlkey{Sampling.Seed} & \yamlkey{seed} \\
-    \yamlkey{Sampling."Point number"} & \yamlkey{point\_number} \\
-    \yamlkey{Sampling.data} (check mode) & \yamlkey{points\_csv} \\
-    \yamlkey{Sampling.AdaptiveBridson} & \yamlkey{adaptive\_bridson} \\
-    \yamlkey{Calculators.Pools} & \yamlkey{pools} \\
-    \yamlkey{Operas.Modules[].timeout\_sec} & \yamlkey{timeout} \\
-    \yamlkey{Likelihood.expressions} & \yamlkey{Sampling.LogLikelihood} (lower precedence) \\
+    \code{JV2-YAML-*} & the file itself & the parse failed; fix the \textsc{yaml} syntax \\
+    \code{JV2-ENC-*}  & the file itself & a non-\textsc{ascii} key or string value \\
+    \code{JV2-SCH-*}  & any block & unknown key or wrong type (\S\ref{sec:zones}) \\
+    \code{JV2-LOAD-*} & the file itself & the card could not be loaded at all \\
+    \code{JV2-ENV-*}  & \yamlkey{EnvReqs} & Chapter~\ref{ch:envreqs} \\
+    \code{JV2-MTH-*}  & \yamlkey{Sampling.Method} and its per-method keys &
+      Chapter~\ref{ch:sampling-block}, then that method's chapter in
+      Part~\ref{part:samplers} \\
+    \code{JV2-VAR-*}  & \yamlkey{Sampling.Variables} & Chapter~\ref{ch:variables} \\
+    \code{JV2-BND-*}  & \yamlkey{Sampling.Bounds} & Chapter~\ref{ch:multinest},
+      Chapter~\ref{ch:dynesty} \\
+    \code{JV2-MOD-*}  & \yamlkey{Calculators.Modules} & Chapter~\ref{ch:calculators} \\
+    \code{JV2-ARC-*}  & archiver settings & Chapter~\ref{ch:envreqs} \\
+    \code{JV2-OPR-*}  & \yamlkey{Operas} & Chapter~\ref{ch:operas} \\
+    \code{JV2-DEAD-*} & anywhere & warning: the key is accepted and then ignored \\
     \bottomrule
   \end{tabular}
-  \caption{Alias spellings. Never write both members of a pair in one card.}
-  \label{tab:aliases}
+  \caption[Code families and the chapter that explains them.]{Code families and the
+  chapter that explains them. The family in a failing code is the fastest index into
+  Part~\ref{part:task-card} this book has.}
+  \label{tab:code-families}
 \end{table}
 
-Keys are case-sensitive exactly as printed throughout this book; note the genuine space
-in \yamlkey{"Point number"} and the historical spelling \yamlkey{make\_paraller}
-(Chapter~\ref{ch:calculators}).
+\begin{jtip}
+Two codes are worth recognising on sight. \code{JV2-SCH-001} is \emph{unknown key} --- the
+suggestion lists every legal key at that level, so it is nearly always a typo you can fix
+without leaving the terminal. \code{JV2-DEAD-*} is the opposite shape: the key is spelled
+correctly, is accepted, and does nothing. Run with \cli{--strict} and it becomes an error,
+which is how you find settings you believe are taking effect and are not.
+\end{jtip}
 
-\section{A reading map for Part~\ref{part:task-card}}
+\section{Every key the card accepts}
+\label{app:yaml-index}
+
+The flat lookup. \req\ marks keys whose omission is an error \emph{in the context of the
+method or block they belong to}; everything else has a default. The chapter column is the
+full behavioural detail --- this table tells you a key exists and what it defaults to,
+never what it means.
+
+\begin{fullwidth}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{longtable}{@{}p{0.30\linewidth}p{0.12\linewidth}p{0.16\linewidth}p{0.38\linewidth}@{}}
+  \toprule
+  \textbf{Key path} & \textbf{Req.} & \textbf{Default} & \textbf{Chapter} \\
+  \midrule
+  \endhead
+  \multicolumn{4}{@{}l}{\emph{Scan}} \\
+  \yamlkey{Scan.\allowbreak{}name}       &      & \code{default}   & \ref{ch:task-yaml} \\
+  \yamlkey{Scan.\allowbreak{}save\_dir}  &      & \file{<root>/\allowbreak{}outputs} & \ref{ch:task-yaml} \\
+  \yamlkey{Scan.\allowbreak{}sample\_directory.\allowbreak{}*} (\code{enabled},
+    \code{limit}, \code{width}, \code{pack}, \code{start\_bucket},
+    \code{archive\_samples}, \code{archive\_prune}) & & \code{true}, \code{200},
+    \code{6}, \code{true}, \code{1}, \code{true}, \code{true} & \ref{ch:envreqs} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{EnvReqs}} \\
+  \yamlkey{EnvReqs.\allowbreak{}Check\_default\_dependencies.\allowbreak{}required} & & \code{false} & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}Check\_default\_dependencies.\allowbreak{}default\_yaml\_path} & & --- & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}workers} (alias \yamlkey{worker}) & & \code{0} ($\to$1) & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}batch\_size}   &      & \code{256}   & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}cleanup.\allowbreak{}strategy} & & \code{direct} & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}archiver.\allowbreak{}*} (\code{mode}, \code{handoff},
+    \code{pack\_buckets}, \code{batch\_size}, \code{flush\_interval\_sec},
+    \code{strategy}, \code{delete\_after\_archive}) & & \code{process}, \code{direct},
+    \code{true}, \code{200}, \code{1.0}, \code{move}, \code{true} & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}check\_modules.\allowbreak{}data} / \yamlkey{.\allowbreak{}n\_samples} & & \code{10} & \ref{ch:check-modules} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Sampling --- shared}} \\
+  \yamlkey{Sampling.\allowbreak{}Method} (alias \yamlkey{method}) & \req & --- & \ref{ch:sampling-block} \\
+  \yamlkey{Sampling.\allowbreak{}Seed} (alias \yamlkey{seed}) & & \code{0}   & \ref{ch:sampling-block} \\
+  \yamlkey{Sampling.\allowbreak{}selection}       &      & ---            & \ref{ch:sampling-block} \\
+  \yamlkey{Sampling.\allowbreak{}on\_failure}     &      & ---            & \ref{ch:sampling-block} \\
+  \yamlkey{Sampling.\allowbreak{}mode}            &      & --- (\code{check\_modules}) & \ref{ch:check-modules} \\
+  \yamlkey{Sampling.\allowbreak{}data} (alias \yamlkey{points\_csv}) & & --- & \ref{ch:check-modules} \\
+  \yamlkey{Sampling.\allowbreak{}LogLikelihood[].\allowbreak{}name} & & \code{LogL} & \ref{ch:loglikelihood} \\
+  \yamlkey{Sampling.\allowbreak{}LogLikelihood[].\allowbreak{}expression} & \req & --- & \ref{ch:loglikelihood} \\
+  \yamlkey{Sampling.\allowbreak{}Variables[].\allowbreak{}name} & \req & ---   & \ref{ch:variables} \\
+  \yamlkey{Sampling.\allowbreak{}Variables[].\allowbreak{}description} & & ---  & \ref{ch:variables} \\
+  \yamlkey{Sampling.\allowbreak{}Variables[].\allowbreak{}distribution.\allowbreak{}type} & \req & \code{Flat} & \ref{ch:variables} \\
+  \yamlkey{\ldots parameters.\{min,\allowbreak{}max\}} & \req\textsuperscript{F/L} & --- & \ref{ch:variables} \\
+  \yamlkey{\ldots parameters.\{mean,\allowbreak{}stddev\}} & \req\textsuperscript{N} & --- & \ref{ch:variables} \\
+  \yamlkey{\ldots parameters.\{location,\allowbreak{}scale\}} & & \code{0}, \code{1} & \ref{ch:variables} \\
+  \yamlkey{\ldots parameters.\allowbreak{}num}    & \req\textsuperscript{G} & --- & \ref{ch:grid} \\
+  \yamlkey{\ldots parameters.\allowbreak{}length} & \req\textsuperscript{B} & --- & \ref{ch:bridson} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Sampling --- per method}} \\
+  \yamlkey{Sampling.\allowbreak{}Radius}          & \req\textsuperscript{B} & --- & \ref{ch:bridson} \\
+  \yamlkey{Sampling.\allowbreak{}MaxAttempt}      & \req\textsuperscript{B} & --- & \ref{ch:bridson} \\
+  \yamlkey{Sampling.\allowbreak{}MaxWorker}       &      & \yamlkey{V2.\allowbreak{}workers} & \ref{ch:bridson} \\
+  \yamlkey{Sampling.\allowbreak{}"Point number"} (alias \yamlkey{point\_number}) & \req\textsuperscript{R} & --- & \ref{ch:random} \\
+  \yamlkey{Sampling.\allowbreak{}CSV.\allowbreak{}path}        & \req\textsuperscript{C} & --- & \ref{ch:csv-sampler} \\
+  \yamlkey{Sampling.\allowbreak{}CSV.\allowbreak{}variables}   &      & all non-uuid columns & \ref{ch:csv-sampler} \\
+  \yamlkey{Sampling.\allowbreak{}CSV.\allowbreak{}uuid\_column} &     & \code{uuid}    & \ref{ch:csv-sampler} \\
+  \yamlkey{Sampling.\allowbreak{}AdaptiveBridson.\allowbreak{}target\_expression} & \req\textsuperscript{A} & --- & \ref{ch:adaptive-levelset} \\
+  \yamlkey{Sampling.\allowbreak{}AdaptiveBridson.\allowbreak{}target\_value} & \req\textsuperscript{A} & --- & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots initial\_radius}   &      & \code{0.10}          & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots min\_radius}       &      & $1/200$              & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots outer\_half\_width} &     & \code{0.02}          & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots refinement\_factor} &     & \code{0.5}           & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots max\_generations}  &      & \code{16}            & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots max\_points}       &      & \code{50000}         & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots max\_new\_per\_generation} & & \code{4000}       & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots k\_ref}            &      & \code{30}            & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots neighbor\_graph}   &      & \code{auto}          & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots knn\_k}            &      & $4d$                 & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots bridge\_gaps}      &      & \code{true}          & \ref{ch:adaptive-levelset} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Sampling.Bounds --- nested samplers (delegated)}} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}nlive}    &      & \code{100}   & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}rseed}    &      & \yamlkey{Sampling.\allowbreak{}Seed} & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}dlogz}    &      & \code{0.5}   & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}sampler.\allowbreak{}*} & & official
+    \code{dynesty} defaults & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}run\_nested.\allowbreak{}*} & &
+    \code{print\_progress: true}, rest unlimited/off & \ref{ch:multinest}, \ref{ch:dynesty} \\
+  \yamlkey{Sampling.\allowbreak{}FeedbackReturn.\allowbreak{}mode} &   & \code{minimal} & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}FeedbackReturn.\allowbreak{}include\_logl} & & \code{true} & \ref{ch:multinest} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{LibDeps}} \\
+  \yamlkey{LibDeps.\allowbreak{}path}             &      & project root   & \ref{ch:libdeps} \\
+  \yamlkey{LibDeps.\allowbreak{}Modules[].\allowbreak{}name}   & \req & ---  & \ref{ch:libdeps} \\
+  \yamlkey{LibDeps.\allowbreak{}Modules[].\{path,\allowbreak{}source,\allowbreak{}installation\}} & & \file{<LibDeps.\allowbreak{}path>/\allowbreak{}<name>} & \ref{ch:libdeps} \\
+  \yamlkey{LibDeps.\allowbreak{}registered\_executables[].\allowbreak{}name} & \req & --- & \ref{ch:libdeps} \\
+  \yamlkey{LibDeps.\allowbreak{}registered\_executables[].\allowbreak{}source} & \req & --- & \ref{ch:libdeps} \\
+  \yamlkey{LibDeps.\allowbreak{}registered\_executables[].\allowbreak{}resolution} & & \code{direct\_path} & \ref{ch:libdeps} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Calculators}} \\
+  \yamlkey{Calculators.\allowbreak{}Pools.\allowbreak{}<name>} (alias \yamlkey{pools}) & & \yamlkey{make\_paraller} or \code{1} & \ref{ch:calculators} \\
+  \yamlkey{Calculators.\allowbreak{}Modules[].\allowbreak{}name} & \req & ---  & \ref{ch:calculators} \\
+  \yamlkey{\ldots required\_modules} &      & \code{[]}            & \ref{ch:workflow-model} \\
+  \yamlkey{\ldots modes[]}           &      & ---                  & \ref{ch:calculators} \\
+  \yamlkey{\ldots clone\_shadow}     &      & \code{false}         & \ref{ch:calculators} \\
+  \yamlkey{\ldots path}              &      & \yamlkey{execution.\allowbreak{}path} $\to$ \code{"."} & \ref{ch:calculators} \\
+  \yamlkey{\ldots source}            &      & ---                  & \ref{ch:calculators} \\
+  \yamlkey{\ldots symlink\_name}     &      & module name          & \ref{ch:calculators} \\
+  \yamlkey{\ldots timeout}           &      & none                 & \ref{ch:calculators} \\
+  \yamlkey{\ldots make\_paraller}    &      & \code{1}             & \ref{ch:calculators} \\
+  \yamlkey{\ldots env\_setup[].\allowbreak{}source} &    & \code{[]}   & \ref{ch:calculators} \\
+  \yamlkey{\ldots installation[].\{cmd,\allowbreak{}cwd\}} & & \code{[]} & \ref{ch:calculators} \\
+  \yamlkey{\ldots initialization[].\{cmd,\allowbreak{}cwd\}} & & \code{[]} & \ref{ch:calculators} \\
+  \yamlkey{\ldots execution.\allowbreak{}path}    &      & ---         & \ref{ch:calculators} \\
+  \yamlkey{\ldots execution.\allowbreak{}commands[].\{cmd,\allowbreak{}cwd\}} & & \yamlkey{cwd}: \code{"."} & \ref{ch:calculators} \\
+  \yamlkey{\ldots execution.\allowbreak{}input[].\{name,\allowbreak{}path,\allowbreak{}type,\allowbreak{}actions\}} & & --- & \ref{ch:io-types} \\
+  \yamlkey{\ldots execution.\allowbreak{}output[].\{name,\allowbreak{}path,\allowbreak{}type,\allowbreak{}variables\}} & & --- & \ref{ch:io-types} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Operas}} \\
+  \yamlkey{Operas.\allowbreak{}Modules[].\allowbreak{}name}    &      & \code{Operas<i>} & \ref{ch:operas} \\
+  \yamlkey{Operas.\allowbreak{}Modules[].\allowbreak{}operator} & \req & ---   & \ref{ch:operas} \\
+  \yamlkey{\ldots call\_mode}        &      & \code{call}          & \ref{ch:operas} \\
+  \yamlkey{\ldots timeout\_sec} (alias \yamlkey{timeout}) & & none  & \ref{ch:operas} \\
+  \yamlkey{\ldots kwargs}            &      & \code{\{\}} (delegated) & \ref{ch:operas} \\
+  \yamlkey{\ldots input}             &      & pass-through         & \ref{ch:operas} \\
+  \yamlkey{\ldots output}            &      & \code{[]} (discards!) & \ref{ch:operas} \\
+  \bottomrule
+\end{longtable}
+\endgroup
+\end{fullwidth}
+
+\noindent\footnotesize Superscripts mark the method that makes a key required:
+\textsuperscript{B}~\sampler{Bridson}, \textsuperscript{R}~\sampler{Random},
+\textsuperscript{G}~\sampler{Grid}, \textsuperscript{C}~\sampler{CSV},
+\textsuperscript{A}~\sampler{AdaptiveBridson}, \textsuperscript{F/L}~Flat/Log
+distributions, \textsuperscript{N}~Normal/Log-Normal distributions.\normalsize
+
+\section{Where to go from here}
+\label{sec:part2-map}
+
+Part~\ref{part:task-card} takes the six keys one at a time, in the order you meet them
+when building a card:
 
 \begin{itemize}
-  \item \textbf{Chapter~\ref{ch:envreqs}} --- \yamlkey{EnvReqs}: shared defaults and the
-        \yamlkey{V2} scheduling/archiving block.
+  \item \textbf{Chapter~\ref{ch:envreqs}} --- \yamlkey{EnvReqs}: shared environment
+        defaults, and the \yamlkey{V2} block that sets Workers, batching, archiving and
+        the sample-directory policy.
   \item \textbf{Chapter~\ref{ch:sampling-block}} --- \yamlkey{Sampling}: choosing a
-        method and the keys all methods share.
-  \item \textbf{Chapter~\ref{ch:variables}} --- \yamlkey{Variables}, the distribution
-        catalog, and the \yamlkey{Mapper}.
-  \item \textbf{Chapter~\ref{ch:loglikelihood}} --- \yamlkey{Likelihood} and its
-        semantics.
-  \item \textbf{Chapter~\ref{ch:expressions}} --- the expression language every
-        \yamlkey{expression:} field shares.
+        \yamlkey{Method}, and the keys every method shares.
+  \item \textbf{Chapter~\ref{ch:variables}} --- \yamlkey{Sampling.Variables} and the
+        distribution catalog: the declaration that defines your u-space
+        (Section~\ref{sec:uspace}).
+  \item \textbf{Chapter~\ref{ch:loglikelihood}} --- \yamlkey{Sampling.LogLikelihood}:
+        how points are scored, and what \code{LogL} means.
+  \item \textbf{Chapter~\ref{ch:expressions}} --- the expression language shared by every
+        \yamlkey{expression:} field in the card.
 \end{itemize}
 
-The workflow blocks (\yamlkey{LibDeps}, \yamlkey{Calculators}, \yamlkey{Operas}) get the
-whole of Part~\ref{part:backends}; the per-method \yamlkey{Sampling} keys get
-Part~\ref{part:samplers}.
+The three workflow blocks --- \yamlkey{LibDeps}, \yamlkey{Calculators},
+\yamlkey{Operas} --- are large enough to have their own part
+(Part~\ref{part:backends}), and the per-method \yamlkey{Sampling} keys get
+Part~\ref{part:samplers}. When you are not sure which of those a key belongs to, the
+index in Section~\ref{app:yaml-index} names the chapter for every key in the card.

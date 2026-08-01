@@ -1,6 +1,8 @@
 # DESIGN — Multi-mode Calculators (`Calculators.Modules[].modes`, V2, D20)
 
-**Status**: design proposal 2026-08-01 — **awaiting maintainer decision on §10**; implementation `todo`
+**Status**: **已实现（2026-08-02，工作区未提交）——实现选择了 shared-only，与本文 §5.6.4 建议的
+`per_mode` 不同，且显式拒绝 `@Mode` / `${mode_dir}`。本文 §3–§5 因此已过时，待按实现重写（WP D20.8）。**
+审阅结论与实测数据见 [`D20_MULTIMODE_REVIEW_2026-08-02.md`](D20_MULTIMODE_REVIEW_2026-08-02.md)。
 **Scope**: **V2-only。不回移 V1**（维护者定调 2026-08-01，见 §1.1）
 **更新 2026-08-01**: 补 §5.1-5.3（触发语义）与 §5.4（主场景为原地重建，新增可选 build 阶段）
 **Date**: 2026-08-01
