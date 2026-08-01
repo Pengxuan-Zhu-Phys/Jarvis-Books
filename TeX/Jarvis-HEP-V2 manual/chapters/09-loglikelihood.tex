@@ -1,0 +1,109 @@
+\chapter{The Likelihood}
+\label{ch:loglikelihood}
+
+\newthought{The likelihood closes the per-point loop.} After the workflow has filled the
+observables dictionary, a list of named expressions turns it into a score. This chapter
+covers where those expressions live, how the total \code{LogL} is formed, and what happens
+when evaluation fails.
+
+\section{Where likelihood terms live}
+\label{sec:likelihood-blocks}
+
+Two equivalent homes, one precedence rule:
+
+\begin{yamlwin}
+Likelihood:                      # preferred, top level
+  expressions:
+    - name: LogL_Z
+      expression: LogGauss(z, 1.0, 0.1)
+    - name: LogL_mass
+      expression: -0.5 * ((mh - 125.25) / 0.17)**2
+\end{yamlwin}
+
+\begin{yamlwin}
+Sampling:                        # accepted alias, lower precedence
+  LogLikelihood:
+    - name: LogL_Z
+      expression: z
+\end{yamlwin}
+
+\yamlkey{Likelihood.expressions} wins when both are present --- first non-empty list
+wins; they are \emph{never merged}. Each entry:
+
+\begin{keylist}
+  \item[name] \opt, default \code{LogL}. The term's observable name; results are added
+        to the observables dictionary and appear in the output records.
+  \item[expression] \req. An expression in the shared language of
+        Chapter~\ref{ch:expressions}, evaluated over the observables.
+\end{keylist}
+
+\section{How \code{LogL} is formed}
+\label{sec:logl-semantics}
+
+Terms evaluate \emph{in order}, and each term's result is added to the observables before
+the next term runs --- so later terms can reference earlier ones by name. Then:
+
+\begin{itemize}
+  \item If some term is literally named \code{LogL}, that term \textbf{is} the total ---
+        no summing. Use this when you want full control:
+\begin{yamlwin}
+Likelihood:
+  expressions:
+    - name: LogL_a
+      expression: LogGauss(obs_a, 5.1, 0.4)
+    - name: LogL_b
+      expression: LogGauss(obs_b, 0.7, 0.05)
+    - name: LogL
+      expression: Max(LogL_a, LogL_b)   # explicit total
+\end{yamlwin}
+  \item Otherwise, $\code{LogL} = \sum_i \text{term}_i$ --- the ordinary case where
+        independent measurement terms add.
+\end{itemize}
+
+When neither likelihood block exists, the execution plan simply carries no likelihood
+step and \code{LogL} is absent from the records --- legitimate for pure mapping scans
+where you only want observables.
+
+\begin{jnote}
+Everything is \emph{log}-likelihood, natural log. The convenience kernels differ in their
+normalisation: \code{LogGauss(x, mu, sigma)} is
+$-\tfrac{1}{2}\big(\tfrac{x-\mu}{\sigma}\big)^2$ without the constant term;
+\code{Normal} includes the $1/(\sigma\sqrt{2\pi})$ factor; \code{Gauss} is the
+unnormalised kernel $e^{-\frac{1}{2}((x-\mu)/\sigma)^2}$ (not a log!). See
+Chapter~\ref{ch:expressions}.
+\end{jnote}
+
+\section{Failure semantics}
+\label{sec:likelihood-failure}
+
+A likelihood expression that references an observable missing from the dictionary raises
+a structured \emph{missing-variables} error naming the absent symbols, and the Sample
+\textbf{fails} --- it is recorded as failed, keeps its logs, and the scan continues.
+This is deliberate: a missing observable usually means an upstream calculator failed to
+produce output for this point, and silently scoring the point would poison the scan.
+
+If a term should be optional --- an observable only some points produce --- make the
+producing module emit an explicit default instead of omitting the key
+(Chapters~\ref{ch:calculators} and~\ref{ch:operas}: absent output entries are captured
+as null values rather than dropped, so the expression sees \emph{something}).
+
+\section{Who consumes \code{LogL}}
+\label{sec:logl-consumers}
+
+For the fixed-set methods, the likelihood is bookkeeping: every accepted point runs
+regardless, and \code{LogL} lands in the database for your posterior analysis. Two
+consumers act on it at runtime:
+
+\begin{itemize}
+  \item \sampler{AdaptiveBridson} evaluates its \yamlkey{target\_expression} over the
+        returned observables --- including likelihood terms --- to steer refinement
+        (Chapter~\ref{ch:adaptive-levelset}).
+  \item Your plots: \file{samples.csv} carries every term as a column, so per-term
+        pulls are one \code{pandas} expression away.
+\end{itemize}
+
+\begin{jtip}
+Name terms by what they constrain --- \code{LogL\_mh}, \code{LogL\_relic},
+\code{LogL\_bsg} --- and let the automatic sum form the total. Per-term columns in the
+output are the fastest way to answer ``which constraint kills this region?''.
+\end{jtip}

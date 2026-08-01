@@ -1,0 +1,276 @@
+\chapter{Installation}
+\label{ch:installation}
+
+\newthought{This chapter is for anyone setting up \Jtwo} --- on a laptop, a group
+server, or a cluster login node. It requires nothing beyond a shell and Python. After
+following it, you have a working \cli{Jarvis2} command, a running Redis service, and a
+verified installation --- ready for the quick start in Chapter~\ref{ch:quickstart}.
+
+The whole installation is two components:
+
+\begin{enumerate}
+  \item the \textbf{Python package} \code{jarvishep2} --- the runtime, the
+        \cli{Jarvis2} command, and its two core plugin packages;
+  \item a local \textbf{Redis service} --- the small data server every scan
+        coordinates through (Section~\ref{sec:runtime-picture}).
+\end{enumerate}
+
+\section{Check the requirements}
+\label{sec:requirements}
+
+\begin{itemize}
+  \item \textbf{Python 3.10 or newer}, on macOS or Linux. Check with
+        \cli{python3 --version}.
+  \item \textbf{Redis} for actual scans; Section~\ref{sec:redis-install} installs it.
+        The test suite does \emph{not} need it --- tests run on a stand-in
+        (\code{fakeredis}).
+\end{itemize}
+
+\begin{jnote}
+\Jtwo\ always connects to the local Redis at \code{127.0.0.1:6379}. This is fixed by
+design --- there is no task-card or CLI setting for it, so there is nothing to
+configure and nothing to get wrong.
+\end{jnote}
+
+\section{Install the package}
+\label{sec:pip-install}
+
+\begin{enumerate}
+  \item Enter the \Jtwo\ source checkout:
+\begin{terminal}
+\begin{jcmd}
+cd Jarvis-HEP-v2
+\end{jcmd}
+\end{terminal}
+  \item Install with the \code{distributed} extra --- the recommended baseline:
+\begin{terminal}
+\begin{jcmd}
+python3 -m pip install -e '.[distributed]'
+\end{jcmd}
+\end{terminal}
+  \item Confirm the command is on your \code{PATH}; it prints the usage text:
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 --help
+\end{jcmd}
+\end{terminal}
+\end{enumerate}
+
+Two plugin packages install automatically as core dependencies: \Portal\ (calculator
+file formats, Chapter~\ref{ch:io-types}) and \Operas\ (the operator registry,
+Chapter~\ref{ch:jarvis-operas}).
+
+Add extras to the bracket list as needed:
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Extra} & \textbf{Pulls in} \\
+    \midrule
+    \code{distributed} & \code{redis}, \code{msgpack}, \code{aiofiles} --- required
+                         for real scans \\
+    \code{plot}        & \JPlot\ --- enables \cli{Jarvis2 plot}
+                         (Chapter~\ref{ch:jarvisplot}) \\
+    \code{dev}         & \code{pytest}, \code{fakeredis}, \code{colorlog} --- the
+                         test suite \\
+    \bottomrule
+  \end{tabular}
+  \caption{Package extras. Combine freely:
+  \cli{pip install -e '.[distributed,plot,dev]'}.}
+  \label{tab:extras}
+\end{table}
+
+\paragraph{For developers.} To work against local checkouts of the plugin packages,
+install them first --- pip then keeps your editable versions:
+
+\begin{terminal}
+\begin{jcmd}
+python3 -m pip install -e ../Jarvis-Portal
+python3 -m pip install -e ../Jarvis-Operas
+python3 -m pip install -e '.[distributed,dev]'
+\end{jcmd}
+\end{terminal}
+
+\begin{jnote}
+\Jtwo\ is its own distribution (\code{jarvishep2}) with its own command
+(\cli{Jarvis2}). It coexists in one environment with a version~1 installation ---
+neither package touches the other.
+\end{jnote}
+
+\section{Check the version}
+\label{sec:verify-version}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 --version    # or the short form: Jarvis2 -v
+\end{jcmd}
+\end{terminal}
+
+\noindent This prints the \Jarvis\ banner with the runtime version of your installed
+package on its last line (Figure~\ref{fig:version-banner}) --- the fastest way to
+confirm exactly which release you are running, without touching Redis or a task card.
+The coloured dot-matrix on the left is the \Jarvis\ icon; the wordmark fades from blue
+to gold, and the version line is read from your environment at print time, not baked
+into the executable.
+
+\begin{figure}[ht]
+\centering
+\JarvisVersionBanner
+\caption[The \clih{Jarvis2 --version} banner.]{The \clih{Jarvis2 --version} banner,
+reproduced in the project's own palette; the version on the last line is read from your
+installed package at runtime, and here shows the release this manual documents.}
+\label{fig:version-banner}
+\end{figure}
+
+\begin{jwarn}
+If your shell reports \cli{Jarvis2: command not found}, the executable is not on your
+\code{PATH} --- almost always because you installed into a different environment than
+the one you are using now. Re-activate the environment where you ran \cli{pip install},
+and confirm with \cli{which Jarvis2}. Under \code{pyenv}, \cli{Jarvis2} lives in that
+version's \code{bin/} directory.
+\end{jwarn}
+
+\section{Install Redis}
+\label{sec:redis-install}
+
+Pick one route:
+
+\paragraph{macOS (Homebrew).}
+\begin{enumerate}
+  \item Install and start the service:
+\begin{terminal}
+\begin{jcmd}
+brew install redis
+brew services start redis
+\end{jcmd}
+\end{terminal}
+\end{enumerate}
+
+\paragraph{Linux (Debian/Ubuntu, \code{apt}).}
+\begin{enumerate}
+  \item Install and enable the service:
+\begin{terminal}
+\begin{jcmd}
+sudo apt-get update
+sudo apt-get install -y redis-server
+sudo systemctl enable --now redis-server
+\end{jcmd}
+\end{terminal}
+\end{enumerate}
+
+\paragraph{Linux (RHEL/Fedora, \code{dnf}).}
+\begin{enumerate}
+  \item Install and enable the service:
+\begin{terminal}
+\begin{jcmd}
+sudo dnf install -y redis
+sudo systemctl enable --now redis
+\end{jcmd}
+\end{terminal}
+\end{enumerate}
+
+\begin{jnote}
+On a shared cluster login node you may not have \code{sudo}. Ask the system
+administrator to install the \code{redis-server}/\code{redis} package once for
+everyone, or fall back to the Docker route below --- it needs no root privilege beyond
+running \code{docker} itself.
+\end{jnote}
+
+\paragraph{Any platform (Docker).}
+\begin{enumerate}
+  \item Run the official image on the default port:
+\begin{terminal}
+\begin{jcmd}
+docker run -d --name jarvis-redis -p 6379:6379 redis:7
+\end{jcmd}
+\end{terminal}
+\end{enumerate}
+
+\paragraph{Then verify --- both routes.}
+\begin{enumerate}
+  \item Ping the service; it answers \code{PONG}:
+\begin{terminal}
+\begin{jcmd}
+redis-cli ping        # -> PONG
+\end{jcmd}
+\end{terminal}
+\end{enumerate}
+
+\begin{jwarn}
+Start Redis \emph{before} launching a scan. If the service is down, \cli{Jarvis2 run}
+fails immediately with a connection error --- it never hangs, but it also never starts.
+\end{jwarn}
+
+\section{Verify the installation}
+\label{sec:verify}
+
+\begin{enumerate}
+  \item Confirm the plugin registries respond --- each prints a non-empty list:
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 portal man     # file formats (JSON, CSV, SLHA, ...)
+Jarvis2 operas list    # registered operators
+\end{jcmd}
+\end{terminal}
+  \item Smoke-test the real pipeline --- sampler, Redis, a Worker, and archiving ---
+        with a tiny self-contained card. Save this as \file{smoke.\allowbreak{}yaml}:
+\begin{yamlwin}
+Sampling:
+  Method: Random
+  "Point number": 20
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
+    - name: y
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
+
+Operas:
+  Modules:
+    - name: TrivialEggbox
+      operator: jarvishep2.testing.eggbox.eggbox2d_numpy
+      call_mode: call
+      input:
+        - {name: x, expression: x}
+        - {name: y, expression: y}
+      output:
+        - {name: z, entry: z}
+\end{yamlwin}
+        then run it as a smoke test --- \cli{check} draws a handful of points instead
+        of the full budget (Chapter~\ref{ch:check-modules}):
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 check smoke.yaml
+\end{jcmd}
+\end{terminal}
+\end{enumerate}
+
+\yamlkey{Operas.Modules.operator} here is a trivial function shipped inside
+\code{jarvishep2} itself --- no external program, no network access, nothing beyond
+what you just installed. All three commands succeeded? The installation is complete.
+
+\begin{jnote}
+This is deliberately the same card shape Chapter~\ref{ch:quickstart} builds on ---
+\cli{check} here just confirms the pipeline works before that chapter walks through it
+key by key and runs it for real with \cli{Jarvis2 run}.
+\end{jnote}
+
+\section{Uninstall}
+\label{sec:uninstall}
+
+\begin{enumerate}
+  \item Remove the package:
+\begin{terminal}
+\begin{jcmd}
+python3 -m pip uninstall jarvishep2
+\end{jcmd}
+\end{terminal}
+\end{enumerate}
+
+Your projects, task cards, and outputs are untouched --- they live in your own
+directories, never inside the package (Chapter~\ref{ch:core-concepts}).
+
+\begin{jtip}
+Done here? Go straight to Chapter~\ref{ch:quickstart}: it runs a complete 20-point
+scan on this installation in under ten minutes.
+\end{jtip}

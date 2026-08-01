@@ -1,0 +1,118 @@
+\chapter{Performance and Parallelism}
+\label{ch:performance}
+
+\newthought{A scan is only as fast} as its slowest stage. This chapter explains the knobs that
+control parallelism and throughput, and how to find the setting that suits your workload---without
+changing any results.
+
+\section{Where the parallelism lives}
+\label{sec:perf-where}
+
+\Jarvis\ runs many points at once through a worker pool, and (for calculators) many external
+commands at once through a subprocess scheduler. A few settings govern this:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{make\_paraller}] the worker count for the workflow backend, set in
+        \yamlkey{Calculators} or \yamlkey{Operas} (Chapters~\ref{ch:calculators},
+        \ref{ch:operas}). This is the dial most scans tune.
+  \item[\yamlkey{Runtime.mode}] whether workers are threads (the default) or separate processes
+        (\code{process}, \yamlkey{Operas}-only); see below.
+  \item[\yamlkey{Runtime.workers}] the process-worker count under \code{mode: process}
+        (\code{0} = automatic), in the \yamlkey{Runtime} block (Chapter~\ref{ch:runtime-block}).
+  \item[\yamlkey{Runtime.Subprocess.max\_concurrency}] how many external commands run at once.
+\end{description}
+
+\begin{jtip}
+A good first guess is to match the worker count to your \textsc{cpu} cores for \textsc{cpu}-bound
+calculators. If each external tool is itself multi-threaded, use \emph{fewer} workers so you do not
+oversubscribe the cores (workers $\times$ threads-per-tool $\approx$ cores).
+\end{jtip}
+
+\section{Batching}
+\label{sec:perf-batching}
+
+\Jarvis\ proposes and persists points in \emph{batches} (default \yamlkey{Runtime.batch\_size} of
+256) rather than one at a time. Batching the data plane---proposal, execution hand-off, and
+\textsc{hdf5} writes---cuts per-point overhead and keeps the workers fed. Larger batches amortise
+overhead further at the cost of coarser checkpoint granularity; the default is a good balance.
+(\code{batch\_size: 1} reproduces the exact v1 per-sample sequence, if you ever need it.)
+
+\section{Scaling across cores: process mode}
+\label{sec:perf-process}
+
+By default \Jarvis\ runs the workflow in one process across a pool of threads. For
+\yamlkey{Operas}-only scans you can spread the work over multiple \emph{processes} with
+\yamlkey{Runtime.mode: process} (Chapter~\ref{ch:runtime-block}), which sidesteps Python's global
+interpreter lock and scales throughput with your \textsc{cpu} cores---close to linearly on a
+well-vectorised workload. \yamlkey{Runtime.workers} caps the process count (\code{0} = auto). To take
+persistence off the critical path too, let \yamlkey{Runtime.writer: process} move the \textsc{hdf5}
+writing into its own process.
+
+\begin{jwarn}
+Process mode is \yamlkey{Operas}-only today: a scan with a \yamlkey{Calculators} block (or any
+\token{@Sdir} reference, or \yamlkey{sample\_artifacts: always}) runs as \code{thread} regardless.
+Tune calculator scans with \yamlkey{make\_paraller} and \yamlkey{Subprocess.max\_concurrency}
+instead.
+\end{jwarn}
+
+\section{Vectorized operators: the biggest win}
+\label{sec:perf-vectorized}
+
+Batching does more than cut overhead---it lets an \yamlkey{Operas} operator process a \emph{whole
+batch at once}. An operator written to accept and return arrays (a vectorized \code{execute\_batch})
+runs the batch in a single call, often an order of magnitude faster than the same operator invoked
+row by row (Chapter~\ref{ch:jarvis-operas}). If a scan is operator-bound, vectorising the operator is
+usually the single most effective change you can make---far more than any worker count.
+
+\section{Skipping disk work}
+\label{sec:perf-artifacts}
+
+For fast, in-process (opera-only) scans, the biggest hidden cost is often creating a folder and
+files for every sample. The default \yamlkey{Runtime.sample\_artifacts: auto}
+(Chapter~\ref{ch:runtime-block}) skips that entirely when no workflow needs it, which can be a
+large speed-up on light workloads. You lose nothing: a failed sample still replays its log
+(Chapter~\ref{ch:logging}).
+
+\begin{jnote}
+This is why an opera-only \code{EggBox} scan runs far faster than the file-based calculator
+version of the same model: the operator stays in memory, with no per-sample file I/O.
+\end{jnote}
+
+\section{Measuring before tuning}
+\label{sec:perf-benchmark}
+
+Do not guess---measure. The \cli{-{}-benchmark} mode runs the machinery for a fixed number of
+seconds and reports points-per-second (Chapter~\ref{ch:run-summary}):
+
+\begin{shellbox}
+Jarvis bin/my_scan.yaml --benchmark 60
+\end{shellbox}
+
+\noindent Change one knob at a time---\yamlkey{make\_paraller}, then \yamlkey{max\_concurrency},
+then \yamlkey{batch\_size}---and re-benchmark, so you know which change helped. The end-of-run
+summary (the factory's \code{avg\_rate} and the worker statistics) tells you the same story for a
+real scan.
+
+\section{A tuning checklist}
+\label{sec:perf-checklist}
+
+\begin{enumerate}
+  \item Start with \yamlkey{make\_paraller} near your core count; benchmark.
+  \item If external tools are multi-threaded, reduce workers to avoid oversubscription.
+  \item For file-based calculators, tune \yamlkey{Subprocess.max\_concurrency} to match I/O and
+        \textsc{cpu} limits.
+  \item For light opera-only scans, confirm \yamlkey{sample\_artifacts} is \code{auto} and leave
+        \yamlkey{batch\_size} at its default.
+  \item For \yamlkey{Operas}-only scans that are still \textsc{cpu}-bound, vectorise the operator
+        (\code{execute\_batch}) and try \yamlkey{Runtime.mode: process} to scale across cores.
+  \item Re-benchmark after each change; keep the setting that wins.
+\end{enumerate}
+
+\section{Summary}
+\label{sec:perf-summary}
+
+Tune \yamlkey{make\_paraller} (and \yamlkey{Subprocess.max\_concurrency} for calculators) to your
+hardware, let batching and \code{auto} artifacts cut overhead, and---for \yamlkey{Operas}-only
+scans---vectorise the operator and reach for \yamlkey{Runtime.mode: process} to scale across cores.
+Use \cli{-{}-benchmark} to make data-driven choices. None of these change the scan's results---only
+its speed.

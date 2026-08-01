@@ -166,11 +166,11 @@ Sampling:
   # AdaptiveBridson:            # AdaptiveBridson method: REQUIRED sub-block (§6.9)
   #   target_expression: "LogL"  #   REQUIRED sympy over returned observables
   #   target_value: -2.9957      #   REQUIRED level-set constant
-  #   contour_precision: 0.01    #   default 0.01 (u-space edge length)
-  #   function_tolerance: 0.05   #   default 0.05
-  #   initial_radius: 0.08       #   default 0.08 (gen-0 spacing)
-  #   max_generations: 25        #   default 25
-  #   max_points: 5000           #   default 5000 (d≤3) / 20000 (d≥4)
+  #   initial_radius: 0.08       #   gen-0 Bridson r0 + first live windows
+  #   refinement_factor: 0.5     #   spacing r' = r_g * factor; next r_g *= factor
+  #   threshold: 0.05            #   stop when (t_max - t_min) < threshold
+  #   max_generations: 25        #   optional gen cap (with/instead of threshold)
+  #   max_points: 5000           #   hard sample budget
   # LogLikelihood:               # alias of Likelihood.expressions (lower precedence)
   #   - name: LogL_Z
   #     expression: z
@@ -232,12 +232,12 @@ Calculators:
       # and `installation` is **skipped** when the stored fingerprint still
       # matches (module name, basepath, source path + root stat, command list).
       # The fingerprint intentionally does NOT scan the source tree for content
-      # edits, so **after editing your calculator source you must ask for a
-      # reinstall** — otherwise the scan keeps running the previously installed
-      # program. Planned control (D13.11): set `"reinstall": true` in
-      #     <calculator folder>/jarvis_install.json     (outside the PackID dirs)
-      # and rerun; one flip reinstalls every pack of that module exactly once.
-      # Until D13.11 lands the only lever is the all-or-nothing env var:
+      # edits. After editing source, set `reinstall: true` once in
+      #     <calculator folder>/jarvis_install.json     (outside PackID dirs)
+      # and rerun; the control process bumps a monotone reinstall_epoch and
+      # every pack reinstalls exactly once. The control file is control-process
+      # owned; Workers write only `.jarvis_install_stamp.json` inside their pack.
+      # The compatible all-module emergency switch is:
       #     JARVIS_FORCE_CALC_INSTALL=1 Jarvis2 run card.yaml
       # Design: `DESIGN_CALC_INSTALL_CONTROL_2.0.md`.
       initialization:            # post-install commands (once per pack)
@@ -341,18 +341,19 @@ detail (error types, aliases, code citations).
 | `Sampling.AdaptiveBridson` / `adaptive_bridson` | [6.9](#69-adaptivebridson) | **yes** (ALS) | — |
 | `Sampling.AdaptiveBridson.target_expression` | [6.9](#69-adaptivebridson) | **yes** | — |
 | `Sampling.AdaptiveBridson.target_value` | [6.9](#69-adaptivebridson) | **yes** | — |
-| `Sampling.AdaptiveBridson.contour_precision` | [6.9](#69-adaptivebridson) | no | `0.01` |
-| `Sampling.AdaptiveBridson.function_tolerance` | [6.9](#69-adaptivebridson) | no | `0.05` |
-| `Sampling.AdaptiveBridson.initial_radius` | [6.9](#69-adaptivebridson) | no | `0.08` |
-| `Sampling.AdaptiveBridson.refinement_factor` | [6.9](#69-adaptivebridson) | no | `0.5` (d≤3) / `0.65` (d≥4) |
-| `Sampling.AdaptiveBridson.max_generations` | [6.9](#69-adaptivebridson) | no | `25` |
-| `Sampling.AdaptiveBridson.max_points` | [6.9](#69-adaptivebridson) | no | `5000` (d≤3) / `20000` (d≥4) |
-| `Sampling.AdaptiveBridson.max_new_per_generation` | [6.9](#69-adaptivebridson) | no | `max_points // 10` |
-| `Sampling.AdaptiveBridson.k_ref` | [6.9](#69-adaptivebridson) | no | `4` |
+| `Sampling.AdaptiveBridson.outer_half_width` | [6.9](#69-adaptivebridson) | no | `0.02` (public) |
+| `Sampling.AdaptiveBridson.min_radius` | [6.9](#69-adaptivebridson) | no | `1/200` (public) |
+| `Sampling.AdaptiveBridson.initial_radius` | [6.9](#69-adaptivebridson) | no | `0.10` |
+| `Sampling.AdaptiveBridson.refinement_factor` | [6.9](#69-adaptivebridson) | no | `0.5` |
+| `Sampling.AdaptiveBridson.threshold` | [6.9](#69-adaptivebridson) | no | default `outer/8` (legacy) |
+| `Sampling.AdaptiveBridson.core_half_width` | [6.9](#69-adaptivebridson) | no | default `outer/8` (legacy) |
+| `Sampling.AdaptiveBridson.max_generations` | [6.9](#69-adaptivebridson) | no | `16` (max \(r_g\) shrinks) |
+| `Sampling.AdaptiveBridson.max_points` | [6.9](#69-adaptivebridson) | no | `50000` |
+| `Sampling.AdaptiveBridson.max_new_per_generation` | [6.9](#69-adaptivebridson) | no | `4000` |
+| `Sampling.AdaptiveBridson.k_ref` | [6.9](#69-adaptivebridson) | no | `30` |
 | `Sampling.AdaptiveBridson.neighbor_graph` | [6.9](#69-adaptivebridson) | no | `auto` |
 | `Sampling.AdaptiveBridson.knn_k` | [6.9](#69-adaptivebridson) | no | `4 * d` |
-| `Sampling.AdaptiveBridson.slice_pairs` | [6.9](#69-adaptivebridson) | no | all pairs (d≥4) |
-| `Sampling.AdaptiveBridson.simplify_tolerance` | [6.9](#69-adaptivebridson) | no | off |
+| `Sampling.AdaptiveBridson.function_tolerance` | [6.9](#69-adaptivebridson) | no | alias of `threshold` (compat) |
 
 ### 3.3 `Mapper` / `LibDeps` / `Calculators` / `Operas` / `Likelihood`
 
@@ -361,9 +362,10 @@ detail (error types, aliases, code citations).
 | `Mapper.type` | [7](#7-mapper-top-level-optional) | no | auto-derived |
 | `Mapper.keys` | [7](#7-mapper-top-level-optional) | for `identity` | — |
 | `Mapper.variables` | [7](#7-mapper-top-level-optional) | for `distribution`/fallthrough | — |
-| `LibDeps.path` | [8.1](#81-libdepsmodules--token-path-registry) | no | project root |
-| `LibDeps.Modules[].name` | [8.1](#81-libdepsmodules--token-path-registry) | yes | — |
-| `LibDeps.Modules[].{path,source,installation}` | [8.1](#81-libdepsmodules--token-path-registry) | no | `<LibDeps.path>/<name>` |
+| `LibDeps.path` | [8.1](#81-libdepsmodules--shared-install-once-libraries) | no | project root |
+| `LibDeps.make_paraller` | [8.1](#81-libdepsmodules--shared-install-once-libraries) | no | `1` |
+| `LibDeps.Modules[].name` | [8.1](#81-libdepsmodules--shared-install-once-libraries) | yes | — |
+| `LibDeps.Modules[].{required_modules,installed,path,source,installation}` | [8.1](#81-libdepsmodules--shared-install-once-libraries) | no | `<LibDeps.path>/<name>` |
 | `LibDeps.registered_executables[].name` | [8.2](#82-libdepsregistered_executables) | yes | — |
 | `LibDeps.registered_executables[].source` | [8.2](#82-libdepsregistered_executables) | yes | — |
 | `LibDeps.registered_executables[].resolution` | [8.2](#82-libdepsregistered_executables) | no | `direct_path` |
@@ -680,6 +682,7 @@ At start the control log prints which path was used, e.g.
 | Setting | Value | Why |
 |---|---|---|
 | Workers | **1** | simple, inspectable smoke |
+| Calculator PackID pool | **1** (`make_paraller` / `Pools` / module `make_paraller` pinned) | avoid free-list rotation installing a new `clone_shadow` pack per sample |
 | Sample root | **`outputs/<scan>/SAMPLE/test/<uuid>/`** | flat uuid dirs (no `00000N/` buckets) |
 | Numbered buckets | **off** (`sample_directory.enabled=false`) | direct inspect under `test/` |
 | Bucket pack (tar.gz) | **off** | never tar during check |
@@ -716,10 +719,33 @@ undeclared-symbol collision risk.
 
 ### 6.9 AdaptiveBridson
 
-Feedback-driven level-set tracer (`jarvishep2/Sampling/adaptive_bridson.py`). Registered
-`stateless=False`; runs only on the internal Redis runtime and automatically enables Worker
-`publish_feedback` (no YAML flag). Full annotated recipe and tables:
-[`YAML-Example/ADAPTIVE_BRIDSON.md`](YAML-Example/ADAPTIVE_BRIDSON.md).
+Feedback-driven **outer/core Bridson** densifier with root-correction and
+endpoint extension (`jarvishep2/Sampling/adaptive_bridson.py`). Registered
+`stateless=False`; Redis runtime enables Worker `publish_feedback`.
+
+The control API names its wait setting `generation_timeout` (default `3600` seconds);
+it is applied independently to each generation/barrier, not as a total run budget.
+The legacy `timeout` keyword remains accepted as an alias for compatibility.
+
+| Doc | Role |
+|---|---|
+| Binding algorithm | [`DESIGN_ADAPTIVE_BRIDSON_LIVE_BAND.md`](DESIGN_ADAPTIVE_BRIDSON_LIVE_BAND.md) |
+| YAML recipes (minimal + full) | [`YAML-Example/ADAPTIVE_BRIDSON.md`](YAML-Example/ADAPTIVE_BRIDSON.md) |
+
+**Control loop (summary)** — full flow in the design doc:
+
+1. **Gen-0**: global Bridson (d≤4) / Sobol (d=5) with `initial_radius` \(r_0\).
+2. **Classify** absolute bands: core \(\lvert f-T\rvert\le w_{\mathrm{core}}\),
+   frontier up to \(w_{\mathrm{outer}}\). Default \(w_{\mathrm{core}}=w_{\mathrm{outer}}/8\).
+3. **Gate** \(t_{\min},t_{\max}\) from finite \(f\) in a **\(2\,r_g\)** ball about
+   best (\(\arg\min\lvert f-T\rvert\)) — exit / next-gen only, not densify mask.
+4. **Same-\(r_g\) fill** (`fill_pass++`, generation does **not** advance):  
+   root-correction on straddles → active endpoints (omni probes) → MST bridge →
+   local Bridson densify in each core’s \(r_g\) ball (blue-noise sep \(=r_g\)).
+5. When fill is quiet: if band thin **and** cores cover contour → **converged**;
+   else \(r_g\leftarrow\max(r_{\min}, r_g\times\rho)\), `generation+=1`, rebuild
+   endpoints.
+6. Hard stops: `min_radius`, `max_generations` (max \(r_g\) shrinks), `max_points`.
 
 **Constraints**
 
@@ -727,38 +753,44 @@ Feedback-driven level-set tracer (`jarvishep2/Sampling/adaptive_bridson.py`). Re
 |---|---|
 | Dimension | `2 ≤ len(Variables) ≤ 5` else `ValueError` at `set_config` |
 | Sub-block | `Sampling.AdaptiveBridson` (alias `adaptive_bridson`) **required** mapping |
-| Gen-0 | d ≤ 4 Bridson Poisson-disk on unit cube; d = 5 Sobol |
-| Neighbor graph | `auto` → Delaunay (d ≤ 3) / kNN (d ≥ 4); explicit `delaunay` / `knn` allowed |
-| Output | `<task_result_dir>/levelset.json` plus normal SAMPLE/DATABASE archive |
-
-**Shared `Sampling` keys used by ALS**
-
-| Key | Required | Default | Notes |
-|---|---|---|---|
-| `Method` | **yes** | — | must be `AdaptiveBridson` |
-| `Variables` | **yes** | — | length 2–5; same distribution catalog as §6.2 |
-| `Seed` / `seed` | no | `0` | Master `SeedSequence` for all generations |
-| `selection` | no | — | physical-param filter before submit (dropped, not failures) |
-| `LogLikelihood` | no | — | alias of `Likelihood.expressions` (§6.8) |
+| Gen-0 | d ≤ 4 Bridson; d = 5 Sobol |
+| Neighbor graph | Delaunay (d≤3) / kNN (d≥4) for brackets; densify is local Bridson |
+| Output | `<task_result_dir>/levelset.json` + SAMPLE/DATABASE archive |
 
 **Keys under `Sampling.AdaptiveBridson`**
 
+Public (new cards):
+
 | Key | Required | Default | Notes |
 |---|---|---|---|
-| `target_expression` | **yes** | — | non-empty sympy string over returned observables (+ variable names) |
-| `target_value` | **yes** | — | float level-set constant `f(obs) = target_value` |
-| `contour_precision` | no | `0.01` | max ‖u_i − u_j‖ over *known* crossing edges |
-| `function_tolerance` | no | `0.05` | max \|f_i − f_j\| over known crossing edges; both must hold to converge |
-| `initial_radius` | no | `0.08` | gen-0 spacing scale in u-space |
-| `refinement_factor` | no | `0.5` (d≤3) / `0.65` (d≥4) | refine radius = `initial_radius * factor^generation` |
-| `max_generations` | no | `25` | int ≥ 1; refine round limit |
-| `max_points` | no | `5000` (d≤3) / `20000` (d≥4) | int ≥ 10 hard sample budget |
-| `max_new_per_generation` | no | `max_points // 10` | int ≥ 1 per-generation refine budget |
-| `k_ref` | no | `4` | candidates drawn per crossing edge |
-| `neighbor_graph` | no | `auto` | `auto` \| `delaunay` \| `knn` |
-| `knn_k` | no | `4 * d` | kNN degree when graph is kNN |
-| `slice_pairs` | no | all unordered pairs | d ≥ 4 only; 2-D projections in `levelset.json` |
-| `simplify_tolerance` | no | off | d=2 polish hook (parsed; polyline chaining always runs for d=2) |
+| `target_expression` | **yes** | — | sympy over returned observables (+ variable names) |
+| `target_value` | **yes** | — | float \(T\) |
+| `outer_half_width` | no | `0.02` | discovery \(\lvert f-T\rvert\le w_{\mathrm{outer}}\) |
+| `min_radius` | no | `1/200` | u-space Euclidean floor for \(r_g\) |
+
+Derived: `core_half_width = outer_half_width/8`, `threshold = core_half_width`
+(\(t_{\max}-t_{\min}\) stop).
+
+Common optional:
+
+| Key | Default | Notes |
+|---|---|---|
+| `initial_radius` | `0.10` | \(r_0\): gen-0 + first windows |
+| `refinement_factor` | `0.5` | \(r_g\) shrink multiplier |
+| `bridge_gaps` | `true` | MST reconnection |
+| `bridge_span_factor` | `2.5` | max bridge = factor × \(r_g\) |
+| `max_generations` | `16` | max \(r_g\) shrinks (scale index) |
+| `max_points` | `50000` | hard sample budget |
+| `max_new_per_generation` | `4000` | densify budget per fill_pass |
+| `k_ref` | `30` | Bridson trials per densify center |
+| `neighbor_graph` | `auto` | `auto` \| `delaunay` \| `knn` |
+| `knn_k` | `4 * d` | when graph is kNN |
+
+Legacy / advanced (still readable): `core_half_width`, `threshold`,
+`function_tolerance` (alias of threshold), `final_half_width`,
+`radius_shrink_mode`, `outer_shrink_factor`, `core_spacing_factor`,
+`min_cores_for_coverage`, `quiet_fill_passes`, `max_fill_passes`,
+`endpoint_stall_passes`, `endpoint_omni_probes`, `slice_pairs`.
 
 Minimal recipe (opera-only circle):
 
@@ -778,11 +810,8 @@ Sampling:
   AdaptiveBridson:
     target_expression: "r2"
     target_value: 0.04
-    contour_precision: 0.05
-    function_tolerance: 0.08
-    initial_radius: 0.12
-    max_generations: 12
-    max_points: 800
+    outer_half_width: 0.05
+    min_radius: 0.005
 Operas:
   Modules:
     - name: Circle
@@ -1021,9 +1050,15 @@ unrecognized `type` string) — auto-derivation never produces it.
 
 ## 8. `LibDeps`
 
-### 8.1 `LibDeps.Modules` — token path registry
+### 8.1 `LibDeps.Modules` — shared install-once libraries
 
-Defines `${LibDeps:<name>}` tokens (Phase 1). Path resolution per entry, **first hit wins**:
+Defines shared native-library builds and `${LibDeps:<name>}` tokens. The control process
+handles this block once, **after environment preflight and before Redis/Workers start**.
+A failed build therefore stops the run before any scan process is spawned. Modules are
+ordered by `required_modules`; independent modules may build concurrently up to
+`LibDeps.make_paraller`.
+
+Path resolution per entry, **first hit wins**:
 
 ```
 1. Modules[].installation.path
@@ -1035,8 +1070,27 @@ Defines `${LibDeps:<name>}` tokens (Phase 1). Path resolution per entry, **first
 
 `LibDeps.path` itself defaults to the project root and supports `&J/`.
 
-Unknown `${LibDeps:name}` references raise `KeyError` at Phase 1. There is **no installation
-executor** in V2 — the block only provides paths (V1's install pipeline is not ported).
+The token vocabulary is `${LibDeps:<name>}`, `${LibDeps:path}` (the base directory),
+`${LibDeps:make_paraller}`, `${path}` / `${source}` within a module's own installation,
+and `@{ROOT path}`. The latter comes from `EnvReqs.CERN_ROOT.path` or
+`get_path_command`; using it without that configuration fails before the build with a
+message naming `EnvReqs.CERN_ROOT`.
+
+`installation.commands` accepts V1's plain string list. Commands preserve V1's sequential
+standalone `cd DIR` behaviour: the following command starts in that directory. Mapping
+commands (`{cmd: ..., cwd: ...}`) are also accepted.
+
+Each successful module writes `<installation.path>/.jarvis_install_stamp.json`; the shared
+control file is `<LibDeps.path>/jarvis_install.json`. A matching fingerprint (module name,
+installation path/source/commands, and source-root stat) reuses the existing build. The
+deliberate limitation is the same as calculator installs: editing a file **inside** a source
+directory does not request a rebuild. Set `"reinstall": true` in the control file before
+the next run to rebuild all modules; V2 never asks an interactive `Reinstall? (y/n)` prompt.
+V1's `installed:` key is accepted but ignored — the stamp is authoritative.
+
+`Jarvis2 run TASK.yaml --skip-library-installation` (and `check`) does no build, emits a
+warning, and verifies that every declared installation path already exists. Per-module
+build output goes to `logs/<scan>/library-<module>.log`.
 
 ### 8.2 `LibDeps.registered_executables`
 

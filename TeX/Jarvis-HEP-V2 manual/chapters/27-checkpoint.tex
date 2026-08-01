@@ -1,0 +1,102 @@
+\chapter{Checkpoint \& Resume}
+\label{ch:checkpoint}
+
+\newthought{Scans get interrupted} --- power, quotas, preemption, your own Ctrl+C. \Jtwo\
+checkpoints the control process every thirty seconds and can resume a scan with
+\emph{no missing and no duplicated points}. This chapter explains what a checkpoint
+contains, the safe-barrier rule that makes resume exact, and the operational details.
+
+\section{What is saved, and what deliberately is not}
+\label{sec:checkpoint-contents}
+
+The Sampler is the source of truth. A checkpoint stores:
+
+\begin{itemize}
+  \item the \textbf{sampler's runtime state} --- RNG streams (as serialized seed
+        sequences), the generated point set or file cursor, and per-method internals;
+  \item the \textbf{submitted and completed \textsc{uuid} sets};
+  \item a \textbf{run spec}: the normalized configuration with its hash, scan/task
+        metadata, and the variable signature --- so a resume against a \emph{changed}
+        card is detected rather than silently mixed.
+\end{itemize}
+
+\begin{jnote}
+\textbf{In-flight tasks are never serialized.} Redis queues are volatile by design: on
+resume, stale queue entries are drained and calculator pools rebuilt, and the sampler
+simply re-proposes whatever was submitted but never acknowledged by the Archiver.
+Combined with idempotent archiving, the arithmetic closes: no lost points, no doubles.
+\end{jnote}
+
+\section{The safe barrier}
+\label{sec:safe-barrier}
+
+A checkpoint is written only at a \emph{safe barrier}, defined by two conditions:
+
+\begin{enumerate}
+  \item the sampler is at rest (not mid-generation, not mid-batch);
+  \item every submitted \textsc{uuid} has been acknowledged by the Archiver.
+\end{enumerate}
+
+A background heartbeat attempts a save every \textbf{30 seconds}; ticks that miss the
+barrier are simply skipped, so the file on disk is always a consistent cut of the run.
+Writes are atomic (temp file + rename) --- a crash mid-save cannot corrupt the previous
+checkpoint.
+
+\section{Where it lives}
+\label{sec:checkpoint-location}
+
+\begin{quote}
+\file{<project-root>/checkpoints/<scan>/<sampler>/state.pkl}
+\end{quote}
+
+One file per scan and sampler, overwritten in place. Checkpoints are project-local like
+everything else; deleting the directory is the supported way to force a fresh start.
+
+\section{Resuming}
+\label{sec:resuming}
+
+Run the same card again:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 run scan.yaml            # prompts when a checkpoint exists
+Jarvis2 run scan.yaml --resume   # accepts it non-interactively
+\end{jcmd}
+\end{terminal}
+
+On accept, \Jtwo\ validates the checkpoint (format, version, config hash), restores the
+sampler state, drains any stale Redis queue, rebuilds calculator pools, and re-proposes
+the unacknowledged points. Because every sampler mints deterministic \textsc{uuid}s and
+per-Sample seeds are derived from a master seed sequence --- independent of Worker count
+--- a resume may use a \emph{different} number of Workers, or a different machine, and
+still produce the identical point set.
+
+\begin{jwarn}
+A checkpoint whose format is not the current distributed-runtime format --- including
+files produced by other \Jarvis\ product lines --- is \textbf{refused} with an
+actionable message, never partially loaded. Likewise, editing the card between runs
+changes the config hash; resume tells you instead of continuing a subtly different
+scan. Change of plan = new scan name.
+\end{jwarn}
+
+\section{Failure recovery during a run}
+\label{sec:failure-recovery}
+
+Resume handles the control process dying. The runtime also self-heals below that
+level, with no operator action:
+
+\begin{itemize}
+  \item \textbf{A Worker dies} (OOM, node fault): its heartbeat lapses, the factory
+        respawns it, and the Sample it held is re-queued.
+  \item \textbf{A Sample fails} (calculator crash, timeout, missing observable): it is
+        archived as a failed record with its log; the scan continues.
+  \item \textbf{The Archiver falls behind}: results queue in Redis; Workers keep
+        computing; buckets pack only after records land
+        (Section~\ref{sec:sample-directory}).
+\end{itemize}
+
+\begin{jtip}
+For long scans on shared machines, make \cli{Jarvis2 run scan.yaml --resume} the
+\emph{only} way you launch: first invocation starts fresh (no checkpoint exists),
+every later invocation continues. Your batch-system retry hook is then a one-liner.
+\end{jtip}

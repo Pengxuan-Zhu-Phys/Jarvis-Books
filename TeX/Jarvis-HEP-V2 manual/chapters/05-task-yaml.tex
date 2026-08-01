@@ -1,0 +1,148 @@
+\chapter{The Task Card}
+\label{ch:task-yaml}
+
+\newthought{One \textsc{yaml} file describes a whole scan.} This chapter is the top of the
+reference: how the card is loaded, what the top-level keys are, which names the loader
+reserves for itself, and --- important for debugging --- the two very different ways \Jtwo\
+reacts to a key it does not like. The following chapters then descend into each block.
+
+\section{How the card is loaded}
+\label{sec:card-loading}
+
+\cli{Jarvis2 run <task>.yaml} performs, in order:
+
+\begin{enumerate}
+  \item \textbf{Parse.} \code{yaml.safe\_load}; the top level must be a mapping.
+  \item \textbf{Resolve the project root} (the rules of
+        Section~\ref{sec:projects}).
+  \item \textbf{Resolve the scan name}: \yamlkey{Scan.name} $\rightarrow$
+        \yamlkey{scan\_name} $\rightarrow$ \code{default}.
+  \item \textbf{Resolve the output root}: the top-level \yamlkey{task\_result\_dir} if
+        given, else \file{<project-root>/outputs/<scan-name>}.
+  \item \textbf{Merge and normalize \yamlkey{EnvReqs.V2}} --- including defaults pulled
+        from a shared file via \yamlkey{EnvReqs.Check\_default\_dependencies}
+        (Chapter~\ref{ch:envreqs}).
+  \item \textbf{Phase-1 token resolution}: \marker{\&J/}, \code{\$\{Scan:\ldots\}},
+        \code{\$\{LibDeps:\ldots\}}, and registered executable names are resolved once,
+        in the control process. Per-Sample tokens pass through untouched
+        (Section~\ref{sec:tokens}).
+\end{enumerate}
+
+\section{Top-level keys}
+\label{sec:top-level}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Default} & \textbf{Role} \\
+    \midrule
+    \yamlkey{project\_name}    & \yamlkey{Scan.name} & label used in the run summary \\
+    \yamlkey{Scan}             & ---            & \yamlkey{name} is the only key read \\
+    \yamlkey{scan\_name}       & \code{default} & fallback when \yamlkey{Scan.name} is absent \\
+    \yamlkey{task\_result\_dir}& \file{outputs/<scan>} & override the output root \\
+    \yamlkey{run\_id}          & fresh \textsc{uuid4} & run identity in records and summary \\
+    \yamlkey{EnvReqs}          & ---            & dependency declarations + the \yamlkey{V2} runtime block (Ch.~\ref{ch:envreqs}) \\
+    \yamlkey{Sampling}         & ---            & sampler selection + configuration (Ch.~\ref{ch:sampling-block}) \\
+    \yamlkey{Mapper}           & auto-derived   & explicit u\,$\rightarrow$\,x control (Ch.~\ref{ch:variables}) \\
+    \yamlkey{LibDeps}          & ---            & tool paths + registered executables (Ch.~\ref{ch:libdeps}) \\
+    \yamlkey{Calculators}      & ---            & external programs, pools, archiver policy (Ch.~\ref{ch:calculators}) \\
+    \yamlkey{Operas}           & ---            & in-process operators (Ch.~\ref{ch:operas}) \\
+    \yamlkey{Likelihood}       & ---            & likelihood expressions (Ch.~\ref{ch:loglikelihood}) \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Top-level task-card keys. All blocks except \yamlkey{Sampling} are optional.}
+  \label{tab:top-level-keys}
+\end{table}
+
+Only \yamlkey{Sampling} is required for a runnable scan; the leanest useful card is
+\yamlkey{Sampling} + \yamlkey{Operas} + a likelihood, exactly as in the quick start.
+
+\begin{jwarn}
+Five names are \textbf{reserved}: \yamlkey{task\_yaml}, \yamlkey{task\_root},
+\yamlkey{project\_root}, \yamlkey{task\_result\_dir}, and \yamlkey{scan\_name} are stamped
+into the configuration by the loader and will overwrite anything you put there (only
+\yamlkey{task\_result\_dir} and \yamlkey{scan\_name} are meaningful for you to set). A
+top-level \yamlkey{Runtime} block is \emph{rejected outright} --- runtime scheduling is
+configured under \yamlkey{EnvReqs.V2}, nowhere else.
+\end{jwarn}
+
+\section{Validation: two regimes}
+\label{sec:validation}
+
+There is no schema validator in front of the loader; each block checks what it reads. Two
+regimes coexist, and telling them apart saves debugging time:
+
+\paragraph{Hard errors.} A missing card, a non-mapping top level, an empty
+\yamlkey{Sampling.Variables}, a missing required sampler key (\yamlkey{Radius},
+\yamlkey{Point number}, \yamlkey{num}, \yamlkey{CSV.path}, \ldots), an unknown
+\yamlkey{Sampling.Method}, an invalid \yamlkey{selection}, a bad
+\yamlkey{registered\_executables} entry, an unknown \code{\$\{LibDeps:\ldots\}} reference,
+a missing opera \yamlkey{operator}, a top-level \yamlkey{Runtime}, or an unsupported key
+under \yamlkey{EnvReqs.V2} --- all abort the run immediately, mostly with the underlying
+Python exception.
+
+\paragraph{Silent coercion.} Malformed values for \yamlkey{EnvReqs.V2.workers},
+\yamlkey{batch\_size}, the \yamlkey{Archiver} and \yamlkey{Cleanup} settings, and
+malformed entries in the \yamlkey{LibDeps}/module lists (a list item that is not a
+mapping, or has no \yamlkey{name}) are \emph{dropped or replaced by defaults without an
+error}.
+
+\begin{jwarn}
+Silent coercion means a typo can vanish: misspell \yamlkey{workers} inside a malformed
+sub-map and you may simply get the default. When a scan ignores a setting you are sure
+you wrote, diff your card against the annotated skeleton in
+Appendix~\ref{app:yaml-index} before suspecting the runtime.
+\end{jwarn}
+
+\section{Spelling and aliases}
+\label{sec:aliases}
+
+The card surface keeps a few historical spellings. They are documented where they occur,
+but the recurring ones are worth one table up front:
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Preferred} & \textbf{Accepted alias} \\
+    \midrule
+    \yamlkey{EnvReqs.V2.workers} & \yamlkey{worker} (singular) \\
+    \yamlkey{Sampling.Seed} & \yamlkey{seed} \\
+    \yamlkey{Sampling."Point number"} & \yamlkey{point\_number} \\
+    \yamlkey{Sampling.data} (check mode) & \yamlkey{points\_csv} \\
+    \yamlkey{Sampling.AdaptiveBridson} & \yamlkey{adaptive\_bridson} \\
+    \yamlkey{Calculators.Pools} & \yamlkey{pools} \\
+    \yamlkey{Operas.Modules[].timeout\_sec} & \yamlkey{timeout} \\
+    \yamlkey{Likelihood.expressions} & \yamlkey{Sampling.LogLikelihood} (lower precedence) \\
+    \bottomrule
+  \end{tabular}
+  \caption{Alias spellings. Never write both members of a pair in one card.}
+  \label{tab:aliases}
+\end{table}
+
+Keys are case-sensitive exactly as printed throughout this book; note the genuine space
+in \yamlkey{"Point number"} and the historical spelling \yamlkey{make\_paraller}
+(Chapter~\ref{ch:calculators}).
+
+\section{A reading map for Part~\ref{part:task-card}}
+
+\begin{itemize}
+  \item \textbf{Chapter~\ref{ch:envreqs}} --- \yamlkey{EnvReqs}: shared defaults and the
+        \yamlkey{V2} scheduling/archiving block.
+  \item \textbf{Chapter~\ref{ch:sampling-block}} --- \yamlkey{Sampling}: choosing a
+        method and the keys all methods share.
+  \item \textbf{Chapter~\ref{ch:variables}} --- \yamlkey{Variables}, the distribution
+        catalog, and the \yamlkey{Mapper}.
+  \item \textbf{Chapter~\ref{ch:loglikelihood}} --- \yamlkey{Likelihood} and its
+        semantics.
+  \item \textbf{Chapter~\ref{ch:expressions}} --- the expression language every
+        \yamlkey{expression:} field shares.
+\end{itemize}
+
+The workflow blocks (\yamlkey{LibDeps}, \yamlkey{Calculators}, \yamlkey{Operas}) get the
+whole of Part~\ref{part:backends}; the per-method \yamlkey{Sampling} keys get
+Part~\ref{part:samplers}.

@@ -1,0 +1,94 @@
+\chapter{MCMC Family I: Metropolis and Adaptive}
+\label{ch:mcmc-1}
+
+\newthought{Markov chain Monte Carlo} (\textsc{mcmc}) draws samples from the posterior by taking a
+guided random walk: from the current point it proposes a nearby point and accepts or rejects it so
+that, over time, the chain visits each region in proportion to its likelihood. This chapter covers
+the baseline random-walk method and three adaptive variants that tune the proposal for you.
+
+\section{The shared format}
+\label{sec:mcmc1-format}
+
+Every sampler in this chapter (and in Chapters~\ref{ch:mcmc-2}--\ref{ch:mcmc-3}) reads the same
+three \yamlkey{Bounds} keys:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{num\_chains}] how many chains to run in parallel ($\geq 1$). Multiple chains
+        improve coverage and let you check convergence between them.
+  \item[\yamlkey{num\_iters}] total iterations ($\geq 1$).
+  \item[\yamlkey{proposal\_scale}] the size of each proposed step ($>0$).
+\end{description}
+
+\begin{yamlwin}
+Sampling:
+  Method: "MCMC"
+  Variables: [ ... ]
+  Bounds:
+    num_chains: 8
+    num_iters: 600
+    proposal_scale: 0.06
+  LogLikelihood:
+    - {name: "LogL", expression: "..."}
+\end{yamlwin}
+
+\begin{jtip}
+\yamlkey{proposal\_scale} is the dial that matters most. Too large and almost every step is
+rejected; too small and the chain crawls. Aim for an acceptance rate around 20--40\%; the adaptive
+methods below tune this for you.
+\end{jtip}
+
+\section{MCMC (random-walk Metropolis)}
+\label{sec:s-mcmc}
+
+\paragraph{How it works} The baseline method. From the current point it proposes a Gaussian step of
+size \yamlkey{proposal\_scale}, computes the likelihood there, and accepts the move with the
+Metropolis probability $\min(1, L_\text{new}/L_\text{old})$---always stepping uphill, sometimes
+downhill. The result is a chain whose density traces the posterior.
+
+\paragraph{When to use} A simple, robust starting point for low-to-medium dimensional posteriors.
+
+\begin{jnote}
+\alias{ToyMCMC}{MCMC} selects this same sampler under a lightweight name, handy for tests.
+\end{jnote}
+
+\section{AMMCMC (adaptive Metropolis)}
+\label{sec:s-ammcmc}
+
+\paragraph{How it works} Plain random-walk \textsc{mcmc} struggles when parameters are correlated,
+because a single fixed step size cannot match a tilted, stretched posterior. \sampler{AMMCMC}
+\emph{learns the proposal covariance} from the chain's own history: as it accumulates samples it
+shapes future proposals to follow the posterior's correlations, so it explores far more
+efficiently without hand-tuning.
+
+\paragraph{When to use} Posteriors with strong parameter correlations, or when tuning
+\yamlkey{proposal\_scale} by hand is painful.
+
+\section{RobustAM (robust adaptive Metropolis)}
+\label{sec:s-robustam}
+
+\paragraph{How it works} \sampler{RobustAM} adapts the proposal to hit a \emph{target acceptance
+rate}: after each step it nudges the proposal scale/shape up or down so the chain settles at an
+efficient acceptance fraction. This makes it forgiving of a poor initial \yamlkey{proposal\_scale}.
+
+\paragraph{When to use} When you want adaptation that is stable from a bad starting guess, with
+less sensitivity to the initial scale than plain adaptive Metropolis.
+
+\section{DRAM (delayed rejection + adaptive Metropolis)}
+\label{sec:s-dram}
+
+\paragraph{How it works} \sampler{DRAM} combines two ideas. \emph{Delayed rejection}: when a
+proposed step is rejected, instead of staying put the chain immediately tries a second, usually
+smaller, proposal---and possibly a third---before giving up, which rescues moves in tight regions.
+\emph{Adaptive Metropolis}: the proposal covariance is learned from history, as in
+\sampler{AMMCMC}. Together they explore awkward posteriors efficiently.
+
+\paragraph{When to use} Difficult posteriors where plain Metropolis gets stuck and you want both
+better local acceptance and automatic tuning.
+
+\section{Summary}
+\label{sec:mcmc1-summary}
+
+All four share \yamlkey{num\_chains}/\yamlkey{num\_iters}/\yamlkey{proposal\_scale}. Start with
+\sampler{MCMC}; switch to \sampler{AMMCMC} or \sampler{DRAM} for correlated or awkward posteriors,
+and \sampler{RobustAM} when you want acceptance-rate-targeted adaptation. After any run, check
+trace plots, acceptance rate, and between-chain agreement.

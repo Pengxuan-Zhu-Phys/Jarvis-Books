@@ -1,0 +1,109 @@
+\chapter{Task YAML Structure}
+\label{ch:task-yaml}
+
+\newthought{A task card is one \textsc{yaml} file} that describes a whole scan. This chapter is
+the map: it shows the handful of top-level blocks a card can contain, says which are required,
+and points you to the chapter that documents each one in detail. Read it once to get the shape;
+then dip into the later chapters as you write.
+
+\section{The shape of a card}
+\label{sec:card-shape}
+
+Recall the three-step model from Chapter~\ref{ch:introduction}: for every point, \Jarvis\
+\emph{draws a point}, \emph{runs a workflow} to get observables, and \emph{scores} them with a
+likelihood. A task card simply fills in those steps. Here is the full skeleton---you will rarely
+use every block at once:
+
+\begin{yamlwin}
+Scan:          # run name + where outputs go          (required)
+Sampling:      # how points are drawn + the objective  (required)
+EnvReqs:       # platform + dependency checks           (recommended)
+Calculators:   # external-program workflow  )  choose
+Operas:        # in-process workflow        )  ONE of these
+LibDeps:       # shared external libraries             (optional)
+Utils:         # helper functions for expressions      (optional)
+\end{yamlwin}
+
+\section{Required, recommended, optional}
+\label{sec:required-optional}
+
+Only two blocks are mandatory; the rest you add when you need them
+(Table~\ref{tab:blocks}).
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}llp{0.46\linewidth}@{}}
+    \toprule
+    \textbf{Block} & \textbf{Status} & \textbf{What it does} \\
+    \midrule
+    \yamlkey{Scan}        & required    & names the run and sets the output location \\
+    \yamlkey{Sampling}    & required    & chooses the sampler, the scan variables, and the likelihood \\
+    \yamlkey{EnvReqs}     & recommended & checks the machine before the run starts \\
+    \yamlkey{Calculators} & one backend & runs external programs to produce observables \\
+    \yamlkey{Operas}      & one backend & runs in-process Python operators instead \\
+    \yamlkey{LibDeps}     & optional    & installs shared external libraries once \\
+    \yamlkey{Utils}       & optional    & defines helper functions used in expressions \\
+    \bottomrule
+  \end{tabular}
+  \caption{The top-level blocks of a task card.}
+  \label{tab:blocks}
+\end{table}
+
+\begin{jwarn}
+Pick \emph{one} workflow backend: a card uses \yamlkey{Calculators} \emph{or} \yamlkey{Operas},
+not both. Use \yamlkey{Operas} for quick, in-process calculations and \yamlkey{Calculators} to
+drive external programs (Chapter~\ref{ch:core-concepts} explains the choice).
+\end{jwarn}
+
+\section{A complete minimal card}
+\label{sec:minimal-card}
+
+The quick-start from Chapter~\ref{ch:quickstart} is a real, complete card. Stripped to its
+essentials it is just \yamlkey{Scan} + \yamlkey{Sampling} + a backend:
+
+\begin{yamlwin}
+Scan:
+  name: "my_first_scan"
+  save_dir: "&J/outputs"
+
+Sampling:
+  Method: "Random"
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0, max: 5}}
+  LogLikelihood:
+    - {name: "LogL", expression: "-0.5 * (x - 2)**2"}
+
+Operas:
+  make_paraller: 4
+  Modules: []
+\end{yamlwin}
+
+\noindent Everything else in this part of the book is about filling these blocks in with more
+detail and confidence.
+
+\section{Where each block is documented}
+\label{sec:block-map}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{Scan}] Chapter~\ref{ch:scan-block} --- run name, output directory, sample
+        retention.
+  \item[\yamlkey{Sampling}] Chapter~\ref{ch:sampling-block} (the block),
+        Chapter~\ref{ch:variables} (scan variables), Chapter~\ref{ch:loglikelihood}
+        (the likelihood), and Part~\ref{part:samplers} (one chapter per sampler).
+  \item[\yamlkey{EnvReqs}] Chapter~\ref{ch:envreqs} --- platform and dependency checks.
+  \item[\yamlkey{Calculators}] Chapter~\ref{ch:calculators} --- external-program workflows.
+  \item[\yamlkey{Operas}] Chapter~\ref{ch:operas} --- in-process operator workflows.
+  \item[\yamlkey{LibDeps}] Chapter~\ref{ch:libdeps} --- shared external libraries.
+  \item[\yamlkey{Utils}] Chapter~\ref{ch:utils} --- helper functions for expressions.
+\end{description}
+
+\noindent Two cross-cutting topics support all of these: the \emph{expressions} you write in
+likelihoods and mappings (Chapter~\ref{ch:symbols}) and the \emph{path markers and tokens}
+that keep paths portable (Chapter~\ref{ch:core-concepts}).
+
+\begin{jtip}
+\textsc{yaml} is whitespace-sensitive: indent with spaces (never tabs), and keep items under a
+key aligned. If \Jarvis\ reports a validation error, it almost always points at the block and
+key where the indentation or a value is wrong.
+\end{jtip}

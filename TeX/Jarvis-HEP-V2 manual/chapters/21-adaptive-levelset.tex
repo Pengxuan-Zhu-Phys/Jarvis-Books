@@ -1,0 +1,443 @@
+\chapter{AdaptiveBridson}
+\label{ch:adaptive-levelset}
+
+\newthought{Trace the boundary, not the bulk.} \sampler{AdaptiveBridson} is the
+feedback-driven contour tracer: it hunts the surface where a target function of your
+observables crosses a chosen constant --- a $95\%$~CL contour, an exclusion edge, a
+relic-density band --- and spends its budget densifying \emph{around that surface}
+instead of the whole space. The current design (finalized 2026-07-22, validated on real
+\textsc{idm}/micrOMEGAs relic-density scans) is an \emph{outer/core Bridson densifier}:
+a coarse global pass finds the contour cheaply, then a two-band classification
+(\emph{core} vs \emph{frontier}) decides where to pack more points, at a spatial scale
+that shrinks generation by generation until the local band around the best point is
+thin enough. Public tuning is deliberately small --- two knobs beyond the target itself
+--- with everything else defaulted from real-world validation runs.
+
+\begin{jnote}
+This chapter documents the \emph{current} algorithm. An earlier design (crossing-edge
+midpoint refinement, keyed on \yamlkey{contour\_precision}/\yamlkey{function\_tolerance})
+is retired as the proposal engine; old checkpoints and cards that still set those keys
+keep working (Section~\ref{sec:als-legacy}), but new cards should use the interface
+below.
+\end{jnote}
+
+\section{Configuration}
+\label{sec:als-config}
+
+\begin{yamlwin}
+Sampling:
+  Method: AdaptiveBridson
+  Seed: 7
+  Variables:                        # REQUIRED: 2 to 5 entries
+    - name: x
+      distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
+    - name: y
+      distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
+
+  AdaptiveBridson:                  # alias: adaptive_bridson
+    target_expression: "r2"          # REQUIRED: shared-language expression
+    target_value: 0.04               # REQUIRED: the level T
+    # Optional public tuning (defaults are fine for most cards):
+    # outer_half_width: 0.02         # discovery band |f-T| <= w_outer
+    # min_radius: 0.005              # u-space resolution floor
+\end{yamlwin}
+
+\begin{keylist}
+  \item[target\_expression] \req. A shared-language expression
+        (Chapter~\ref{ch:expressions}) evaluated in the control process over the
+        observables your workflow \emph{returns} --- likelihood terms included. Its
+        value is $f(u)$.
+  \item[target\_value] \req. The level $T$ you are tracing: $f(u) = T$.
+  \item[outer\_half\_width] \opt, default \code{0.02}. The \emph{discovery} band ---
+        any evaluated point with $\lvert f - T\rvert \le w_{\mathrm{outer}}$ is worth
+        keeping around as context; only its inner half (below) actually drives
+        densification.
+  \item[min\_radius] \opt, default $1/200$. The final u-space resolution floor: the
+        per-generation spatial scale never shrinks past this, even if the local band is
+        still not thin enough. Clamped down to \yamlkey{initial\_radius} if you set it
+        larger.
+\end{keylist}
+
+Everything the tracer needs beyond the target and these two knobs is derived or safely
+defaulted (Section~\ref{sec:als-keys}); prefer the two-knob card above and only add more
+keys when you know specifically why.
+
+\section{The algorithm}
+\label{sec:als-algorithm}
+
+Geometry --- Bridson spacing, windows, neighbor distances --- is always in
+\textbf{u-space}; the physical map (Chapter~\ref{ch:variables}) is used only to build
+the Sample that gets submitted and to read back $f$. The tracer works through a fixed
+generation loop; within one generation it can take many \emph{fill passes} before the
+spatial scale actually shrinks.
+
+\begin{marginfigure}
+\centering
+\smallcaps{gen-0 Bridson}\\[2pt]
+$\big\downarrow$\\[2pt]
+\smallcaps{classify core / frontier}\\[2pt]
+$\big\downarrow$\\[2pt]
+\smallcaps{same-scale fill} $\circlearrowleft$\\
+{\footnotesize root-corr, endpoints, bridge, densify}\\[2pt]
+$\big\downarrow$ \emph{fill quiet}\\[2pt]
+\smallcaps{band thin \& covered?}\\[2pt]
+yes $\to$ \textbf{converged} \quad no $\to$ shrink $r_g$, repeat
+\caption[The generation loop.]{One generation: classify, fill at fixed scale until
+quiet, then either stop or shrink the scale and classify again.}
+\end{marginfigure}
+
+\subsection{Notation}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[$r_g$] the current spatial scale --- the Bridson/window radius for this
+        generation.
+  \item[$w_{\mathrm{outer}}, w_{\mathrm{core}}$] the discovery and densify-center
+        half-widths in $f$; $w_{\mathrm{core}} = w_{\mathrm{outer}}/8$ by default.
+  \item[core / frontier] a point is \emph{core} if $\lvert f-T\rvert \le w_{\mathrm{core}}$,
+        \emph{frontier} if it is farther but still inside $w_{\mathrm{outer}}$; only
+        cores act as densify centers and bridge endpoints.
+  \item[best] $\arg\min_i \lvert f_i - T\rvert$ among points with a finite $f$.
+  \item[generation / fill\_pass] a \emph{generation} is one completed shrink of $r_g$;
+        a \emph{fill\_pass} is one densify / root-correction / endpoint / bridge round
+        at the \textbf{same} $r_g$ --- fill passes do not advance the generation
+        counter.
+\end{description}
+
+\begin{jwarn}
+Two different masks look similar and are not: the \textbf{core/frontier} split
+(above) decides who may open a densify window or act as a bridge center. The
+\textbf{$t_{\min}, t_{\max}$} gate below is a completely separate measurement used only
+to decide when to stop or shrink --- never confuse "is this point a core" with "is the
+local band thin."
+\end{jwarn}
+
+\subsection{Generation 0}
+
+A global Bridson fill at spacing \yamlkey{initial\_radius} covers the whole unit cube
+($d \le 4$); at $d = 5$ a Sobol (quasi-random) fill is used instead, since Bridson's
+rejection sampling degrades in five dimensions. Every gen-0 point is submitted and
+evaluated; a point whose workflow fails never becomes best, core, or a densify center
+--- non-finite $f$ is simply excluded, not guessed at.
+
+\subsection{Classify, then gate}
+
+Every evaluated point is classified by its \emph{absolute} distance from the target:
+core if $\lvert f-T\rvert \le w_{\mathrm{core}}$, frontier if it is farther but still
+within $w_{\mathrm{outer}}$. An empty core after gen-0 is not a failure --- edges whose
+endpoints straddle $T$ seed the first cores via root-correction (below).
+
+Separately, the tracer computes an exit/next-generation gate from \textbf{best}: collect
+every finite $f$ within a ball of radius $2\,r_g$ around best, and take
+$t_{\min}=\min f$, $t_{\max}=\max f$ over that set. Using $2\,r_g$ (not $r_g$) matters
+--- under strict blue-noise spacing $r_g$, a ball of that radius around best is
+essentially a single point, so its width would always read zero; $2\,r_g$ actually
+measures local variation at the current scale. Fewer than two finite values in that ball
+means "no band yet," which never counts as converged.
+
+\subsection{Same-scale fill}
+\label{sec:als-fill}
+
+While cores exist and fill is still making structural progress, the tracer runs
+repeated fill passes \emph{at the same $r_g$} --- generation does not advance:
+
+\begin{enumerate}
+  \item \textbf{Root-correction.} On the neighbor graph (Delaunay for $d\le3$, kNN for
+        $d\ge4$) plus a nearest-opposite-side query, classify every edge:
+        \begin{center}
+        \begin{tabular}{@{}p{0.08\linewidth}p{0.40\linewidth}p{0.42\linewidth}@{}}
+          \toprule
+          \textbf{Class} & \textbf{Meaning} & \textbf{Action} \\
+          \midrule
+          A & neither endpoint is core & root-correction toward $T$ \\
+          B & exactly one endpoint is core & expand from the core along the edge \\
+          C & both cores, u-gap is large & spatial bridge between them \\
+          D & both cores, already close & no fill needed on this edge \\
+          \bottomrule
+        \end{tabular}
+        \end{center}
+        A class-A or -B edge gets a new point placed by linear secant interpolation in
+        $f$, clipped to stay well inside the edge:
+        \[
+        u = u_i + \alpha\,(u_j-u_i), \qquad
+        \alpha = \mathrm{clip}_{[0.05,\,0.95]}\!\left(\frac{T-f_i}{f_j-f_i}\right)
+        \]
+        (falling back to the midpoint if blue-noise spacing rejects the secant point).
+        A new point near $T$ becomes a core on the \emph{next} classify --- existing
+        points are never moved.
+  \item \textbf{Active endpoints.} Disconnected or open pieces of the contour need
+        directional growth, not just densification around what already exists. The
+        tracer keeps a persistent set of \emph{active endpoints} (contour tips) at the
+        current $r_g$; each pass probes many directions on the hypersphere around every
+        active endpoint (omni probes, default $\ge16$). An endpoint retires once a
+        farther core supersedes it, it reaches the cube boundary, or it stalls for
+        \yamlkey{endpoint\_stall\_passes} passes without progress. Endpoints are rebuilt
+        from scratch whenever $r_g$ shrinks --- stale tips from a coarser scale are
+        never carried forward.
+  \item \textbf{Gap bridge.} When \yamlkey{bridge\_gaps} is on (default), nearby cores
+        that are not yet well connected get a spatial bridge along a minimum-spanning
+        tree, up to \yamlkey{bridge\_span\_factor}~$\times\,r_g$ apart.
+  \item \textbf{Local densify.} Around every densify center, new candidates are drawn
+        inside a ball of radius $r_g$ with Bridson-style trials
+        (\yamlkey{k\_ref} per center), rejecting anything closer than $r_g$ to an
+        already-accepted or in-flight point --- the same blue-noise separation as
+        generation 0, just local. Over-dense centers are thinned first so proposal
+        budget does not pile up on redundant cores.
+\end{enumerate}
+
+A fill pass's mid-pass accepts only constrain \emph{exclusion} for the rest of that pass
+--- they never open new densify windows until the next classify. A point is never
+resubmitted twice at the same $u$, even if it later falls out of the core band.
+
+\textbf{Fill continues} while any of: new cores keep appearing, the best
+$\lvert f-T\rvert$ keeps improving, contour extent or core-to-core spacing keeps
+improving, or actionable A/B/C edges or active endpoints remain. After
+\yamlkey{quiet\_fill\_passes} (default 3) with none of that, the scale is treated as
+\emph{quiet} even if some straddling edges persist --- a lingering straddle alone is not
+a reason to keep filling forever.
+
+\subsection{Convergence, shrink, and hard stops}
+
+Once a scale is quiet, the tracer checks \textbf{coverage}: enough cores
+(\yamlkey{min\_cores\_for\_coverage}, default 4), forming one connected component, with
+every core-to-core nearest-neighbor gap within
+\yamlkey{core\_spacing\_factor}~$\times\,r_g$ (default $2.0$). Until coverage holds, the
+scale never shrinks --- the tracer keeps appending cores instead.
+
+With fill quiet and coverage OK, the tracer stops (\code{stop\_reason = converged}) once
+\emph{all} of the following hold: fill is not needed, the best point is itself a core,
+coverage is satisfied, and $t_{\max}-t_{\min} < \tau$ on the $2\,r_g$ ball about best
+($\tau$ defaults to $w_{\mathrm{core}}$). If \yamlkey{final\_half\_width} is set, at
+least one point must also land inside that tighter band.
+
+Otherwise the tracer \emph{solidifies} the current cores into a permanent set, shrinks
+$r_g \leftarrow \max(r_{\min},\, r_g \times \yamlkey{refinement\_factor})$ (default
+$\times 0.5$), increments \yamlkey{generation}, resets \yamlkey{fill\_pass} to zero, and
+rebuilds active endpoints from the new, finer geometry. If $r_g$ is already at
+\yamlkey{min\_radius} and the band is still not thin, the tracer stops anyway --- it
+never invents resolution finer than the floor you configured.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Condition} & \textbf{\code{stop\_reason}} \\
+    \midrule
+    generation $\ge$ \yamlkey{max\_generations} & \code{max\_generations} \\
+    total points $\ge$ \yamlkey{max\_points} & \code{max\_points} \\
+    fill\_pass $\ge$ \yamlkey{max\_fill\_passes} & scale force-closed, then re-gated \\
+    no finite $f$ at all & hard failure \\
+    local windows saturated, no candidates left & \code{no\_refinement\_candidates} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Hard safety stops, independent of convergence.}
+  \label{tab:als-stops}
+\end{table}
+
+\begin{jtip}
+When cores exist but every nearby bracket has cleared, \yamlkey{outer\_half\_width}
+itself anneals toward \yamlkey{core\_half\_width} (by
+\yamlkey{outer\_shrink\_factor}, default $0.7$, per pass) --- discovery support tightens
+automatically as the contour becomes well sampled. This never substitutes for the
+$t_{\min}/t_{\max}$ exit gate; it only trims how much frontier the tracer keeps around.
+\end{jtip}
+
+\section{How it behaves in the runtime}
+\label{sec:als-runtime}
+
+Every generation --- and every fill pass within it --- submits a batch, waits at the
+usual feedback barrier for every proposal's observables, and only then classifies again;
+Workers get \yamlkey{publish\_feedback} enabled automatically for this method. The
+checkpoint carries every evaluated point and its $f$, the solidified core set, $r_g$,
+\yamlkey{generation}, \yamlkey{fill\_pass}, the seed, and any pending
+\textsc{uuid}s --- resume continues the exact same scale and fill state rather than
+restarting the trace. \textsc{rng} streams are fixed per \code{(generation, fill\_pass)}
+and core ordering is fixed, so a resumed run reproduces the same proposals a completed
+one would have made.
+
+At the default \code{INFO} level the log carries the start line, every $r_g$ transition,
+and the final summary; fill-pass band diagnostics, bracket classification, endpoint
+tracking, and densify timing are \code{DEBUG} (Chapter~\ref{ch:logging}).
+
+\section{Outputs}
+\label{sec:als-outputs}
+
+Beyond the normal archive (\file{DATABASE/\allowbreak{}samples.\allowbreak{}hdf5},
+plus \file{samples.\allowbreak{}csv} via \cli{Jarvis2 convert},
+Section~\ref{sec:cli-convert}), the tracer writes
+\file{<task\_result\_dir>/\allowbreak{}levelset.\allowbreak{}json} --- algorithm id
+\code{outer\_core\_root\_correction\_bridson}, dimension, target and band values, the
+final $r_g$ / $t_{\min}$ / $t_{\max}$, point counts, generation and fill-pass counts, the
+\code{converged}/\code{stop\_reason} verdict, chained polylines for $d=2$, and a crossing
+cloud with slice projections for $d \ge 4$. The stock \JPlot\ scenes overlay
+\file{levelset.json} directly on scan scatter plots (Chapter~\ref{ch:jarvisplot}).
+\yamlkey{save: true} calculator artifacts still land under \file{SAMPLE/} exactly as for
+any other method (Chapter~\ref{ch:calculators}).
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.10\linewidth}p{0.14\linewidth}p{0.20\linewidth}p{0.20\linewidth}p{0.32\linewidth}@{}}
+    \toprule
+    $d$ & Gen-0 & Neighbor graph & Densify engine & Output emphasis \\
+    \midrule
+    2 & Bridson & Delaunay & local Bridson & polylines + crossing cloud \\
+    3 & Bridson & Delaunay & local Bridson & crossing cloud \\
+    4 & Bridson & \textsc{k}nn & local Bridson & cloud + slice projections \\
+    5 & Sobol & \textsc{k}nn & local Bridson & same as $d=4$ \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Dimension policy. Outside $2 \le d \le 5$, configuration raises
+  \code{ValueError} before any point is drawn.}
+  \label{tab:als-dimpolicy}
+\end{table}
+
+\section{Full key reference}
+\label{sec:als-keys}
+
+\begin{fullwidth}
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.21\linewidth}p{0.10\linewidth}p{0.12\linewidth}p{0.53\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Req.} & \textbf{Default} & \textbf{Notes} \\
+    \midrule
+    \multicolumn{4}{@{}l}{\emph{Public (prefer these on new cards)}} \\
+    \yamlkey{target\_expression} & \req & --- & shared-language expression over
+      returned observables \\
+    \yamlkey{target\_value} & \req & --- & the level $T$ \\
+    \yamlkey{outer\_half\_width} & & \code{0.02} & discovery band $\lvert f-T\rvert \le
+      w_{\mathrm{outer}}$ \\
+    \yamlkey{min\_radius} & & $1/200$ & u-space Euclidean floor for $r_g$; clamped to
+      \yamlkey{initial\_radius} \\
+    \multicolumn{4}{@{}l}{\emph{Common optional}} \\
+    \yamlkey{initial\_radius} & & \code{0.10} & $r_0$: gen-0 fill and first $r_g$ \\
+    \yamlkey{refinement\_factor} & & \code{0.5} & $r_g$ shrink multiplier per generation \\
+    \yamlkey{bridge\_gaps} & & \code{true} & \textsc{mst} reconnection between cores \\
+    \yamlkey{bridge\_span\_factor} & & \code{2.5} & max bridge length $= $ factor
+      $\times\, r_g$ \\
+    \yamlkey{max\_generations} & & \code{16} & max $r_g$ shrinks (scale index) \\
+    \yamlkey{max\_points} & & \code{50000} & hard sample budget \\
+    \yamlkey{max\_new\_per\_generation} & & \code{4000} & densify budget per fill pass \\
+    \yamlkey{k\_ref} & & \code{30} & Bridson trials per densify center \\
+    \yamlkey{neighbor\_graph} & & \code{auto} & \code{auto} $\to$ Delaunay ($d\le3$) /
+      \textsc{k}nn ($d\ge4$); \code{delaunay}/\code{knn} force it \\
+    \yamlkey{knn\_k} & & $4d$ & degree when the graph is \textsc{k}nn \\
+    \multicolumn{4}{@{}l}{\emph{Advanced / legacy (rarely needed on new cards)}} \\
+    \yamlkey{core\_half\_width} & & $w_{\mathrm{outer}}/8$ & densify-center half-width;
+      overrides the derived value \\
+    \yamlkey{threshold} & & $= w_{\mathrm{core}}$ & the $t_{\max}-t_{\min}$ stop tolerance
+      $\tau$; alias \yamlkey{function\_tolerance} \\
+    \yamlkey{final\_half\_width} & & off & optional tighter export band $\le w_{\mathrm{core}}$ \\
+    \yamlkey{radius\_shrink\_mode} & & \code{on\_coverage} & or legacy
+      \code{every\_generation} \\
+    \yamlkey{outer\_shrink\_factor} & & \code{0.7} & anneals $w_{\mathrm{outer}}$ once
+      local brackets clear \\
+    \yamlkey{core\_spacing\_factor} & & \code{2.0} & coverage: max core \textsc{nn} gap
+      $\le$ factor $\times\, r_g$ \\
+    \yamlkey{min\_cores\_for\_coverage} & & \code{4} & coverage floor \\
+    \yamlkey{quiet\_fill\_passes} & & \code{3} & no-progress passes before a scale is quiet \\
+    \yamlkey{max\_fill\_passes} & & $\max(64, 4g)$ & $g=$\,\yamlkey{max\_generations};
+      safety cap on fill passes per scale \\
+    \yamlkey{endpoint\_stall\_passes} & & \code{12} & passes before retiring an active
+      endpoint \\
+    \yamlkey{endpoint\_omni\_probes} & & $\max(16,\,4d)$ & directions probed per endpoint
+      per pass \\
+    \yamlkey{slice\_pairs} & & all pairs & $d\ge4$: which 2-D projections
+      \file{levelset.json} exports \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\yamlkey{Sampling.AdaptiveBridson} keys. \yamlkey{contour\_precision} (an
+  older name for \yamlkey{threshold}) remains readable on legacy cards and checkpoints
+  (Section~\ref{sec:als-legacy}).}
+  \label{tab:als-keys}
+\end{table}
+\end{fullwidth}
+
+\begin{jwarn}
+\yamlkey{target\_expression} is compiled in the control process over the observables
+your workflow \emph{returns}. Points whose workflow fails contribute nothing to any
+graph or band --- a region where the calculator always crashes looks to the tracer like
+missing territory, not evidence about $f$.
+\end{jwarn}
+
+\subsection{Reading an old card}
+\label{sec:als-legacy}
+
+Cards and checkpoints written against the retired edge-midpoint design still load:
+\yamlkey{contour\_precision} is accepted as an alias of \yamlkey{threshold}, and
+\yamlkey{function\_tolerance} likewise. Neither drives the densify engine anymore ---
+the outer/core classification and the $t_{\min}/t_{\max}$ gate do that now --- but
+setting them still moves $\tau$, so an old card keeps behaving sensibly rather than
+silently ignoring its tuning. New cards should set \yamlkey{outer\_half\_width} (which
+derives \yamlkey{threshold} automatically) instead of touching these directly.
+
+\section{Tuning advice}
+
+\begin{itemize}
+  \item \textbf{Start from the two knobs, nothing else.} \yamlkey{outer\_half\_width}
+        controls how much of $f$-space counts as "near the contour" for discovery;
+        \yamlkey{min\_radius} controls the finest u-space resolution you are willing to
+        pay for. Everything else (\yamlkey{core\_half\_width}, $\tau$, budgets) is
+        already tuned from real relic-density scans --- override only when you know
+        specifically why.
+  \item \textbf{\yamlkey{min\_radius} is a floor, not a target.} The tracer stops
+        refining once the band is thin \emph{or} $r_g$ hits this floor, whichever comes
+        first --- setting it very small does not guarantee a tighter contour if
+        \yamlkey{outer\_half\_width}/\yamlkey{max\_generations} exhaust first.
+  \item \textbf{Barriers like fast workflows.} Every fill pass --- not just every
+        generation --- waits for its slowest Sample. With hour-long calculators, a
+        higher \yamlkey{max\_new\_per\_generation} means fewer, bigger barriers instead
+        of many small ones.
+  \item \textbf{Multiple contours mean multiple runs.} One \yamlkey{target\_value} per
+        scan; the archived evaluations from one run are ordinary context you can replay
+        into the next (\sampler{CSV}, Chapter~\ref{ch:csv-sampler}).
+\end{itemize}
+
+\section{Choosing \sampler{AdaptiveBridson} over the alternatives}
+
+\begin{itemize}
+  \item \textbf{vs \sampler{Bridson}/\sampler{Grid}/\sampler{Random}:} those spend their
+        budget over the \emph{whole} declared space; \sampler{AdaptiveBridson} spends it
+        on one target surface --- far cheaper for a contour, useless if you actually
+        want the bulk.
+  \item \textbf{vs the \textsc{mcmc} family / nested sampling
+        (Chapter~\ref{ch:choosing-sampler}):} those characterize a \emph{posterior} (and,
+        for nested sampling, its evidence); \sampler{AdaptiveBridson} traces a single
+        level set of one expression --- not a posterior sampler, and it produces no
+        evidence.
+  \item \textbf{Dimension ceiling:} $2 \le d \le 5$ by construction --- past five
+        dimensions a level set is no longer the right object to chase this way.
+\end{itemize}
+
+\section{Summary}
+\label{sec:als-summary}
+
+\sampler{AdaptiveBridson} is the only method here that reacts to results generation by
+generation, spending its budget on a target surface instead of the whole space --- the
+right choice for a contour or exclusion edge, never a general-purpose posterior sampler.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{\sampler{AdaptiveBridson}} \\
+    \midrule
+    Kind & feedback \\
+    Point count & until converged / generation \& point caps \\
+    Dimensions & $2$--$5$ \\
+    Required keys & \yamlkey{target\_expression}, \yamlkey{target\_value} \\
+    Public tuning & \yamlkey{outer\_half\_width}, \yamlkey{min\_radius} \\
+    u$\to$x mapping & yes \\
+    \yamlkey{Seed} role & every generation's / fill pass's draws \\
+    \yamlkey{selection} & filters proposals before submission \\
+    Extra output & \file{levelset.json} \\
+    \bottomrule
+  \end{tabular}
+  \caption{\sampler{AdaptiveBridson} at a glance.}
+  \label{tab:als-summary}
+\end{table}

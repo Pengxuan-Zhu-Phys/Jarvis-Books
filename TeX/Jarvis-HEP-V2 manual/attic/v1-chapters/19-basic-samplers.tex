@@ -1,0 +1,124 @@
+\chapter{Basic Samplers}
+\label{ch:basic-samplers}
+
+\newthought{The basic samplers} need no likelihood gradient and no convergence tuning: they just
+lay points down across the space (or replay a list you already have). They are the right way to
+validate a model before committing to heavier inference.
+
+\section{Random}
+\label{sec:s-random}
+
+\paragraph{How it works} \sampler{Random} draws independent, uniform points in the unit hypercube
+$[0,1]^d$ and maps each through your variable distributions
+(Chapter~\ref{ch:variables}). Points are independent---there is no memory between
+them---so coverage is unbiased but not especially efficient.
+
+\paragraph{When to use} A quick plumbing test of a new card, or simple independent sampling with
+an optional \yamlkey{selection} cut. Not for posteriors, correlated exploration, or evidence.
+
+\paragraph{Format} The one control key is \yamlkey{Point number}, the number of \emph{accepted}
+points to return (if a \yamlkey{selection} cut is active, more raw points may be drawn to reach
+that count).
+
+\begin{yamlwin}
+Sampling:
+  Method: "Random"
+  Point number: 1000
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
+  LogLikelihood:
+    - {name: L_total, expression: "-0.5 * (x - 0.5)**2"}
+\end{yamlwin}
+
+\section{Grid}
+\label{sec:s-grid}
+
+\paragraph{How it works} \sampler{Grid} builds a Cartesian grid from per-variable bin counts and
+evaluates \emph{every} grid point. With $d$ variables of $n_i$ points each, that is
+$\prod_i n_i$ evaluations---so the cost grows fast with dimension.
+
+\paragraph{When to use} Small, low-dimensional studies where you want regular, axis-aligned
+coverage (for example, a 2-D map for a contour plot).
+
+\paragraph{Format} \sampler{Grid} has no \yamlkey{Bounds}; instead each variable's
+\yamlkey{parameters} must include \yamlkey{num}, the number of grid points along that axis.
+
+\begin{yamlwin}
+Sampling:
+  Method: "Grid"
+  Variables:
+    - name: p1
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0, num: 50}}
+    - name: p2
+      distribution: {type: Log,  parameters: {min: 0.1, max: 10.0, num: 40}}
+  LogLikelihood:
+    - {name: L_total, expression: "-0.5 * ((obs - 100.0) / 10.0)**2"}
+\end{yamlwin}
+
+\begin{jwarn}
+Grid cost is the \emph{product} of the per-axis counts. Two axes of 50 is 2{,}500 points;
+four axes of 50 is over six million. Keep \yamlkey{num} modest, or use \sampler{Bridson} for
+space-filling coverage without the combinatorial blow-up.
+\end{jwarn}
+
+\section{Bridson}
+\label{sec:s-bridson}
+
+\paragraph{How it works} \sampler{Bridson} is Poisson-disk sampling: it places points at random
+but enforces a \emph{minimum spacing} between them, giving even, gap-free coverage without the
+clumping of pure random sampling. Around each accepted point it tries up to \yamlkey{MaxAttempt}
+candidate neighbours at least \yamlkey{Radius} away; the runtime supports 2-D to 4-D spaces.
+
+\paragraph{When to use} Broad, well-spread scans where you want good coverage with no clusters or
+holes---an excellent default for mapping a space before inference.
+
+\paragraph{Format} \yamlkey{Radius} (the minimum spacing) and \yamlkey{MaxAttempt} are required;
+\yamlkey{MaxWorker} is optional (defaults to the \textsc{cpu} count). Each variable's
+\yamlkey{parameters} also takes a \yamlkey{length} (the axis extent used for spacing).
+
+\begin{yamlwin}
+Sampling:
+  Method: "Bridson"
+  Radius: 0.25
+  MaxAttempt: 30
+  Variables:
+    - name: xx
+      distribution: {type: Flat, parameters: {min: 0.0, max: 31.4159, length: 31.4159}}
+    - name: yy
+      distribution: {type: Flat, parameters: {min: 0.0, max: 31.4159, length: 31.4159}}
+  LogLikelihood:
+    - {name: L_total, expression: "-0.5 * ((z - 100.0) / 10.0)**2"}
+\end{yamlwin}
+
+\section{CSV (replay)}
+\label{sec:s-csv}
+
+\paragraph{How it works} \sampler{CSV} does not sample at all---it reads parameter points from a
+\textsc{csv} file and pushes each row through the workflow. This makes runs perfectly
+reproducible and is the cleanest way to validate a calculator on a few known points
+(Chapter~\ref{ch:calculators}).
+
+\paragraph{When to use} Re-running an exact set of points, onboarding a new calculator, or
+re-evaluating interesting points found by another method.
+
+\paragraph{Format} A \yamlkey{CSV} block names the file, the column holding each row's
+\textsc{uuid}, and which columns map to scan variables.
+
+\begin{yamlwin}
+Sampling:
+  Method: "CSV"
+  CSV:
+    path: "&J/data/points.csv"
+    uuid_column: "uuid"
+    variables: ["x", "y"]
+  LogLikelihood:
+    - {name: "LogL_Z", expression: "LogGauss(z, 100, 10)"}
+\end{yamlwin}
+
+\section{Summary}
+\label{sec:basic-summary}
+
+Use \sampler{Random} to test, \sampler{Bridson} for even coverage, \sampler{Grid} for small
+axis-aligned maps, and \sampler{CSV} to replay known points. When you need posteriors, evidence,
+or best-fits, move on to the inference samplers in the next chapters.

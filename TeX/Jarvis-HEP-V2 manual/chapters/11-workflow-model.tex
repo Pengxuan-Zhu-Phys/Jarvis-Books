@@ -1,0 +1,106 @@
+\chapter{The Workflow Model}
+\label{ch:workflow-model}
+
+\newthought{Before the backends, the shape.} A task card can declare many calculators and
+operas; \Jtwo\ turns them into a single \emph{execution plan} --- a layered sequence that
+every Sample follows inside its Worker. This chapter explains how layers are derived from
+dependencies, what runs concurrently, and how the plan travels.
+
+\section{From modules to layers}
+\label{sec:layers}
+
+Each calculator module may declare the modules it depends on:
+
+\begin{yamlwin}
+Calculators:
+  Modules:
+    - name: SPheno            # no dependencies -> layer 0
+    - name: HiggsTools
+      required_modules: [SPheno]     # -> layer 1
+    - name: MicrOmegas
+      required_modules: [SPheno]     # -> layer 1 (same layer as HiggsTools)
+    - name: Combine
+      required_modules: [HiggsTools, MicrOmegas]   # -> layer 2
+\end{yamlwin}
+
+Layer assignment is an iterative topological sort over \yamlkey{required\_modules}: a
+module's layer is one past the deepest of its dependencies, and modules with no mutual
+dependency land in the same layer. \textbf{Same layer = eligible to run concurrently}
+inside one Sample.
+
+Two lenient rules keep the sort from being a foot-gun: a dependency name that matches no
+module is ignored rather than an error, and a dependency \emph{cycle} falls back to
+running the entangled remainder together in one final layer instead of refusing the card.
+
+\begin{jwarn}
+Both fallbacks are silent. If your layer structure looks wrong --- things running
+together that should be ordered --- check \yamlkey{required\_modules} spellings first: a
+typo there does not error, it just flattens your ordering.
+\end{jwarn}
+
+\section{The full plan: calculators, then operas, then likelihood}
+\label{sec:plan-order}
+
+The complete execution plan for every Sample is assembled deterministically:
+
+\begin{enumerate}
+  \item \textbf{Calculator layers} as derived above, starting at layer 0.
+  \item \textbf{Operas}, offset to begin after the last calculator layer, in card
+        order. Operas therefore always see every calculator's outputs.
+  \item \textbf{One likelihood step}, appended as the terminal layer.
+\end{enumerate}
+
+For the example above, with one opera \code{L}:
+
+\begin{quote}
+\sffamily\footnotesize
+[\,SPheno\,@\,0\,]\ \ [\,HiggsTools\,@\,1,\ MicrOmegas\,@\,1\,]\ \
+[\,Combine\,@\,2\,]\ \ [\,L\,@\,3\,]\ \ [\,LogLikelihood\,@\,4\,]
+\end{quote}
+
+The plan is data-independent: built once from the card, serialized as plain
+dictionaries, and shipped to Redis inside every task. Workers iterate it layer by layer
+--- \emph{sequential across layers, concurrent within a layer}.
+
+\section{Concurrency inside a Sample}
+\label{sec:sample-concurrency}
+
+Within one layer, each calculator run is submitted to the Worker's subprocess scheduler
+and waits for its own \emph{global} concurrency slot
+(\yamlkey{Calculators.Pools}, Chapter~\ref{ch:calculators}). Three consequences:
+
+\begin{itemize}
+  \item Two independent calculators overlap their external run time --- the main win of
+        declaring accurate dependencies.
+  \item Global caps still hold: eight Workers each running a same-layer
+        \code{MicrOmegas} step still respect \code{MicrOmegas}'s total pool.
+  \item The widest layer sizes the Worker's scheduler; nothing else needs tuning.
+\end{itemize}
+
+Operas run in-process and sequentially, in card order, after all calculators.
+
+\section{Where observables flow}
+\label{sec:observable-flow}
+
+The observables dictionary of Section~\ref{sec:observables} threads through the plan:
+each calculator's \yamlkey{output} spec and each opera's \yamlkey{output} list merge into
+it as their step completes; every later step's expressions and input specs see everything
+already merged. Within one concurrent layer, sibling outputs are merged as each finishes
+--- do not rely on sibling ordering; if module B needs module A's output, that is by
+definition a dependency, so declare it.
+
+\section{Seeing the plan: the flowchart}
+\label{sec:flowchart}
+
+Every run exports a semantic flowchart of the workflow --- nodes for parameters,
+calculators, operas, and observables, edges from the actual expression and I/O
+dependencies --- under the project's \file{images/<scan>/} directory, and \JPlot\ can
+render it directly (Chapter~\ref{ch:jarvisplot}). Likelihood nodes are omitted by
+default to keep the graph readable.
+
+\begin{jtip}
+The flowchart is the fastest sanity check of a new card: if an edge you expect is
+missing, the expression or \yamlkey{entry} that should create it references a name that
+does not exist --- typically a typo that would otherwise surface as a failed Sample at
+runtime.
+\end{jtip}

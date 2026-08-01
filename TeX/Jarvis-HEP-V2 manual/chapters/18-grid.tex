@@ -1,0 +1,100 @@
+\chapter{Grid}
+\label{ch:grid}
+
+\newthought{The exhaustive, axis-aligned baseline.} \sampler{Grid} takes the Cartesian
+product of a per-dimension linspace in u-space --- deterministic, regular, and
+reproducible without even needing a seed. It is the right choice for a small,
+low-dimensional space where you want every combination covered, or where downstream
+tooling expects a regular grid to interpolate on.
+
+\section{Configuration}
+\label{sec:grid-config}
+
+\begin{yamlwin}
+Sampling:
+  Method: Grid
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0, num: 21}}
+    - name: y
+      distribution: {type: Log,  parameters: {min: 0.1, max: 10., num: 11}}
+\end{yamlwin}
+
+\begin{keylist}
+  \item[parameters.num] \req\ per variable (\code{ValueError} if absent): the number of
+        points along that dimension. The total point count is the product across
+        variables --- here $21 \times 11 = 231$.
+\end{keylist}
+
+The grid is laid out in u-space, so a \code{Log} variable gets a log-spaced
+\emph{physical} grid automatically --- declare the distribution you mean rather than
+hand-spacing physical values. \yamlkey{Seed} matters only for tie-breaking bookkeeping;
+the point set itself is fully deterministic and needs no seed to reproduce.
+
+\begin{jwarn}
+The product grows without mercy. Five variables at \yamlkey{num: 20} is $3.2$ million
+samples; at an hour per point that is not a scan, it is a career. Past $d=3$, prefer
+\sampler{Bridson} coverage plus offline interpolation (Chapter~\ref{ch:bridson}), or a
+single dimension's worth of resolution moved onto \sampler{AdaptiveBridson}
+(Chapter~\ref{ch:adaptive-levelset}).
+\end{jwarn}
+
+\section{How it behaves in the runtime}
+\label{sec:grid-runtime}
+
+The full Cartesian product is generated \emph{once}, at startup, in the control process
+--- one call builds the whole point array via \code{numpy}'s outer product, and each
+per-dimension linspace endpoint is nudged a hair inside $[0,1]$ so a \code{Log}
+variable's u=0/u=1 edges never map to $\pm\infty$. The point count is logged as
+\code{NSamples} as soon as generation finishes, before submission starts, so an
+unexpectedly large grid is visible immediately.
+
+Submission then walks the array in order, applying \yamlkey{selection} the same way as
+every fixed-set method (Section~\ref{sec:selection}) and streaming accepted points to
+Redis in the usual batches. The entire generated grid --- not just progress counters ---
+is part of the sampler's checkpoint state, so resume replays exactly the same array
+instead of regenerating it; an interrupted grid scan continues from its row cursor with
+no risk of drifting to a slightly different grid.
+
+\section{Choosing \sampler{Grid} over the alternatives}
+
+\begin{itemize}
+  \item \textbf{Regular structure matters.} If a downstream tool wants a rectangular
+        grid to interpolate, contour, or Fourier-transform, \sampler{Grid} is the only
+        method that guarantees one.
+  \item \textbf{vs \sampler{Bridson}:} \sampler{Grid}'s axis alignment shows up as
+        moir\'e artifacts in derived contours that \sampler{Bridson}'s irregular
+        packing avoids; \sampler{Bridson} also degrades gracefully with dimension
+        instead of exploding as a product (Chapter~\ref{ch:bridson}).
+  \item \textbf{Dimension limit:} practical for $d \lesssim 3$ at a useful resolution;
+        beyond that the product overwhelms any reasonable compute budget
+        (see the warning above).
+\end{itemize}
+
+\section{Summary}
+\label{sec:grid-summary}
+
+\sampler{Grid} trades flexibility for a guarantee: every combination of every declared
+value is covered, exactly, with no randomness anywhere. Use it only where that
+guarantee is the point --- a small, low-dimensional space, or a downstream tool that
+expects a rectangular array.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{\sampler{Grid}} \\
+    \midrule
+    Kind & fixed set \\
+    Point count & $\prod_i \yamlkey{num}_i$ \\
+    Dimensions & any (product grows without mercy, Section~\ref{sec:grid-config}) \\
+    Required keys & \yamlkey{num} per variable \\
+    u$\to$x mapping & yes \\
+    \yamlkey{Seed} role & tie-breaking bookkeeping only --- point set needs no seed \\
+    \yamlkey{selection} & consumes slots, no top-up \\
+    Extra output & --- \\
+    \bottomrule
+  \end{tabular}
+  \caption{\sampler{Grid} at a glance.}
+  \label{tab:grid-summary}
+\end{table}

@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "YAML_REFERENCE_2.0.md",
+                "file": "USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13.md",
                 "mode": "preview",
                 "source": false,
                 "backlinks": true,
@@ -28,7 +28,7 @@
                 }
               },
               "icon": "lucide-file",
-              "title": "YAML_REFERENCE_2.0"
+              "title": "USER_INTERFACE_INTEGRATION_REVIEW_2026-07-13"
             }
           }
         ]
@@ -195,6 +195,7 @@
   },
   "active": "714cd7a2cfe9e6fa",
   "lastOpenFiles": [
+    "YAML_REFERENCE_2.0.md",
     "archive/V2_PLAN_ARCHIVE_2026-07-14.md",
     "archive",
     "PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md",
@@ -212,7 +213,6 @@
     "DESIGN_AGENT_BRIDGE_2.0.md",
     "Jarvis-Agent_Design_Document.md",
     "README.md",
-    "YAML_REFERENCE_2.0.md",
     "components/V1_TO_V2_MAP.md",
     "components/redis_queue.md"
   ]

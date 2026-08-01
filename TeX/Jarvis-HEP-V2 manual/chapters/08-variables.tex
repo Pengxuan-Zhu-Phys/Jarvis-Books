@@ -1,0 +1,139 @@
+\chapter{Variables, Distributions \& the Mapper}
+\label{ch:variables}
+
+\newthought{Variables define the space you scan.} Each entry under
+\yamlkey{Sampling.Variables} names one physical parameter, and its
+\yamlkey{distribution} fixes how a u-space coordinate in $[0,1]$ maps to a physical
+value. This chapter covers the entry schema, the five distribution types, and the
+\yamlkey{Mapper} block that makes the u\,$\rightarrow$\,x step explicit when you need
+control over it.
+
+\section{The \yamlkey{Variables[]} entry}
+\label{sec:variables-entry}
+
+\begin{yamlwin}
+Sampling:
+  Variables:
+    - name: m0                     # required
+      description: "unified scalar mass"   # informational only
+      distribution:
+        type: Log                  # default: Flat
+        parameters: {min: 100.0, max: 10000.0}
+\end{yamlwin}
+
+\begin{keylist}
+  \item[name] \req\ in practice --- an entry with an empty or missing name is
+        \emph{silently dropped}. The name becomes the observable key and the expression
+        symbol for this parameter everywhere downstream.
+  \item[description] \opt, purely informational.
+  \item[distribution.type] \opt, default \code{Flat}. One of the five types below.
+  \item[distribution.parameters] the per-type parameter map --- and the home of the
+        method-specific extras \yamlkey{num} (\sampler{Grid}) and \yamlkey{length}
+        (\sampler{Bridson}).
+\end{keylist}
+
+\begin{jwarn}
+A missing required distribution parameter surfaces at sampler startup as a raw
+\code{KeyError} --- not as a schema message naming the variable. If a scan dies
+instantly with \code{KeyError: 'max'}, check your \yamlkey{parameters} maps first.
+\end{jwarn}
+
+\section{The distribution catalog}
+\label{sec:distributions}
+
+\begin{fullwidth}
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.16\linewidth}p{0.24\linewidth}p{0.56\linewidth}@{}}
+    \toprule
+    \textbf{type} & \textbf{Parameters} & \textbf{Mapping $u\in[0,1] \to x$} \\
+    \midrule
+    \code{Flat}       & \yamlkey{min}, \yamlkey{max} & $x = \mathrm{min} + (\mathrm{max}-\mathrm{min})\,u$ \\
+    \code{Log}        & \yamlkey{min}, \yamlkey{max} ($>0$) & $x = \exp\!\big(\ln \mathrm{min}$ \allowbreak $+ (\ln \mathrm{max} - \ln \mathrm{min})\,u\big)$ \\
+    \code{Normal}     & \yamlkey{mean}, \yamlkey{stddev} & $x = \mathrm{mean} + \mathrm{stddev}\cdot\Phi^{-1}(u)$ \\
+    \code{Log-Normal} & \yamlkey{mean}, \yamlkey{stddev} & $x = \exp\!\big(\mathrm{mean}$ \allowbreak $+ \mathrm{stddev}\cdot\Phi^{-1}(u)\big)$ \\
+    \code{Logit}      & \yamlkey{location} (0), \yamlkey{scale} (1) & $x = \mathrm{logit}(u)\cdot\mathrm{scale} + \mathrm{location}$ \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Distribution types. $\Phi^{-1}$ is the standard normal quantile;
+  $\mathrm{logit}(u)=\ln\frac{u}{1-u}$. \code{Flat}/\code{Log} parameters are required;
+  \code{Logit}'s default as shown.}
+  \label{tab:distributions}
+\end{table}
+\end{fullwidth}
+
+Intuition for choosing:
+
+\begin{itemize}
+  \item \code{Flat} --- the default; equal prior weight per unit of $x$.
+  \item \code{Log} --- equal weight per \emph{decade}; the right choice for masses and
+        couplings spanning orders of magnitude.
+  \item \code{Normal} / \code{Log-Normal} --- concentrate points around a known central
+        value, e.g.\ a measured nuisance parameter.
+  \item \code{Logit} --- an unbounded variable sampled through a squashing map; heavy
+        tails compared to \code{Normal}.
+\end{itemize}
+
+\paragraph{Method extras on the same map.} \sampler{Grid} requires \yamlkey{num} (points
+along this dimension) and \sampler{Bridson} requires \yamlkey{length} (the u-space box
+edge for this dimension) inside \yamlkey{distribution.parameters} --- geometry keys that
+ride along with the distribution parameters. Details in
+Chapters~\ref{ch:grid} and~\ref{ch:bridson}.
+
+\section{The \yamlkey{Mapper} block}
+\label{sec:mapper}
+
+The u\,$\rightarrow$\,x map is rebuilt inside every Worker
+(Section~\ref{sec:uspace}). Normally you never mention it: the top-level \yamlkey{Mapper}
+block is auto-derived ---
+
+\begin{itemize}
+  \item \sampler{CSV} method $\rightarrow$ \yamlkey{type: none} (points are already
+        physical; they travel with the task);
+  \item \yamlkey{Sampling.Variables} present $\rightarrow$ \yamlkey{type: distribution}
+        with those variables;
+  \item otherwise $\rightarrow$ \yamlkey{type: identity} over \code{[x, y]} (a test
+        fallback).
+\end{itemize}
+
+Write it explicitly only to override:
+
+\begin{yamlwin}
+Mapper:
+  type: distribution     # distribution | identity | none
+  # keys: [x, y]         # identity: observable names for u components
+  # variables: [...]     # distribution: same schema as Sampling.Variables
+\end{yamlwin}
+
+\begin{keylist}
+  \item[type: distribution] The standard mapping of
+        Table~\ref{tab:distributions}; supply \yamlkey{variables} (same schema as
+        \yamlkey{Sampling.Variables}) to map differently from what the sampler saw.
+  \item[type: identity] Pass u-coordinates through unchanged, named by \yamlkey{keys}.
+        Useful when the workflow itself works in the unit cube.
+  \item[type: none] No mapping; every Sample must carry its parameters with the task
+        (the \sampler{CSV} arrangement).
+\end{keylist}
+
+\begin{jwarn}
+Any \emph{other} \yamlkey{type} string --- including the tempting \code{flat} --- falls
+through to a minimal linear mapper that reads \yamlkey{min}/\yamlkey{max} directly and
+supports nothing else; and if \yamlkey{variables} is absent there, the mapper is silently
+\code{None}. Treat the three types above as the complete public surface.
+\end{jwarn}
+
+\section{Practical guidance}
+
+\begin{jtip}
+Declare every variable with the distribution you \emph{mean}, not \code{Flat} plus a
+transformation in the workflow. The declared distribution is what samplers use for
+geometry (\sampler{Bridson} radii, \sampler{AdaptiveBridson} refinement), what the
+mapper applies, and what your records show --- keeping physics intent in one place.
+\end{jtip}
+
+Variable names to avoid: single letters that collide with mathematical constants and
+functions in the expression language (\code{E}, \code{I}, \code{N}, \code{pi},
+\code{beta}, \code{gamma}); Chapter~\ref{ch:expressions} lists the reserved names.

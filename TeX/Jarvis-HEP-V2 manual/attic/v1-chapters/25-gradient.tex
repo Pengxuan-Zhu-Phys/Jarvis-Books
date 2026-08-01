@@ -1,0 +1,67 @@
+\chapter{Gradient-Based Samplers}
+\label{ch:gradient}
+
+\newthought{Gradient-based samplers use the slope} of the log-likelihood to take long, informed
+steps, which makes them very efficient on smooth, high-dimensional posteriors. \Jarvis\ defines
+three---\sampler{MALA}, \sampler{HMC}, and \sampler{NUTS}---and they accept the standard
+\textsc{mcmc} \yamlkey{Bounds}.
+
+\begin{jwarn}
+\textbf{Status: placeholder.} In the current version the gradient \emph{engines} for
+\sampler{MALA}, \sampler{HMC}, and \sampler{NUTS} are placeholders---the likelihood-gradient
+contract is not yet wired up. Treat this chapter as documentation of the intended methods and their
+configuration, not as production-ready samplers. For posterior sampling today, use the
+gradient-free \textsc{mcmc} methods in Chapters~\ref{ch:mcmc-1}--\ref{ch:mcmc-3}.
+\end{jwarn}
+
+\section{The shared idea}
+\label{sec:grad-idea}
+
+A random walk wanders; a gradient walk \emph{climbs}. By following the gradient of the
+log-likelihood, these methods propose points that are both far from the current one and likely to
+be accepted, so they decorrelate quickly and scale well with dimension---provided a reliable
+gradient is available. They use the same \yamlkey{Bounds} as the rest of the family
+(\yamlkey{num\_chains}, \yamlkey{num\_iters}, \yamlkey{proposal\_scale}, the last setting the
+step/leapfrog size).
+
+\section{MALA}
+\label{sec:s-mala}
+
+\paragraph{How it works} The Metropolis-adjusted Langevin algorithm proposes a step that combines a
+nudge \emph{up the gradient} with random noise (a discretised Langevin diffusion), then applies a
+Metropolis accept/reject to correct the discretisation. It is the simplest gradient method---one
+gradient evaluation per step.
+
+\section{HMC}
+\label{sec:s-hmc}
+
+\paragraph{How it works} Hamiltonian Monte Carlo gives the point a random ``momentum'' and then
+simulates frictionless physics---rolling along the posterior surface using the gradient via several
+leapfrog steps---to propose a distant point, which is accepted with a Hamiltonian Metropolis rule.
+Long trajectories mean nearly independent samples, but the trajectory length and step size need
+tuning.
+
+\section{NUTS}
+\label{sec:s-nuts}
+
+\paragraph{How it works} The No-U-Turn Sampler\cite{Hoffman:2011ukg} is \sampler{HMC} that tunes
+itself: it keeps extending the trajectory until the path starts to double back (a ``U-turn''), so
+you never have to choose the number of leapfrog steps. It is the usual default among gradient
+samplers when gradients are available.
+
+\section{Configuration}
+\label{sec:grad-format}
+
+When the engines are completed, all three will take the standard form:
+
+\begin{yamlwin}
+Sampling:
+  Method: "NUTS"          # or MALA, HMC
+  Variables: [ ... ]
+  Bounds:
+    num_chains: 4
+    num_iters: 1000
+    proposal_scale: 0.1   # step / leapfrog size
+  LogLikelihood:
+    - {name: "LogL", expression: "..."}
+\end{yamlwin}

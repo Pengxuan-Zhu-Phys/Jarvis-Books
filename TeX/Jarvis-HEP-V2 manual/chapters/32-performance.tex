@@ -1,0 +1,112 @@
+\chapter{Performance Tuning}
+\label{ch:performance}
+
+\newthought{The runtime is sized for the slow regime}: external calculators taking
+seconds to minutes, results landing on network storage. In that regime the framework's
+overhead is noise, and performance is a resource-allocation problem with three dials ---
+\yamlkey{workers}, \yamlkey{Pools}, and the archiving policy. This chapter is the tuning
+guide, ordered by how often each dial actually matters.
+
+\section{First, measure}
+\label{sec:perf-measure}
+
+Two numbers from the \code{[Scan Performance]} block
+(Section~\ref{sec:scan-performance}) frame everything:
+
+\begin{quote}
+\emph{effective parallelism} $\;=\;$
+\code{avg\_point\_eval\_sec} $/$ \code{avg\_sample\_sec}
+\end{quote}
+
+If a point costs $60$\,s to evaluate and the system delivers one finished sample every
+$2$\,s, you are running $\sim$$30$ points wide. Compare that against
+\yamlkey{workers}: a large gap means Workers are waiting --- on pool slots, on the
+queue, or on storage --- and the live monitor shows which
+(Section~\ref{sec:monitor-diagnosis}).
+
+\section{Dial 1: \yamlkey{workers}}
+\label{sec:perf-workers}
+
+Workers are cheap (a Python process holding calculator templates); their \emph{work} is
+not. Size by the binding resource, not by optimism:
+
+\begin{itemize}
+  \item \textbf{CPU-bound calculators}: about one Worker per available core (times the
+        cores each calculator uses).
+  \item \textbf{Memory-bound}: total \textsc{ram} $/$ peak per-point footprint ---
+        calculators, not Workers, dominate the footprint.
+  \item \textbf{Subprocess-wait-bound} (calculators that themselves farm out, or wait
+        on I/O): oversubscribe cores freely; the \textsc{gil} is released during waits.
+\end{itemize}
+
+Scaling is horizontal and honest: doubling Workers doubles throughput until a pool,
+the machine, or storage saturates. The design target is hundreds of Workers.
+
+\begin{jnote}
+More Workers also means more one-time initialization (template loads, environment
+captures, expression compiles) and --- for \yamlkey{clone\_shadow} tools --- more pack
+installs on \emph{first contact} with each pack. Long scans amortize all of it; a
+five-minute scan with 128 Workers spends its life starting up.
+\end{jnote}
+
+\section{Dial 2: calculator \yamlkey{Pools}}
+\label{sec:perf-pools}
+
+Pools decouple ``how many Workers exist'' from ``how many copies of tool X may run''
+(Section~\ref{sec:pools}). Patterns:
+
+\begin{itemize}
+  \item \textbf{The license/memory hog}: pool $=$ what you can afford; other layers'
+        work continues around it.
+  \item \textbf{The mismatched chain}: a 10\,s tool feeding a 10\,min tool wants pools
+        sized $\sim$1:60 against Worker count, not equal shares.
+  \item \textbf{Diagnosis}: monitor shows every slot of one pool busy while Workers
+        idle $\Rightarrow$ that pool is the throttle. Raise it or accept it as the
+        design capacity.
+\end{itemize}
+
+A Worker that waits longer than the internal 30\,s slot timeout fails that Sample ---
+chronically starved pools show up as timeout failures, not just slowness.
+
+\section{Dial 3: archiving and storage}
+\label{sec:perf-storage}
+
+Storage is the usual silent bottleneck on clusters:
+
+\begin{itemize}
+  \item \textbf{Watch the archive queue} in the monitor: steady growth means the
+        Archiver cannot keep up with the Workers.
+  \item \yamlkey{archiver.batch\_size} (default 200) trades database write frequency
+        against memory; larger batches help slow filesystems.
+  \item \textbf{Buckets} (default 200/dir, packed) exist precisely for network
+        filesystems --- do not disable \yamlkey{pack} on \textsc{nas} scans that
+        \yamlkey{save} files.
+  \item \yamlkey{cleanup.strategy: mv\_to\_staging} buffers Sample directories through
+        local scratch when final storage is remote and slow --- the move is cheap
+        metadata on the same filesystem, and the Archiver does the expensive hop off
+        the critical path.
+  \item \textbf{Save less} (Section~\ref{sec:save-policy}): the cheapest byte is the
+        one never written.
+\end{itemize}
+
+\section{What not to bother tuning}
+\label{sec:perf-non-dials}
+
+\begin{itemize}
+  \item \yamlkey{batch\_size} (submit grouping): queue pipelining only; the default
+        256 is fine from ten samples to ten million.
+  \item \textbf{Expression and template caching}: automatic, once per Worker.
+  \item \textbf{Redis}: at HEP scan rates the broker idles; it is never the bottleneck
+        on a single machine.
+  \item \textbf{Opera micro-costs}: an opera call is microseconds against calculator
+        seconds. If your workflow is \emph{all} operas and you need raw throughput,
+        you are outside the slow regime this runtime is sized for --- it will still do
+        thousands of samples per minute, but that is the ceiling's neighborhood.
+\end{itemize}
+
+\begin{jtip}
+The tuning loop that works: run 15 minutes at a plausible \yamlkey{workers}; read
+\code{[Scan Performance]} and one monitor snapshot; move \emph{one} dial; repeat. Two
+iterations usually land within 20\% of the machine's ceiling --- past that, buy
+hardware, not \textsc{yaml}.
+\end{jtip}

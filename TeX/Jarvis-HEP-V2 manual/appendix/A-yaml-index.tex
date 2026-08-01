@@ -1,0 +1,153 @@
+\chapter{YAML Key Index}
+\label{app:yaml-index}
+
+Every task-card key, as a flat lookup. \req\ marks keys whose omission raises an error
+(in the context of their column's method/block); everything else defaults silently.
+The chapter column points to the full behavioral detail.
+
+\begin{fullwidth}
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{longtable}{@{}p{0.28\linewidth}p{0.14\linewidth}p{0.14\linewidth}p{0.40\linewidth}@{}}
+  \toprule
+  \textbf{Key path} & \textbf{Req.} & \textbf{Default} & \textbf{Chapter} \\
+  \midrule
+  \endhead
+  \multicolumn{4}{@{}l}{\emph{Top level}} \\
+  \yamlkey{project\_name}            &      & \yamlkey{Scan.\allowbreak{}name}  & \ref{ch:task-yaml} \\
+  \yamlkey{Scan.\allowbreak{}name}                &      & \code{default}       & \ref{ch:task-yaml} \\
+  \yamlkey{scan\_name}               &      & ---                  & \ref{ch:task-yaml} \\
+  \yamlkey{task\_result\_dir}        &      & \file{outputs/\allowbreak{}<scan>} & \ref{ch:task-yaml} \\
+  \yamlkey{run\_id}                  &      & \textsc{uuid4}       & \ref{ch:task-yaml} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{EnvReqs}} \\
+  \yamlkey{EnvReqs.\allowbreak{}Check\_default\_dependencies.\allowbreak{}required} & & \code{false} & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}Check\_default\_dependencies.\allowbreak{}default\_yaml\_path} & & --- & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}workers} (alias \yamlkey{worker}) & & \code{0} ($\to$1) & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}batch\_size}   &      & \code{256}           & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}sample\_directory.\allowbreak{}*} (\code{enabled}, \code{limit},
+    \code{width}, \code{pack}, \code{start\_bucket}) & & \code{true}, \code{200},
+    \code{6}, \code{true}, \code{1} & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}cleanup.\allowbreak{}strategy} & & \code{direct}         & \ref{ch:envreqs} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}archiver.\allowbreak{}*} (\code{mode}, \code{handoff},
+    \code{pack\_buckets}, \code{batch\_size}, \code{flush\_interval\_sec},
+    \code{strategy}, \code{delete\_after\_archive}) & & \code{process}, \code{direct},
+    \code{true}, \code{200}, \code{1.0}, \code{move}, \code{true} & \ref{ch:envreqs} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Sampling --- shared}} \\
+  \yamlkey{Sampling.\allowbreak{}Method}          & \req & ---                  & \ref{ch:sampling-block} \\
+  \yamlkey{Sampling.\allowbreak{}mode}            &      & --- (\code{check\_modules}) & \ref{ch:check-modules} \\
+  \yamlkey{Sampling.\allowbreak{}data} (alias \yamlkey{points\_csv}) & & \file{\&J/\allowbreak{}data/\allowbreak{}check\_modules\_points.\allowbreak{}csv}\textsuperscript{c} & \ref{ch:check-modules} \\
+  \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}check\_modules.\allowbreak{}data} / \yamlkey{.\allowbreak{}n\_samples} & & \code{10}\textsuperscript{c} & \ref{ch:check-modules} \\
+  \yamlkey{Sampling.\allowbreak{}Seed} (alias \yamlkey{seed}) & & \code{0}     & \ref{ch:sampling-block} \\
+  \yamlkey{Sampling.\allowbreak{}selection}       &      & ---                  & \ref{ch:sampling-block} \\
+  \yamlkey{Sampling.\allowbreak{}LogLikelihood}   &      & ---                  & \ref{ch:loglikelihood} \\
+  \yamlkey{Sampling.\allowbreak{}Variables[].\allowbreak{}name} & \req & ---                 & \ref{ch:variables} \\
+  \yamlkey{Sampling.\allowbreak{}Variables[].\allowbreak{}description} & & ---               & \ref{ch:variables} \\
+  \yamlkey{Sampling.\allowbreak{}Variables[].\allowbreak{}distribution.\allowbreak{}type} & & \code{Flat} & \ref{ch:variables} \\
+  \yamlkey{\ldots parameters.\{min,max\}} & \req\textsuperscript{F/L} & --- & \ref{ch:variables} \\
+  \yamlkey{\ldots parameters.\{mean,\allowbreak{}stddev\}} & \req\textsuperscript{N} & --- & \ref{ch:variables} \\
+  \yamlkey{\ldots parameters.\{location,\allowbreak{}scale\}} & & \code{0}, \code{1} & \ref{ch:variables} \\
+  \yamlkey{\ldots parameters.\allowbreak{}num}    & \req\textsuperscript{G} & --- & \ref{ch:grid} \\
+  \yamlkey{\ldots parameters.\allowbreak{}length} & \req\textsuperscript{B} & --- & \ref{ch:bridson} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Sampling --- per method}} \\
+  \yamlkey{Sampling.\allowbreak{}Radius}          & \req\textsuperscript{B} & --- & \ref{ch:bridson} \\
+  \yamlkey{Sampling.\allowbreak{}MaxAttempt}      & \req\textsuperscript{B} & --- & \ref{ch:bridson} \\
+  \yamlkey{Sampling.\allowbreak{}MaxWorker}       &      & \yamlkey{V2.\allowbreak{}workers} & \ref{ch:bridson} \\
+  \yamlkey{Sampling.\allowbreak{}"Point number"} (alias \yamlkey{point\_number}) & \req\textsuperscript{R} & --- & \ref{ch:random} \\
+  \yamlkey{Sampling.\allowbreak{}CSV.\allowbreak{}path}        & \req\textsuperscript{C} & --- & \ref{ch:csv-sampler} \\
+  \yamlkey{Sampling.\allowbreak{}CSV.\allowbreak{}variables}   &      & all non-uuid columns & \ref{ch:csv-sampler} \\
+  \yamlkey{Sampling.\allowbreak{}CSV.\allowbreak{}uuid\_column} &     & \code{uuid}          & \ref{ch:csv-sampler} \\
+  \yamlkey{Sampling.\allowbreak{}CSV.\{delimiter,\allowbreak{}encoding\}} & & \code{","}, \code{utf-8} & \ref{ch:csv-sampler} \\
+  \yamlkey{Sampling.\allowbreak{}AdaptiveBridson.\allowbreak{}target\_expression} & \req\textsuperscript{A} & --- & \ref{ch:adaptive-levelset} \\
+  \yamlkey{Sampling.\allowbreak{}AdaptiveBridson.\allowbreak{}target\_value} & \req\textsuperscript{A} & --- & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots outer\_half\_width} &     & \code{0.02}          & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots min\_radius}       &      & $1/200$              & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots initial\_radius}   &      & \code{0.10}          & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots refinement\_factor} &     & \code{0.5}           & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots max\_generations}  &      & \code{16}            & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots max\_points}       &      & \code{50000}         & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots max\_new\_per\_generation} & & \code{4000}       & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots k\_ref}            &      & \code{30}            & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots neighbor\_graph}   &      & \code{auto}          & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots knn\_k}            &      & $4d$                 & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots bridge\_gaps}      &      & \code{true}          & \ref{ch:adaptive-levelset} \\
+  \yamlkey{\ldots slice\_pairs}      &      & all pairs            & \ref{ch:adaptive-levelset} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Sampling --- Dynesty / MultiNest (shared)}} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}nlive}    &      & \code{100}           & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}rseed}    &      & \yamlkey{Sampling.\allowbreak{}Seed} & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}dlogz}    &      & \code{0.5}           & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}sampler.\allowbreak{}*} (\code{bound}, \code{sample}, \code{walks},
+    \code{facc}, \code{slices}, \code{enlarge}, \code{bootstrap}, \ldots) & & official
+    \code{dynesty} defaults & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}run\_nested.\allowbreak{}*} (\code{print\_progress}, \code{maxcall},
+    \code{maxiter}, \code{checkpoint\_file}, \code{checkpoint\_every}, \code{resume},
+    \ldots) & & \code{print\_progress: true}, rest unlimited/off & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}FeedbackReturn.\allowbreak{}mode} &   & \code{minimal}       & \ref{ch:multinest} \\
+  \yamlkey{Sampling.\allowbreak{}FeedbackReturn.\allowbreak{}include\_logl} & & \code{true}   & \ref{ch:multinest} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Sampling --- Dynesty only (dynamic engine)}} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}run\_nested.\allowbreak{}*} (\code{nlive\_init}, \code{dlogz\_init},
+    \code{nlive\_batch}, \code{wt\_kwargs}, \code{maxbatch}, \code{n\_effective},
+    \code{use\_stop}, \ldots) & & see chapter & \ref{ch:dynesty} \\
+  \yamlkey{Sampling.\allowbreak{}Bounds.\allowbreak{}dynamic} / \yamlkey{Dynamic} & \multicolumn{2}{l}{\textbf{rejected} --- \code{JV2-BND-012}; engine is fixed by \yamlkey{Method}} & \ref{ch:dynesty} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Mapper}} \\
+  \yamlkey{Mapper.\allowbreak{}type}              &      & auto-derived         & \ref{ch:variables} \\
+  \yamlkey{Mapper.\allowbreak{}keys}              & \req\textsuperscript{i} & --- & \ref{ch:variables} \\
+  \yamlkey{Mapper.\allowbreak{}variables}         & \req\textsuperscript{d} & --- & \ref{ch:variables} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{LibDeps}} \\
+  \yamlkey{LibDeps.\allowbreak{}path}             &      & project root         & \ref{ch:libdeps} \\
+  \yamlkey{LibDeps.\allowbreak{}Modules[].\allowbreak{}name}   & \req & ---                  & \ref{ch:libdeps} \\
+  \yamlkey{LibDeps.\allowbreak{}Modules[].\{path,\allowbreak{}source,\allowbreak{}installation\}} & & \file{<LibDeps.\allowbreak{}path>/\allowbreak{}<name>} & \ref{ch:libdeps} \\
+  \yamlkey{LibDeps.\allowbreak{}registered\_executables[].\allowbreak{}name} & \req & ---    & \ref{ch:libdeps} \\
+  \yamlkey{LibDeps.\allowbreak{}registered\_executables[].\allowbreak{}source} & \req & ---  & \ref{ch:libdeps} \\
+  \yamlkey{LibDeps.\allowbreak{}registered\_executables[].\allowbreak{}resolution} & & \code{direct\_path} & \ref{ch:libdeps} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Calculators}} \\
+  \yamlkey{Calculators.\allowbreak{}Pools.\allowbreak{}<name>} (alias \yamlkey{pools}) & & \yamlkey{make\_paraller} or \code{1} & \ref{ch:calculators} \\
+  \yamlkey{Calculators.\allowbreak{}Archiver.\allowbreak{}*}   &      & see \yamlkey{EnvReqs.\allowbreak{}V2.\allowbreak{}archiver} & \ref{ch:envreqs} \\
+  \yamlkey{Calculators.\allowbreak{}Cleanup.\{strategy,\allowbreak{}staging\_dir\}} & & \code{direct}, \file{<out>/\allowbreak{}staging} & \ref{ch:envreqs} \\
+  \yamlkey{Calculators.\allowbreak{}Modules[].\allowbreak{}name} & \req & ---                & \ref{ch:calculators} \\
+  \yamlkey{\ldots required\_modules} &      & \code{[]}            & \ref{ch:workflow-model} \\
+  \yamlkey{\ldots clone\_shadow}     &      & \code{false}         & \ref{ch:calculators} \\
+  \yamlkey{\ldots path}              &      & \yamlkey{execution.\allowbreak{}path} $\to$ \code{"."} & \ref{ch:calculators} \\
+  \yamlkey{\ldots source}            &      & ---                  & \ref{ch:calculators} \\
+  \yamlkey{\ldots symlink\_name}     &      & module name          & \ref{ch:calculators} \\
+  \yamlkey{\ldots timeout}           &      & none                 & \ref{ch:calculators} \\
+  \yamlkey{\ldots make\_paraller}    &      & \code{1}             & \ref{ch:calculators} \\
+  \yamlkey{\ldots env\_setup[].\allowbreak{}source} &    & \code{[]}            & \ref{ch:calculators} \\
+  \yamlkey{\ldots installation[].\{cmd,\allowbreak{}cwd\}} & & \code{[]}        & \ref{ch:calculators} \\
+  \yamlkey{\ldots initialization[].\{cmd,\allowbreak{}cwd\}} & & \code{[]}      & \ref{ch:calculators} \\
+  \yamlkey{\ldots execution.\allowbreak{}path}    &      & ---                  & \ref{ch:calculators} \\
+  \yamlkey{\ldots execution.\allowbreak{}commands[].\{cmd,\allowbreak{}cwd\}} & & \yamlkey{cwd}: \code{"."} & \ref{ch:calculators} \\
+  \yamlkey{\ldots execution.\allowbreak{}input[].\{name,\allowbreak{}path,\allowbreak{}type,\allowbreak{}save,\allowbreak{}actions\}} & & --- & \ref{ch:io-types} \\
+  \yamlkey{\ldots execution.\allowbreak{}output[].\{name,\allowbreak{}path,\allowbreak{}type,\allowbreak{}save,\allowbreak{}variables\}} & & --- & \ref{ch:io-types} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Operas}} \\
+  \yamlkey{Operas.\allowbreak{}Modules[].\allowbreak{}name}    &      & \code{Operas<i>}     & \ref{ch:operas} \\
+  \yamlkey{Operas.\allowbreak{}Modules[].\allowbreak{}operator} & \req & ---                 & \ref{ch:operas} \\
+  \yamlkey{\ldots call\_mode}        &      & \code{call}          & \ref{ch:operas} \\
+  \yamlkey{\ldots timeout\_sec} (alias \yamlkey{timeout}) & & none & \ref{ch:operas} \\
+  \yamlkey{\ldots kwargs}            &      & \code{\{\}}          & \ref{ch:operas} \\
+  \yamlkey{\ldots input}             &      & pass-through         & \ref{ch:operas} \\
+  \yamlkey{\ldots output}            &      & \code{[]} (discards!) & \ref{ch:operas} \\
+  \midrule
+  \multicolumn{4}{@{}l}{\emph{Likelihood}} \\
+  \yamlkey{Likelihood.\allowbreak{}expressions[].\allowbreak{}name} & & \code{LogL}          & \ref{ch:loglikelihood} \\
+  \yamlkey{Likelihood.\allowbreak{}expressions[].\allowbreak{}expression} & \req & ---       & \ref{ch:loglikelihood} \\
+  \bottomrule
+\end{longtable}
+\endgroup
+\end{fullwidth}
+
+\noindent\footnotesize Superscripts: \textsuperscript{B}~Bridson,
+\textsuperscript{R}~Random, \textsuperscript{G}~Grid, \textsuperscript{C}~CSV,
+\textsuperscript{A}~AdaptiveBridson, \textsuperscript{c}~check\_modules,
+\textsuperscript{F/L}~Flat/Log, \textsuperscript{N}~Normal/Log-Normal,
+\textsuperscript{i}~\yamlkey{type: identity}, \textsuperscript{d}~\yamlkey{type:
+distribution}. Reserved names (never set): \yamlkey{task\_yaml}, \yamlkey{task\_root},
+\yamlkey{project\_root}; a top-level \yamlkey{Runtime} block is rejected.

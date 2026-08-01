@@ -1,0 +1,133 @@
+%==============================================================================
+% jarvis-preamble.tex
+% Shared packages, metadata macros, and semantic text commands for the
+% Jarvis-HEP manual.  Loaded by main.tex after \documentclass{tufte-book}.
+%
+% The tufte-book class already provides: xcolor, hyperref (unless nohyper),
+% geometry, graphicx, \allcaps, \smallcaps, \newthought, \sidenote,
+% \marginnote, \footnote->sidenote, fullwidth env, marginfigure, etc.
+% We only add what a code/reference manual additionally needs.
+%==============================================================================
+
+% --- Math ---------------------------------------------------------------------
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% --- Tables -------------------------------------------------------------------
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{ragged2e}      % \RaggedRight inside narrow table cells
+
+% --- Misc ---------------------------------------------------------------------
+\usepackage{pmboxdraw}     % render block/box-drawing glyphs (the Jarvis -v banner) in pdfLaTeX
+\usepackage{newunicodechar} % map the literal dot glyph U+2B24 (the banner icon) to a drawn circle
+\usepackage{varwidth}      % shrink-to-content box so the banner panel hugs its text (no empty margin)
+\usepackage{xspace}        % smart trailing space for text macros
+\usepackage{enumitem}      % tighter description/itemize lists
+\setlist{noitemsep, topsep=2pt}
+% Bera Mono (the typewriter font tufte-common.def loads) carries the T1 `--' ->
+% en-dash ligature, so every long CLI flag mentioned in prose via \cli{}/\code{}
+% printed as `-strict' instead of `--strict'. microtype is loaded ONLY to switch
+% that ligature off: protrusion and expansion are disabled so it changes nothing
+% else about the book's typesetting (verified: page count identical, no new
+% Overfull >15pt).
+\usepackage[protrusion=false,expansion=false]{microtype}
+\DisableLigatures[-]{family=tt*}
+
+% --- Project version single-source --------------------------------------------
+% This manual is a LIVING document: it is revised in step with each Jarvis-HEP
+% release.  \JversionNum names the release this particular build documents --
+% bump it (and rebuild) on every release; do not hard-code version numbers in
+% the prose, always use \Jversion so there is a single source of truth.
+\newcommand{\JversionNum}{2.0.0}
+\newcommand{\Jversion}{v\JversionNum\xspace}
+
+% --- Product / ecosystem names ------------------------------------------------
+\newcommand{\Jarvis}{\textsc{Jarvis-HEP}\xspace}
+\newcommand{\Jtwo}{\textsc{Jarvis-HEP}~2\xspace}
+\newcommand{\Operas}{\textsc{Jarvis-Operas}\xspace}
+\newcommand{\JPlot}{\textsc{JarvisPLOT}\xspace}
+\newcommand{\Portal}{\textsc{Jarvis-HEP-Portal}\xspace}
+
+% --- Inline semantic markup ---------------------------------------------------
+% Monospace helper that lets long tokens break in the narrow text column: an
+% underscore (\_) and a dot offer a zero-penalty breakpoint, so names like
+% interpolations\_1D or Runtime.batch\_size can wrap instead of overflowing.
+\newcommand{\jbttbreak}{\penalty0\hskip0pt\relax}
+\newcommand{\jtt}[1]{\begingroup
+  \def\_{\textunderscore\jbttbreak}%
+  \texttt{#1}\endgroup}
+% Code-ish things rendered in monospace with consistent meaning across the book.
+\newcommand{\code}[1]{\jtt{#1}}                          % generic inline code
+% A YAML key / block name -- coloured jYKey (style/jarvis-listings.tex) so it
+% matches how the same key looks inside a yamlcode listing; \ykey{} is a
+% shorter alias defined alongside that colour.
+\newcommand{\yamlkey}[1]{\textcolor{jYKey}{\jtt{#1}}}
+\newcommand{\cli}[1]{\jtt{#1}}   % a shell / CLI fragment -- real look defined in
+                                  % jarvis-boxes.tex (\hl{} needs jShell + soul)
+% \clih{}: plain fallback for \section{}/\chapter{}/\caption{} (moving arguments)
+% -- soul's \hl{} cannot appear there (crashes: "Argument of \let has an extra }"),
+% so any \cli{} inside a heading or caption must use \clih{} instead.
+\newcommand{\clih}[1]{\jtt{#1}}
+% \token{}/\marker{}: runtime tokens (@SampleID) and path markers (&J/) -- coloured
+% jYValue (style/jarvis-listings.tex) since these are values substituted at run time,
+% same colour family as a YAML string value in a listing.
+\newcommand{\token}[1]{\textcolor{jYValue}{\jtt{#1}}}
+\newcommand{\marker}[1]{\textcolor{jYValue}{\jtt{#1}}}
+\newcommand{\file}[1]{\jtt{#1}}                          % a file or path (overridden in dirtree)
+% \sampler{}: a sampler method name -- bold + jSampler purple, sans-serif kept.
+\newcommand{\sampler}[1]{\textbf{\textcolor{jSampler}{\textsf{#1}}}}
+\newcommand{\optitem}[1]{\textit{#1}}                    % an "(optional)" tag etc.
+
+% Reference to a sampler JSON schema file (authoritative key source).
+\newcommand{\schemaref}[1]{\texttt{card/schema/#1}}
+
+% A "registered alias" inline note, e.g. \alias{ToyMCMC}{MCMC}
+\newcommand{\alias}[2]{\texttt{#1}~(alias of~\texttt{#2})}
+
+% --- Required / Optional inline tags for key tables ---------------------------
+% Rendered as small inline badges (tcolorbox's \tcbox, "on line" keeps them in the
+% running text/table cell without breaking it) -- colours jWarn (red) / jOpt (gold),
+% both in style/jarvis-boxes.tex, which loads after this file but only needs to
+% exist by the time \req/\opt are actually used in a chapter, not at definition time.
+% The trailing \allowbreak{} gives TeX a legal line-break point right after the
+% badge -- without it, a badge glued directly to following punctuation with no
+% source space (e.g. "\req.") is one unbreakable unit with the next word and can
+% force an overfull line; plain text never had this problem since a period alone
+% is breakable. (A zero-width \hskip was tried first and did not fix it --
+% \allowbreak's bare penalty is what actually works; keep the empty braces, a
+% bare \allowbreak before a letter gets swallowed into an undefined control
+% sequence.)
+\newcommand{\req}{\tcbox[on line, colback=jWarn!10, colframe=jWarn, coltext=jWarn,
+  boxrule=0.6pt, arc=1.5pt, left=3pt, right=3pt, top=0pt, bottom=0pt,
+  boxsep=1pt]{\sffamily\bfseries\footnotesize REQ}\allowbreak{}}
+\newcommand{\opt}{\tcbox[on line, colback=jOpt!18, colframe=jOpt, coltext=jOpt,
+  boxrule=0.6pt, arc=1.5pt, left=3pt, right=3pt, top=0pt, bottom=0pt,
+  boxsep=1pt]{\sffamily\bfseries\footnotesize OPT}\allowbreak{}}
+
+% --- Tufte: \paragraph is our de-facto third heading level --------------------
+% tufte-book forbids \subsubsection, so \paragraph (provided by the class) is the
+% deepest heading we use.  We deliberately do NOT redefine it, to avoid clashing
+% with the class's titlesec-based sectioning.
+
+% --- A compact key/value description list for YAML key references -------------
+\newenvironment{keylist}
+  {\begin{description}[style=nextline, leftmargin=1.2em, font=\ttfamily]}
+  {\end{description}}
+
+% --- Coloured cross-reference & citation links --------------------------------
+% tufte loads hyperref with colorlinks=false (links are black, box-less), so
+% references look like plain text.  Turn on coloured links so references to
+% figures, tables, equations, and sections -- and citations -- stand out.
+% (hyperref is already loaded by the tufte-book class at this point.)
+\definecolor{jlink}{HTML}{1F6FB2}  % cross-refs: figures, tables, equations, sections
+\definecolor{jcite}{HTML}{2E7D32}  % citations / bibliography
+\definecolor{jurl}{HTML}{1A5FB4}   % URLs
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = jlink,
+  citecolor  = jcite,
+  urlcolor   = jurl,
+  linktoc    = page,   % keep ToC titles black; colour only the page-number links
+}

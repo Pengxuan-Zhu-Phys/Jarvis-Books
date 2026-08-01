@@ -1,0 +1,30 @@
+\chapter{Distribution Formula Sheet}
+\label{app:distributions}
+
+\newthought{The five scan-variable distributions} at a glance, with their parameters and the map
+from a uniform $u\in[0,1]$. Full discussion is in Chapter~\ref{ch:variables}.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    \textbf{\yamlkey{type}} & \textbf{Parameters} & \textbf{Definition} \\
+    \midrule
+    \yamlkey{Flat}       & \yamlkey{min}, \yamlkey{max}        & $x \sim \mathcal{U}(\mathrm{min},\mathrm{max})$ \\
+    \yamlkey{Log}        & \yamlkey{min}, \yamlkey{max}        & $\ln x \sim \mathcal{U}(\ln\mathrm{min},\ln\mathrm{max})$,\ \ \yamlkey{min}$>0$ \\
+    \yamlkey{Normal}     & \yamlkey{mean}, \yamlkey{stddev}    & $x \sim \mathcal{N}(\mathrm{mean},\mathrm{stddev})$ \\
+    \yamlkey{Log-Normal} & \yamlkey{mean}, \yamlkey{stddev}    & $\ln x \sim \mathcal{N}(\mathrm{mean},\mathrm{stddev})$ \\
+    \yamlkey{Logit}      & \yamlkey{location}, \yamlkey{scale} & $x = \mathrm{location} + \mathrm{scale}\cdot\ln\!\big(\tfrac{u}{1-u}\big)$ \\
+    \bottomrule
+  \end{tabular}
+  \caption{The supported 1-D distributions.}
+  \label{tab:app-dist}
+\end{table}
+
+\noindent All five support \Jarvis's internal mapping from $u\in[0,1]$, which is what lets nested
+and \textsc{mcmc} samplers use them. Per-sampler notes:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\sampler{Grid}] each variable also needs \yamlkey{num} (grid points along that axis).
+  \item[\sampler{Bridson}] each variable also needs \yamlkey{length} (axis extent for spacing).
+\end{description}

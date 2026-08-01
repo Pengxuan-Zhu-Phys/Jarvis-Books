@@ -1,0 +1,144 @@
+\chapter{Operas}
+\label{ch:operas}
+
+\newthought{Operas are the in-process backend.} Where a calculator shells out to an
+external program, an \emph{opera} is a Python callable imported directly into the Worker:
+no subprocess, no input files, no working directory. Interpolations, surrogate models,
+fast analytic observables, and glue logic between calculators all belong here.
+
+\section{The module entry}
+\label{sec:opera-entry}
+
+\begin{yamlwin}
+Operas:
+  Modules:
+    - name: TrivialEggbox
+      operator: helper.eggbox2d      # dotted import path, or a registered name
+      call_mode: call                # call | acall
+      timeout_sec: 30                # optional
+      kwargs: {shift: 0.5}           # static extra kwargs
+      input:                         # optional; default = pass everything through
+        - x                          # str form: pass observable x
+        - name: r
+          expression: sqrt(x**2 + y**2)   # computed input
+        - name: alias
+          entry: some.dotted.key     # copy via dotted path
+      output:                        # REQUIRED to capture anything
+        - name: z
+          entry: z                   # dotted path into the returned mapping
+\end{yamlwin}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.21\linewidth}p{0.11\linewidth}p{0.17\linewidth}p{0.41\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Req.} & \textbf{Default} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{name} &      & \code{Operas<i>} & the step's name in the execution plan \\
+    \yamlkey{operator} & \req & --- & the callable (\S\ref{sec:opera-resolution}) \\
+    \yamlkey{call\_mode} &      & \code{call} & \code{call} (sync) or \code{acall} (async) \\
+    \yamlkey{timeout\_sec} (alias \yamlkey{timeout}) & & none & seconds (\S\ref{sec:opera-failure}) \\
+    \yamlkey{kwargs} &      & \code{\{\}} & static keyword arguments \\
+    \yamlkey{input} &      & pass-through & what the operator receives (\S\ref{sec:opera-io}) \\
+    \yamlkey{output} &      & \code{[]} & what is captured (\S\ref{sec:opera-io}) \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\yamlkey{Operas.Modules[]} keys.}
+  \label{tab:opera-keys}
+\end{table}
+
+\section{Operator resolution}
+\label{sec:opera-resolution}
+
+\yamlkey{operator} is resolved \textbf{once per Worker}, at startup:
+
+\begin{enumerate}
+  \item first as a dotted \code{importlib} path (\code{mypackage.models.evaluate});
+  \item failing that, as a \emph{registered name} in the \Operas\ package registry
+        (\code{helper.eggbox2d}) --- the same registry whose functions are callable
+        inside expressions (Chapter~\ref{ch:jarvis-operas}).
+\end{enumerate}
+
+A missing or non-callable operator is a hard error at Worker startup, not at first
+Sample. Your own project code is importable as long as it is on \code{PYTHONPATH};
+packaging it, or persisting it into the \Operas\ registry, makes the card portable.
+
+\section{Inputs and outputs}
+\label{sec:opera-io}
+
+\paragraph{The call.} The operator is called with the prepared inputs as keyword
+arguments, plus every static \yamlkey{kwargs} entry, plus a full \code{observables}
+mapping --- so a quick prototype can just accept
+\code{def f(**kw): obs = kw["observables"]}. It must return a \code{Mapping}; anything
+else is a \code{TypeError} and the Sample fails.
+
+\paragraph{\yamlkey{input}.} With no \yamlkey{input} list, all current observables pass
+through. Otherwise each entry is one of:
+
+\begin{itemize}
+  \item a bare string --- pass that observable under its own name;
+  \item \code{\{name, expression\}} --- a computed input in the shared expression
+        language, compiled once per Worker;
+  \item \code{\{name, entry\}} --- copy a nested value out via a dotted path.
+\end{itemize}
+
+\paragraph{\yamlkey{output}.} Each \code{\{name, entry\}} pair maps a dotted path of the
+returned mapping into the observables.
+
+\begin{jwarn}
+An absent or empty \yamlkey{output} list \textbf{discards the entire result}. The single
+most common ``my opera ran but produced nothing'' report is a missing \yamlkey{output}
+block --- unlisted keys are dropped by design, not merged.
+\end{jwarn}
+
+\section{Async operators and timeouts}
+\label{sec:opera-failure}
+
+\yamlkey{call\_mode: acall} declares the operator as an \code{async def}, awaited on a
+private event loop --- for operators that do async I/O themselves:
+
+\begin{yamlwin}
+- name: AsyncModel
+  operator: mypackage.models.evaluate_async
+  call_mode: acall
+  timeout_sec: 30
+  output:
+    - {name: z, entry: z}
+\end{yamlwin}
+
+Any other \yamlkey{call\_mode} value currently falls through to the synchronous path ---
+spell \code{acall} exactly.
+
+\yamlkey{timeout\_sec} bounds one invocation. On expiry the Sample fails, but ---
+unlike a calculator subprocess --- \textbf{the runaway Python code is not killed}: a
+thread cannot be terminated safely, so a truly stuck operator leaks its thread. An opera
+that can block on external resources should manage its own deadline; better still, make
+it a calculator, where the process-group kill is unconditional.
+
+\section{Operas vs calculators}
+\label{sec:opera-vs-calc}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.20\linewidth}p{0.37\linewidth}p{0.37\linewidth}@{}}
+    \toprule
+    & \textbf{Opera} & \textbf{Calculator} \\
+    \midrule
+    Runs as          & Python call in the Worker & external subprocess \\
+    Per-point cost   & microseconds--ms          & seconds--minutes \\
+    Isolation        & none (shared process)     & sample dir / clone-shadow \\
+    Concurrency cap  & --- (sequential per Sample) & global pools \\
+    Timeout kills    & no (thread leak)          & yes (process group) \\
+    Files            & none                      & input/output specs \\
+    \bottomrule
+  \end{tabular}
+  \caption{Choosing a backend for a workflow step.}
+  \label{tab:opera-vs-calc}
+\end{table}
+
+In the execution plan, operas always run \emph{after} all calculator layers, in card
+order (Section~\ref{sec:plan-order}) --- an opera can post-process any calculator
+output, but a calculator can never consume an opera's.

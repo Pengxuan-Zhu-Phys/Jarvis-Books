@@ -1,0 +1,103 @@
+\chapter{Monitoring \& the Run Summary}
+\label{ch:monitoring}
+
+\newthought{Observability without interference.} A running scan can be inspected from a
+second terminal at any time --- \cli{Jarvis2 monitor} reads the runtime's shared state
+and prints a snapshot without writing a single byte to it --- and every run closes with
+a performance accounting in the console and on disk. This chapter covers both ends.
+
+\section{\clih{Jarvis2 monitor}}
+\label{sec:monitor-cli}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 monitor
+\end{jcmd}
+\end{terminal}
+
+Prints one text snapshot of the active scan and exits:
+
+\begin{itemize}
+  \item \textbf{Workers} --- alive/total, each Worker's status, current Sample, held
+        calculator packs, and subprocess \textsc{pid}s;
+  \item \textbf{queues} --- task queue and archive queue lengths;
+  \item \textbf{samples} --- running / completed / failed counters;
+  \item \textbf{calculators} --- free vs busy slots per pool;
+  \item \textbf{activity counters} --- the change counters that timestamp each
+        subsystem's last movement.
+\end{itemize}
+
+No active scan yields a clear ``No active scan found.''\ message and a non-zero exit.
+Repeat it with \cli{watch} for a poor man's dashboard:
+
+\begin{terminal}
+\begin{jcmd}
+watch -n 5 Jarvis2 monitor
+\end{jcmd}
+\end{terminal}
+
+\begin{jnote}
+The monitor is \textbf{strictly read-only} and cheap by construction. Inside the
+runtime, every writer bumps a per-subsystem change counter; the monitoring path
+re-reads a subsystem only when its counter moved, and an idle subsystem costs a single
+\textsc{get}. You can attach monitors as often as you like without slowing Workers ---
+and because the state lives in Redis, the monitor works from any process on the
+machine.
+\end{jnote}
+
+\section{Reading a snapshot in anger}
+\label{sec:monitor-diagnosis}
+
+The snapshot answers the three production questions directly:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Is it moving?] \code{completed} grows between two snapshots. If not: are the
+        Workers all showing the same current Sample for minutes (a hung calculator ---
+        check its \yamlkey{timeout}), or is the task queue empty (sampler finished or
+        at an \sampler{AdaptiveBridson} barrier)?
+  \item[Where is the bottleneck?] A large task queue with idle calculator slots means
+        too few Workers; all slots of one pool busy while Workers wait means that pool
+        is the throttle; a growing \emph{archive} queue means storage, not compute, is
+        behind (Chapter~\ref{ch:performance}).
+  \item[Is anything dying?] The \code{failed} counter and per-Worker status make
+        systematic failure visible within seconds of it starting --- long before the
+        end-of-run summary.
+\end{description}
+
+\section{The \code{[Scan Performance]} block and \code{run\_summary}}
+\label{sec:scan-performance}
+
+Every run ends with a two-column console block and the matching
+\file{run\_summary.\{json,csv,txt\}} files (Section~\ref{sec:run-summary-file}):
+
+\begin{terminal}
+\begin{jout}
+[Scan Performance]
+  wall_time_sec        :  1284.3
+  samples_per_sec      :  0.78
+  samples_per_min      :  46.7
+  avg_sample_sec       :  1.28
+  avg_point_eval_sec   :  9.6
+  median_point_eval_sec:  8.9
+\end{jout}
+\end{terminal}
+
+Two latencies are deliberately distinct:
+
+\begin{itemize}
+  \item \code{avg\_sample\_sec} $=$ wall time $/$ finished samples --- the
+        \emph{amortized system} latency; parallelism drives it far below any single
+        evaluation's cost.
+  \item \code{avg\_point\_eval\_sec} / \code{median\_point\_eval\_sec} --- the
+        per-point \emph{evaluation} cost as measured inside Workers; this is the
+        number that reflects your calculators.
+\end{itemize}
+
+The ratio of the two is your effective parallelism --- if it is far from
+\yamlkey{workers}, Chapter~\ref{ch:performance} tells you where the loss went.
+
+\begin{jtip}
+Keep \file{run\_summary.json} from every production scan (it is tiny). Throughput
+regressions after a tool upgrade or a storage migration become one \code{diff} instead
+of an argument from memory.
+\end{jtip}

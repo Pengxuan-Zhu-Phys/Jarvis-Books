@@ -1,0 +1,716 @@
+\chapter{The Command Line Interface}
+\label{ch:cli}
+
+\newthought{The command line is where the design becomes visible.} \Jtwo\ deliberately
+exposes one executable, \cli{Jarvis2}, and asks you to name \emph{one intent} per
+invocation --- and the intents are not an arbitrary menu. Three of them are graded by how
+much of your task card they are willing to execute, from reading it to running it; three
+more act on scans already running, and never touch a card at all. Learn that shape and the
+\textsc{cli} stops being a list of flags to memorise: you will know which command to reach
+for, what it started on your machine, what it deliberately did not start, and how to read
+what it printed back.
+
+\section{One binary, one intent, one card}
+\label{sec:cli-shape}
+
+Every invocation has the same shape:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 <intent> <card>.yaml [flags]
+\end{jcmd}
+\end{terminal}
+
+The intent comes first because it is the decision you actually make; the card is the
+noun it acts on. \cli{Jarvis2 -h} prints the whole surface, and it does not print a flat
+list --- the commands arrive already sorted into the five groups you actually work in:
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Group} & \textbf{Commands} & \textbf{What the group is for} \\
+    \midrule
+    Scan workflow &
+      \clih{validate} \clih{check} \clih{run} &
+      the same card, executed at three depths (\S\ref{sec:cli-ladder}) \\
+    Data export &
+      \clih{convert} &
+      refresh the \textsc{csv} snapshots of a run's \textsc{hdf5} \\
+    Plots &
+      \clih{gen-plot-yaml} \clih{plot} &
+      generate a plot card from a finished run, then render it \\
+    Runtime control &
+      \clih{monitor} \clih{ps} \clih{kill} &
+      look at, or end, scans running right now --- no card involved \\
+    Extensions \& projects &
+      \clih{project} \clih{portal} \clih{operas} &
+      doors into the neighbouring tools \\
+    \bottomrule
+  \end{tabular}
+  \caption[The five command groups printed by \clih{Jarvis2 -h}.]{The five command
+  groups printed by \clih{Jarvis2 -h}. Within the first group the order is the order you
+  should use them in.}
+  \label{tab:cli-groups}
+\end{table}
+
+Those group names are the CLI's own, not this book's, and they are worth trusting: when a
+command moves or appears, the help panel is where it shows up first. Two habits follow.
+Run \cli{Jarvis2 -h} when you have forgotten \emph{which} command, and
+\cli{Jarvis2 <command> -h} when you have forgotten \emph{which flag} --- the help text
+says so itself, and every command accepts both \cli{-h} and \cli{--help}.
+
+\paragraph{The card never changes between intents.} This is the single most important
+consequence of the design, and it is worth stating as a rule: the file you hand to
+\cli{Jarvis2 validate} is byte-for-byte the file you hand to \cli{Jarvis2 run}. There is
+no ``test card'' and no debug variant to keep in sync. Gating a card in continuous
+integration therefore gates \emph{the card you will run}, and a card that survives
+\cli{check} needs no edit before production --- only more points.
+
+\paragraph{The CLI refuses to guess.} Called with nothing, it says so and stops rather
+than defaulting to some plausible action:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2
+\end{jcmd}
+\termsep
+\begin{jout}
+Provide a task YAML or a subcommand
+(run|check|validate|convert|monitor|plot|portal|operas|project). See Jarvis2 -h.
+\end{jout}
+\end{terminal}
+
+The same instinct governs conflicts. Naming two intents at once --- a subcommand plus a
+legacy flag that means something different (Section~\ref{sec:cli-legacy}) --- is a usage
+error, not a precedence puzzle to be resolved silently in your favour.
+
+\section{The ladder of commitment}
+\label{sec:cli-ladder}
+
+The three commands in the \emph{Scan workflow} group run the same card at three depths.
+Almost every practical question about ``which command do I use'' is a question about
+which rung you are on --- which is why the help panel lists them in this order rather
+than alphabetically.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Intent} & \textbf{Cost} & \textbf{What it starts, and what it proves} \\
+    \midrule
+    \clih{validate} & seconds &
+      Nothing. Reads and checks the card against the \textsc{yaml} contract. Proves the
+      card is \emph{sayable}. \\
+    \clih{check}    & minutes &
+      Redis, Workers, your real calculators --- on about ten points. Proves the card is
+      \emph{runnable}: paths resolve, programs execute, outputs parse, the likelihood
+      evaluates. \\
+    \clih{run}      & hours &
+      Everything, for as long as the sampler asks. Proves nothing new about the card ---
+      it produces physics. \\
+    \bottomrule
+  \end{tabular}
+  \caption{The three depths at which \clih{Jarvis2} will execute one card.}
+  \label{tab:cli-ladder}
+\end{table}
+
+The rungs are cheap in exactly the order you need them to be, and each one catches a
+different class of mistake. \cli{validate} catches what you wrote: a misspelled
+\yamlkey{Sampling.Method}, a key that no longer exists, a bound that contradicts a
+distribution. \cli{check} catches what your \emph{machine} does with what you wrote: an
+\yamlkey{entry} path that is correct on the cluster and wrong on the laptop, a program
+that needs an environment variable you forgot to set, an output file whose format
+changed between versions of an external code. No amount of validation finds those,
+because none of them are in the card.
+
+That is why the failure mode this ladder exists to prevent is so specific: discovering a
+broken path forty minutes into a scan, after a sampler has already spent your evening.
+
+\section{\clih{validate}: the cheapest gate}
+\label{sec:cli-validate}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 validate scan.yaml
+Jarvis2 validate scan.yaml --strict   # also fail on warnings
+Jarvis2 validate scan.yaml --json     # machine-readable report
+\end{jcmd}
+\end{terminal}
+
+\cli{validate} loads a card and checks it against the full \textsc{yaml} contract ---
+every block in Part~\ref{part:task-card}, plus the keys the chosen sampler declares for
+itself --- without starting Redis, a Worker, or an Archiver. \cli{Jarvis2 run} and
+\cli{Jarvis2 check} run this same gate before they do anything else, so \cli{validate}
+is not an extra safety net bolted on the side. It is the first thing a run does, made
+available on its own, for the moment \emph{before} you are willing to pay for a run.
+
+A card that passes prints one line and exits \code{0}:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 validate bin/Example_Dynesty_Operas_Quick.yaml
+\end{jcmd}
+\termsep
+\begin{jout}
+Config validation successful. The task YAML meets the V2 contract.
+\end{jout}
+\end{terminal}
+
+A card that fails prints every problem it found, then exits \code{2}:
+
+\begin{terminal}
+\begin{jout}
+Config validation failed (1 error(s), 0 warning(s)):
+  [error] JV2-MTH-003  Sampling.Method
+          'Dynastey' is not implemented in Jarvis-HEP V2. Available: AM, AMMCMC,
+          AdaptiveBridson, Bridson, CSV, DEMCMC, DRAM, Dynesty, Ensemble,
+          EnsembleMCMC, Grid, MCMC, MultiNest, PT, PTEnsemble, PTMCMC, Random
+\end{jout}
+\end{terminal}
+
+Every finding carries the same four fields, and each one is there to save you a specific
+step:
+
+\begin{keylist}
+  \item[{[error] / [warning]}] Severity. Errors fail the card; warnings do not, unless
+        you asked for \cli{--strict}.
+  \item[JV2-MTH-003] A stable code. It does not change between releases, so it is safe
+        to grep for in \textsc{ci} logs and it is the lookup key in
+        Appendix~\ref{app:troubleshooting}.
+  \item[Sampling.Method] The exact dotted path in \emph{your} card. No line numbers, no
+        guessing which of four \yamlkey{Method} keys it meant.
+  \item[the message] What is wrong and --- wherever the answer is a closed set, as here
+        --- what the legal values are.
+\end{keylist}
+
+\paragraph{\clih{--strict}.} Warnings mark things that will not stop a run but will
+probably not do what you meant: a key that \Jtwo\ ignores, a dead
+\yamlkey{Operas.call\_mode}, a setting the chosen sampler silently overrides.
+\cli{--strict} promotes them to hard failures. Make it a habit before a long production
+run: the card you are about to spend a night on is exactly the card whose ``it runs,
+just not quite the way you think'' should be caught first.
+
+\paragraph{\clih{--json}.} The same report, on standard output, as one \textsc{json}
+object --- \code{ok}, the resolved \code{task\_yaml} path, the \code{scan\_name}, and an
+\code{issues} array of the four fields above:
+
+\begin{terminal}
+\begin{jout}
+{
+  "issues": [
+    {
+      "code": "JV2-MTH-003",
+      "hint": null,
+      "level": "error",
+      "message": "'Dynastey' is not implemented in Jarvis-HEP V2. ...",
+      "path": "Sampling.Method"
+    }
+  ],
+  "ok": false,
+  "scan_name": "EggBox_Dynesty_Operas_Quick",
+  "task_yaml": "/home/you/Eggbox/bin/Example_Dynesty_Operas_Quick.yaml"
+}
+\end{jout}
+\end{terminal}
+
+Note which stream each form uses: the human report goes to standard error, the
+\textsc{json} report to standard output. A \textsc{ci} job can therefore pipe
+\cli{--json} straight into a parser without filtering log noise out of it first. The
+\sampler{MultiNest} and \sampler{Dynesty} chapters walk a real card through this gate
+key by key (Section~\ref{sec:nested-validation}).
+
+\section{\clih{check}: the workflow rehearsal}
+\label{sec:cli-check}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 check scan.yaml
+Jarvis2 check scan.yaml --strict --console-level DEBUG
+\end{jcmd}
+\end{terminal}
+
+\cli{check} is a full run in miniature. It starts the same Redis, the same Workers, and
+the same calculators as production, then feeds them a handful of points --- fixed ones
+from a \textsc{csv} if your card resolves to one, or about ten drawn from your real
+\yamlkey{Sampling.Method} if it does not. Everything downstream is genuine: the same
+shell commands, the same \Portal\ readers and writers, the same \Operas\ calls, the same
+likelihood expression.
+
+Two flags earn their keep here. \cli{--strict} applies to the same validation gate as
+above. \cli{--console-level DEBUG} raises what reaches the screen, which is what you want
+the first time a card fails on a new machine --- the files were already recording at
+\code{DEBUG} either way (\S\ref{sec:cli-logging-flags}).
+Chapter~\ref{ch:check-modules} covers where the points come from and how to read the
+per-Sample output that follows.
+
+\section{\clih{run}: the real thing}
+\label{sec:cli-run}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 run scan.yaml
+Jarvis2 run scan.yaml --resume    # take the checkpoint, no prompt
+\end{jcmd}
+\end{terminal}
+
+One command, in order: validate the card (clear messages and exit code~2 on a missing or
+invalid file), start Redis bookkeeping, spawn the Workers and the Archiver, drive the
+sampler until it says it is finished, then tear the whole family down --- including any
+\code{Jarvis-Redis:<scan>} service \Jtwo\ started itself. If a checkpoint from an
+interrupted run is sitting there, you are asked whether to resume before any of that
+happens; \cli{--resume} answers yes non-interactively
+(Chapter~\ref{ch:checkpoint}).
+
+\subsection{The flags}
+
+\begin{keylist}
+  \item[--resume] Accept an existing checkpoint without prompting. The right flag for
+        batch queues and \cli{nohup}, where there is no terminal to answer the question.
+  \item[--strict] Promote validation warnings to errors, exactly as in
+        Section~\ref{sec:cli-validate}. Costs nothing; run it this way.
+  \item[--skip-draw-flowchart] Skip the \file{flowchart.json} and \file{flowchart.png}
+        export. Useful on headless machines and in repeated short runs where you already
+        know the workflow graph.
+  \item[--console-level LEVEL] Minimum severity that reaches the screen: \code{DEBUG},
+        \code{INFO}, \code{WARNING}, \code{ERROR}, or \code{CRITICAL} (default
+        \code{WARNING}).
+  \item[--debug, -d] Shorthand for \cli{--console-level DEBUG}.
+  \item[--silence, -s] Turn console output off entirely. Files are still written, so this
+        loses nothing --- it is the flag for a scan whose terminal you are about to stop
+        watching.
+\end{keylist}
+
+\subsection{Deciding how much to watch}
+\label{sec:cli-logging-flags}
+
+\textbf{The files always record \code{DEBUG} and above.} That is not adjustable, and it is
+the useful half of the design: you cannot start an overnight scan that fails at 02:00
+having logged nothing worth reading.
+
+So the only logging decision is how much of it reaches your screen, and the default answer
+is \code{WARNING} --- a quiet terminal that speaks up when something is wrong. Raise it
+with \cli{--console-level INFO} to watch progress, or \cli{--debug} when you are chasing a
+specific failure. The file under \file{logs/<scan>/} is identical either way, so the
+post-mortem recipe in Chapter~\ref{ch:logging} works no matter how the run was invoked.
+
+\subsection{One scan per name}
+
+Starting a run whose \yamlkey{Scan.name} already belongs to a live controller is refused
+before Redis comes up:
+
+\begin{terminal}
+\begin{jout}
+a Jarvis scan named 'EggBox_Dynesty' is already running; inspect it with
+`Jarvis2 monitor R1` or `Jarvis2 ps R1` before starting another run
+\end{jout}
+\end{terminal}
+
+Two scans sharing a name would share an output directory, a checkpoint file, and a set of
+Redis keys, and the second one would quietly corrupt the first. The message hands you the
+reference of the scan already holding the name so you can go and look at it
+(\S\ref{sec:cli-ps-kill}) rather than guess.
+
+\subsection{What it looks like on your machine}
+
+Every managed process sets its own \textsc{os}-visible title, so \cli{ps} and \cli{top}
+show you a scan instead of a column of identical \code{python3} entries:
+\code{Jarvis2:<scan>} for the control process,
+\code{Jarvis2-\allowbreak{}Worker-\allowbreak{}N:<scan>},
+\code{Jarvis2-\allowbreak{}Archiver:<scan>}, \code{Jarvis2-\allowbreak{}FileOperation},
+and \code{Jarvis-\allowbreak{}Redis:<scan>}. Section~\ref{sec:cli-ps-kill} puts that to
+work.
+
+\subsection{Stopping}
+
+\textbf{Ctrl+C} (\textsc{sigint}) is the supported stop: Workers finish or abandon
+cleanly, the checkpoint is saved, and children are reaped. \textbf{Ctrl+Z} is
+deliberately ignored during a scan --- a suspended control process would leave Workers
+and Redis half-alive, holding Redis keys and file handles that nothing is left to
+release.
+
+\subsection{The closing line}
+
+A finished run prints one summary line to standard error before it exits:
+
+\begin{terminal}
+\begin{jout}
+RunOutcome status=success submitted=20 completed=20 failed=0 archived=20 exit=0
+\end{jout}
+\end{terminal}
+
+The counters are the same ones \file{run\_summary.json} records
+(Chapter~\ref{ch:monitoring}), and \code{status} is the field the exit code is derived
+from --- not the reverse. Section~\ref{sec:exit-codes} gives the mapping.
+
+\section{The second terminal}
+\label{sec:cli-second-terminal}
+
+Here is a habit worth forming, and a design decision worth noticing behind it: while a
+scan runs, everything you want to \emph{do} to it happens from a second terminal, and
+none of it disturbs the first. \cli{Jarvis2 monitor} reads one status snapshot.
+\cli{Jarvis2 ps} lists the processes. \cli{Jarvis2 convert} exports whatever data has
+been flushed so far. All three are read-only with respect to the scan's state; you can
+run them whenever you like, as often as you like, and stop.
+
+That is possible because a scan's live state is not held inside the control process ---
+it is in Redis and on disk (Chapter~\ref{ch:distributed-runtime}). Any tool that can
+reach those can observe a scan without asking it to cooperate, which is also why none of
+these commands need a \textsc{pid} or a socket.
+
+\subsection{\clih{monitor}}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 monitor       # which scans are running?
+Jarvis2 monitor R1    # snapshot of that one
+\end{jcmd}
+\end{terminal}
+
+Bare, \cli{monitor} lists the running scans and stops. Given a reference it attaches to
+that scan's Redis and prints one read-only snapshot --- queue depths, Worker states,
+throughput, resource use --- then exits. Chapter~\ref{ch:monitoring} reads a snapshot
+field by field; Section~\ref{sec:cli-ps-kill} explains the reference.
+
+\subsection{\clih{convert}: refreshing the \textsc{csv} snapshots}
+\label{sec:cli-convert}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 convert scan.yaml
+\end{jcmd}
+\end{terminal}
+
+The Archiver already writes \file{DATABASE/samples.csv} at the end of every run
+(Section~\ref{sec:database-csv}), so \cli{convert} has two jobs, and both are worth
+knowing. It is the recovery path when that export never happened --- an interrupted run,
+a deleted \textsc{csv}, or any other \file{*.hdf5} under \file{DATABASE/} that never got
+one. And it is how you look at a long scan's results \emph{before} it finishes: convert
+in the second terminal, open the \textsc{csv}, and decide whether the run is worth
+letting continue.
+
+It resolves \yamlkey{task\_result\_dir} from the card (path resolution only --- no Redis,
+no full validation gate) and refreshes \emph{every} \file{*.hdf5} directly under
+\file{DATABASE/} into a sibling \file{.csv} of the same name, one column per observable,
+with nested values flattened to \textsc{json} text by the same rule \file{samples.csv}
+itself uses.
+
+\textbf{Run it as often as you like.} \cli{convert} compares each \textsc{hdf5} against
+the \textsc{csv} beside it and rewrites only what actually changed, so repeated runs on a
+growing scan are cheap and a run on a finished scan is a no-op. It is safe mid-scan for
+the same reason it needs no locking: it only reads \file{DATABASE/*.hdf5} and writes
+\textsc{csv} beside it, never touching the running scan's Redis state, so you get whatever
+the Archiver has flushed so far.
+
+Each file reports its own outcome: \code{converted} with a row count,
+\code{skipped\_unchanged} when the \textsc{csv} already matches its source, \code{empty}
+when the \textsc{hdf5} holds no records yet, or \code{missing} when it is unreadable or
+absent. Exit code \code{0} if at least one file was converted or already up to date,
+\code{1} if every file was empty or missing, or if no \file{*.hdf5} exists at all.
+
+\subsection{\clih{gen-plot-yaml}: a plot card from a finished run}
+\label{sec:cli-gen-plot-yaml}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 gen-plot-yaml scan.yaml    # writes images/<scan>/plot.yaml, prints its path
+Jarvis2 plot images/<scan>/plot.yaml
+
+# or chain them: the generator prints the path it wrote
+Jarvis2 plot "$(Jarvis2 gen-plot-yaml scan.yaml)"
+\end{jcmd}
+\end{terminal}
+
+The two \emph{Plots} commands are deliberately separate steps rather than one
+``\,plot my scan'' button. \cli{gen-plot-yaml} reads a finished run's outputs and writes
+\file{images/<scan>/plot.yaml}, a \JPlot\ scene card seeded with that scan's own variables
+and likelihood --- a starting point, not a final figure. You then edit it and render it
+with \cli{plot}, as many times as the figure needs. Generation happens once; rendering
+happens as often as you like, which is the asymmetry the split exists to serve
+(Chapter~\ref{ch:jarvisplot}). On success the command prints the path it wrote --- the
+last line above uses that to chain the two halves in one go.
+
+\begin{jwarn}
+\cli{gen-plot-yaml} rewrites \file{plot.yaml} in place, without asking. Once you start
+tuning a figure, save your version under another name --- \file{plot\_paper.yaml} --- or
+the next regeneration silently discards it.
+\end{jwarn}
+
+\section{Runtime control: pick a scan, then act on it}
+\label{sec:cli-ps-kill}
+
+A distributed scan is a small family of processes, and occasionally --- a killed
+terminal, a lost \textsc{ssh} session, a control process that took a signal the wrong
+way --- part of that family outlives the run. Worse, on a shared machine there may be
+several families, and only one of them is yours to end. Guessing at \textsc{pid}s from
+\cli{ps aux | grep python} is exactly the operation you should not have to do by hand.
+
+All three \emph{Runtime control} commands therefore work the same two-step way: run them
+bare to see what is running, then run them again naming one scan.
+
+\subsection{Step one: the chooser}
+
+\cli{monitor}, \cli{ps} and \cli{kill} with no argument all print the same thing --- the
+scans currently alive on this machine, grouped from the \textsc{os} titles \Jtwo\ gives
+its own processes, each with a short reference.\sidenote{On screen this arrives inside a
+rounded, coloured panel whose width follows your terminal; the transcripts here show the
+content with that frame stripped.}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 ps
+\end{jcmd}
+\termsep
+\begin{jout}
+Running Jarvis scan tasks (2)
+
+  REF   SCAN             PROCESSES   PIDS
+  ----------------------------------------------------------------
+  R1    EggBox_Dynesty           4   48120, 48127, 48131, 48140
+  R2    NMSSM_02                 3   51002, 51009, 51015
+
+Choose a task by its REF (for example R1):
+  Jarvis2 monitor R1   view this task's live scan status
+  Jarvis2 ps R1        list its control, workers, archiver, Redis
+  Jarvis2 kill R1      terminate ALL processes belonging to this task
+\end{jout}
+\end{terminal}
+
+\code{R1} and \code{R2} are assigned fresh on every listing, by scan name in
+case-insensitive alphabetical order --- they are a convenience for the next command you
+type, not identifiers to store in a script. Anywhere a reference is accepted the exact
+scan name works too, which is what a script should use. With nothing running you get one
+line, \code{No running Jarvis scan tasks.}, and exit code \code{0}: these commands report,
+they do not judge.
+
+\subsection{Step two: one scan}
+
+Naming a reference turns the listing into a card for that scan alone --- its Redis
+endpoint, its output directory, and one row per process with the \emph{role} that process
+plays rather than its raw title:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 ps R1
+\end{jcmd}
+\termsep
+\begin{jout}
+Runtime task - R1
+
+  REF    R1
+  SCAN   EggBox_Dynesty
+  REDIS  127.0.0.1:6390   db 3
+  OUTPUT /work/eggbox/outputs/EggBox_Dynesty
+
+    PID   ROLE       DETAIL
+  ----------------------------------------------------
+  48120   Control    scan coordinator
+  48127   Redis      127.0.0.1:6390
+  48131   Archiver   writes DATABASE and exports
+  48140   Worker 0   calculator / sampling worker
+\end{jout}
+\end{terminal}
+
+The \code{REDIS} and \code{OUTPUT} rows are not read from your card --- they are read from
+the runtime metadata the scan itself published into Redis, then checked against the
+process you selected. If that cross-check fails, the command refuses rather than showing
+you a card that might describe a different scan:
+
+\begin{terminal}
+\begin{jout}
+Refusing unverified runtime: control PID does not match metadata.
+\end{jout}
+\end{terminal}
+
+An unknown reference is a usage error (exit \code{2}) and reprints the chooser, so a typo
+costs you nothing:
+
+\begin{terminal}
+\begin{jout}
+Unknown running scan 'R9'; available: R1 (EggBox_Dynesty), R2 (NMSSM_02)
+\end{jout}
+\end{terminal}
+
+\subsection{Ending one scan}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 kill R1              # shows the card, then asks
+Jarvis2 kill R1 --yes        # no prompt (batch scripts, cleanup hooks)
+Jarvis2 kill R1 --no-force   # SIGTERM only; never escalate to SIGKILL
+\end{jcmd}
+\end{terminal}
+
+\cli{kill} prints the same card, with the destructive consequence spelled out on it, then
+asks; on confirmation it signals that scan's processes --- \textsc{sigterm}, a two-second
+grace period, then \textsc{sigkill} for whatever is still standing --- and closes with a
+tally and a verdict:
+
+\begin{terminal}
+\begin{jout}
+DANGER: Jarvis2 kill R1 will terminate all 4 processes above.
+Kill 4 Jarvis process(es)? [y/N] y
+kill: SIGTERM=4 SIGKILL=0 gone=0 failed=0
+All matched Jarvis processes terminated.
+\end{jout}
+\end{terminal}
+
+Four details in that sequence are deliberate, and each one has bitten somebody:
+
+\begin{enumerate}
+  \item \textbf{Only the selected scan dies.} The other families on the machine are
+        untouched, which is the whole reason the reference is mandatory rather than
+        optional-with-a-default.
+  \item \textbf{The order is dependents first}: Workers, then the file-operation
+        helper, then the Archiver, then the control process, and Redis last. Killing the
+        control process first would leave it a window in which to respawn the Workers
+        you are trying to remove, and killing Redis first would strand every process
+        that is mid-transaction against it.
+  \item \textbf{Without a terminal, it refuses}. Piped or run from \cli{cron}, where
+        nobody can answer the prompt, it declines rather than guessing --- the message
+        names the flag it wants, \code{re-run with: Jarvis2 kill --yes}. Automation has
+        to say so explicitly.
+  \item \textbf{Anything left alive is reported, not glossed over}. Processes it could
+        not signal are listed by \textsc{pid} and the exit code is \code{1}, so a
+        cleanup script can tell ``all clear'' from ``still there, and it is not mine to
+        kill''.
+\end{enumerate}
+
+\begin{jwarn}
+\cli{kill} is the last resort, not the stop button. \textbf{Ctrl+C} on the running scan
+shuts down cleanly and \emph{saves the checkpoint}; a signalled control process does
+not, so the work since the last checkpoint barrier is gone
+(Chapter~\ref{ch:checkpoint}). Reach for \cli{kill} when there is no longer a scan to
+interrupt --- only its remains.
+\end{jwarn}
+
+\section{Discovery: the registries, without a scan}
+\label{sec:cli-discovery}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 portal man             # every registered file format
+Jarvis2 portal man slha        # one format's manual
+Jarvis2 portal io_task.yaml    # run a standalone Portal IO YAML
+Jarvis2 operas list            # every registered operator
+Jarvis2 operas info math.add   # one operator's signature and doc
+\end{jcmd}
+\end{terminal}
+
+\cli{portal} and \cli{operas} are not curated subsets --- each forwards its whole argument
+list to the neighbouring package's own \textsc{cli} (\cli{jportal} and \cli{jopera}
+respectively) and returns its exit code. Whatever those tools can do, this spelling can do,
+including their own \cli{-h}; nothing here has to be kept in sync as they grow. Missing
+\code{Jarvis-Operas} is reported as such (exit \code{2}) rather than as an unknown
+command. \cli{Jarvis2 portal man} prints what \Portal\ can currently read and write:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 portal man
+\end{jcmd}
+\termsep
+\begin{jout}
+Jarvis-Portal manual
+
+Supported formats:
+  input: CSV, DAT, JSON, SLHA, TSV, Wolfram
+  output: CSV, DAT, JSON, SLHA, TSV, Wolfram, xSLHA
+\end{jout}
+\end{terminal}
+
+The reason to prefer these over the documentation --- including this book --- is that
+they interrogate the registries in \emph{your} environment. \cli{operas list} names the
+operators actually importable here, so a missing extra or a stale plugin version shows
+up as an absent name rather than as a puzzling \yamlkey{expression} failure halfway
+through a scan. When a card names something these commands do not list, the card is
+wrong about this machine.
+
+\section{Legacy spellings}
+\label{sec:cli-legacy}
+
+\Jarvis\ V1 was driven by a bare card path plus a mode flag, and those spellings still
+work. The rule is mechanical: when the first token is neither a known subcommand nor a
+flag, \Jtwo\ treats it as a path and lets a trailing legacy flag pick the intent.
+
+\begin{itemize}
+  \item \cli{Jarvis2 <task>.yaml} routes to \cli{run}.
+  \item \cli{Jarvis2 <task>.yaml --resume} routes to \cli{run --resume}.
+  \item \cli{Jarvis2 <task>.yaml --check-modules} routes to \cli{check}.
+  \item \cli{Jarvis2 <task>.yaml --validate} routes to \cli{validate}.
+  \item \cli{Jarvis2 <task>.yaml --convert} routes to \cli{convert}.
+  \item \cli{Jarvis2 --monitor} routes to \cli{monitor} (\S\ref{sec:cli-ps-kill}).
+  \item \cli{Jarvis2 <scene>.yaml --plot} routes to \cli{plot}, with a deprecation
+        warning.
+\end{itemize}
+
+That list is complete, and \cli{Jarvis2 -h} prints exactly these in their own
+\emph{Legacy options} panel, kept apart from the real options so the two are never
+confused for each other.
+
+Prefer the subcommand forms in anything you save. They survive shell quoting, they read
+correctly in a batch script somebody else inherits, and they cannot collide: naming a
+subcommand \emph{and} a conflicting legacy flag in one line is rejected as a usage error
+rather than resolved by precedence.
+
+\section{Exit codes}
+\label{sec:exit-codes}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Code} & \textbf{Meaning} \\
+    \midrule
+    0   & every sample succeeded \\
+    1   & any sample failed (including partial failure), or a runtime/IO error \\
+    2   & usage or configuration error (bad flags, missing/invalid card) \\
+    130 & interrupted (Ctrl+C) \\
+    \bottomrule
+  \end{tabular}
+  \caption{\clih{Jarvis2} exit codes --- contract-stable for scripting.}
+  \label{tab:exit-codes}
+\end{table}
+
+These four are contract-stable, and the run codes are computed from the \code{status}
+field of the closing \code{RunOutcome} line: \code{success} gives \code{0};
+\code{partial\_failure}, \code{failed}, and \code{error} all give \code{1};
+\code{interrupted} gives \code{130}. Reporting one number for three different kinds of
+trouble is the deliberate part.
+
+So is treating \emph{partial} failure as failure. A scan where nineteen of twenty points
+completed exits \code{1}, because the alternative --- calling it success --- is how a
+pipeline quietly ships a dataset with a hole in it. Failed samples are archived as failed
+records, so a workflow that legitimately tolerates ``some points crashed'' should read
+the counters in \file{run\_summary.json} rather than widening its notion of a good exit
+code.
+
+\section{Environment variables}
+\label{sec:cli-env}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Variable} & \textbf{Effect} \\
+    \midrule
+    \code{JARVIS\_HEP\_TASK\_ROOT} / \code{JHEP\_TASK\_ROOT} & force the project root
+      (Section~\ref{sec:projects}) \\
+    \code{JARVIS\_PROJECT\_FETCH\_KEY} & decryption key for restricted fetches
+      (Ch.~\ref{ch:project-cli}) \\
+    \code{JARVIS\_OFFICIAL\_LIBRARY\_INDEX\_URL} & override the catalog index URL
+      (\code{https://} or \code{file://}) \\
+    \code{JARVIS\_OFFICIAL\_LIBRARY\_TIMEOUT\_SEC} & catalog fetch timeout \\
+    \bottomrule
+  \end{tabular}
+  \caption{Environment variables read by the CLI.}
+  \label{tab:cli-env}
+\end{table}
+
+\begin{jtip}
+\textbf{The habit, in three lines.} Gate the card in \textsc{ci} with
+\cli{Jarvis2 validate --strict}; after every edit that touches a path, a program, or an
+expression, spend a minute on \cli{Jarvis2 check}; then \cli{Jarvis2 run --strict} once,
+and watch it from a second terminal with \cli{Jarvis2 monitor} followed by the reference
+it hands you. Every rung you skip is one you will climb later, at the price of the rung
+above it.
+\end{jtip}

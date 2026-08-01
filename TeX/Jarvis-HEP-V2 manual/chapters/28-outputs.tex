@@ -1,0 +1,103 @@
+\chapter{Outputs}
+\label{ch:outputs}
+
+\newthought{Everything lands under \file{outputs/<scan>/}.} A run's products are
+project-local, layout-stable, and designed to be read by tools you already have:
+\textsc{hdf5} and \textsc{csv} for the records, a bucketed artifact tree for per-sample
+files, \textsc{json} for the summaries. This chapter is the tour.
+
+\section{The output tree}
+\label{sec:output-tree}
+
+\begin{jfiletree}
+\dirtree{%
+.1 \dtfoldopen{outputs/<scan>/}.
+.2 \dtfoldopen{DATABASE/}.
+.3 \dtdata{samples.hdf5}\DTcomment{the record of record}.
+.3 \dtcsv{samples.csv}\DTcomment{full-column export}.
+.2 \dtfoldopen{SAMPLE/}.
+.3 \dtfold{000001/}\DTcomment{bucket of $\le$ limit Samples}.
+.3 \dtarchive{000002.tar.gz}\DTcomment{packed sealed bucket}.
+.2 \dtjson{levelset.json}\DTcomment{AdaptiveBridson runs only}.
+.2 \dtjson{run\_summary.json}.
+.2 \dtcsv{run\_summary.csv}.
+.2 \dtdoc{run\_summary.txt}.
+}
+\end{jfiletree}
+
+Alongside, at the project root: \file{logs/} (Chapter~\ref{ch:logging}),
+\file{images/<scan>/} (the flowchart export and generated figures,
+Chapters~\ref{ch:workflow-model} and~\ref{ch:jarvisplot}), and
+\file{checkpoints/<scan>/} (Chapter~\ref{ch:checkpoint}).
+
+\section{\code{DATABASE/samples.hdf5}}
+\label{sec:database-hdf5}
+
+The primary record: one row per Sample --- succeeded \emph{or failed} --- containing the
+full observables dictionary as a \textsc{json} document: parameters, every captured
+calculator/opera output, likelihood terms and \code{LogL}, the \textsc{uuid}, status,
+timing, and the paths of any \yamlkey{save}d artifacts. Rows are appended in Archiver
+batches (\yamlkey{archiver.batch\_size} with a time-based flush), so the file trails the
+scan by at most a flush interval.
+
+Reading it directly:
+
+\begin{terminal}
+\begin{jcmd}
+python3 - <<'PY'
+import h5py, json
+with h5py.File("outputs/scan-01/DATABASE/samples.hdf5") as f:
+    rows = [json.loads(r) for r in f["samples"][...]]
+print(len(rows), rows[0]["LogL"])
+PY
+\end{jcmd}
+\end{terminal}
+
+\section{\code{DATABASE/samples.csv}}
+\label{sec:database-csv}
+
+A \emph{full-column} flat export of the same records, written at the end of the run:
+every observable becomes a column (nested values as \textsc{json} text), so nothing in
+the \textsc{hdf5} is missing from the \textsc{csv}. For most analysis,
+\code{pandas.read\_csv} on this file is all you need --- and it feeds straight back
+into a \sampler{CSV} replay (Chapter~\ref{ch:csv-sampler}).
+
+Missing this file --- an interrupted run, or a deleted \textsc{csv} --- is not a lost
+cause: \cli{Jarvis2 convert <task>.yaml} regenerates it (and any other
+\file{DATABASE/*.hdf5}) from the \textsc{hdf5} record alone, without touching Redis
+(Section~\ref{sec:cli-convert}).
+
+\section{\code{SAMPLE/}: artifacts}
+\label{sec:sample-outputs}
+
+Per-sample keepsakes --- \yamlkey{save}d input/output files and the Sample's own log ---
+under \file{SAMPLE/<bucket>/<uuid>/}. The bucket policy
+(Section~\ref{sec:sample-directory}) bounds directory sizes and packs finished buckets
+into \file{<bucket>.tar.gz}; the records in the database always carry the artifact
+paths, so locating a specific point's spectrum file is a lookup, not a search.
+
+An opera-only scan that saves nothing keeps \file{SAMPLE/} essentially empty --- the
+directories exist only where content does.
+
+\section{\code{run\_summary}: the end-of-run receipt}
+\label{sec:run-summary-file}
+
+Written at shutdown in three formats (\file{.json} for machines, \file{.csv} for
+spreadsheets, \file{.txt} for humans), with a frozen field order: identity
+(\yamlkey{project\_name}, scan, \yamlkey{run\_id}, timestamps), counters (submitted,
+completed, failed), and throughput --- \code{wall\_time\_sec}, \code{samples\_per\_sec},
+\code{samples\_per\_min}, \code{avg\_sample\_sec}, and per-point evaluation latencies
+where Workers reported them. The same numbers appear in the console's
+\code{[Scan Performance]} block (Chapter~\ref{ch:monitoring}).
+
+\begin{jnote}
+The layout and field order of everything in this chapter is contract-stable
+(Section~\ref{sec:contracts}): pipelines that parse \file{samples.csv} or
+\file{run\_summary.json} survive upgrades.
+\end{jnote}
+
+\begin{jtip}
+Archive \file{outputs/<scan>/} and you have archived the scan: records, artifacts,
+summary --- plus the card itself if you pack at the project level
+(\cli{Jarvis2 project pack . --repro}, Chapter~\ref{ch:project-cli}).
+\end{jtip}

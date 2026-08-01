@@ -1,240 +1,76 @@
 # YAML Example — AdaptiveBridson
 
-Public-facing task-YAML example for **`Sampling.Method: AdaptiveBridson`**
-(feedback-driven level-set tracer, 2 ≤ d ≤ 5).
+Public task-YAML recipes for **`Sampling.Method: AdaptiveBridson`**.
 
-- **As-built code**: `jarvishep2/Sampling/adaptive_bridson.py`
-- **Design**: [`components/adaptive_voronoi_contour.md`](../components/adaptive_voronoi_contour.md)
-- **Full key inventory** (all methods): [`YAML_REFERENCE_2.0.md`](../YAML_REFERENCE_2.0.md)
+| Doc | Role |
+|-----|------|
+| **This file** | Minimal + full YAML examples |
+| [`DESIGN_ADAPTIVE_BRIDSON_LIVE_BAND.md`](../DESIGN_ADAPTIVE_BRIDSON_LIVE_BAND.md) | **Complete algorithm flow** (binding) |
+| [`YAML_REFERENCE_2.0.md`](../YAML_REFERENCE_2.0.md) §6.9 | Full key inventory |
+| Code | `jarvishep2/Sampling/adaptive_bridson.py` |
 
-Other top-level blocks (`EnvReqs`, `Calculators`, `Operas`, …) are shown only as needed.
-**`Sampling` is fully specified** below for documentation use. Redis is an internal V2
-broker (local `127.0.0.1:6379`); it is not configured in task YAML.
-
----
-
-## Annotated skeleton
-
-```yaml
-project_name: adaptive-level-set-example
-
-Scan:
-  name: levelset-01
-  # …
-
-EnvReqs:
-  V2:
-    workers: 4                   # Worker count (default 0 → factory uses 1)
-    batch_size: 256              # submit-group size (sampler submit batches)
-  # Check_default_dependencies:  # optional V1-shaped defaults merge (§ YAML_REFERENCE §4.1)
-  #   required: true
-  #   default_yaml_path: "&J/deps/environment_default.yaml"
-
-Sampling:
-  # ============================================================
-  # AdaptiveBridson — Sampling block (complete for this method)
-  # ============================================================
-
-  Method: AdaptiveBridson       # REQUIRED for this recipe
-                                 # (registered stateless=False; uses hep:feedback)
-
-  Seed: 42                       # int; alias: seed; default 0
-                                 # Master SeedSequence for all generations
-                                 # (gen-0 Bridson/Sobol + every refine generation)
-
-  selection: null                # optional sympy bool over *physical* params
-                                 # (e.g. "m0 + m12 < 3000")
-                                 # Applied to gen-0 and refine candidates before submit;
-                                 # rejected candidates are dropped (not counted as failures)
-
-  Variables:                     # REQUIRED; length must be 2..5 (else ValueError)
-    - name: m0                   # REQUIRED per entry; free sympy name for expressions
-      description: soft mass     # optional; informational only
-      distribution:
-        type: Flat               # Flat | Log | Normal | Log-Normal | Logit
-        parameters:
-          min: 0.0               # Flat/Log: min, max (physical bounds)
-          max: 5000.0
-          # mean / stddev        # Normal / Log-Normal
-          # location / scale     # Logit (defaults 0 / 1)
-          # num: …               # unused by AdaptiveBridson (Grid-only)
-          # length: …            # unused by AdaptiveBridson
-                                 # (u-domain is always the unit cube [0,1]^d)
-    - name: m12
-      distribution:
-        type: Log
-        parameters:
-          min: 100.0
-          max: 3000.0
-    # - name: tanb               # optional 3rd–5th dimension
-    #   distribution: { type: Flat, parameters: { min: 1.0, max: 60.0 } }
-    # d = 2–3 → Delaunay neighbor graph (exact)
-    # d = 4–5 → kNN neighbor graph (proximity-approximate)
-    # d < 2 or d > 5 → ValueError at set_config
-
-  AdaptiveBridson:              # REQUIRED sub-block (name matches Method)
-                                 # alias accepted: adaptive_bridson
-
-    # ---- required ----------------------------------------------------------
-    target_expression: "LogL"    # REQUIRED (non-empty string)
-                                 # expression over *returned* observables
-                                 # (and variable names). Compiled via shared
-                                 # ExpressionContext (same as Likelihood).
-                                 # Avoid free symbols named E / I / pi / gamma / …
-                                 # (remaining sympy collision caveat).
-    target_value: -2.9957        # REQUIRED (float); level-set f(obs) = target_value
-                                 # e.g. 95% CL in ΔLogL units
-
-    # ---- convergence (u-space geometry + function gap) ---------------------
-    contour_precision: 0.01      # float; default 0.01
-                                 # max ‖u_i − u_j‖ over *known* crossing edges
-    function_tolerance: 0.05     # float; default 0.05
-                                 # max |f_i − f_j| over *known* crossing edges
-                                 # Converged only if BOTH are satisfied
-
-    # ---- generation-0 spacing ----------------------------------------------
-    initial_radius: 0.08         # float; default 0.08
-                                 # d ≤ 4: Bridson Poisson-disk radius on [0,1]^d
-                                 # d = 5: Sobol n0 ~ (1/radius)^d (capped; power-of-two)
-
-    # ---- refinement schedule -----------------------------------------------
-    refinement_factor: 0.5       # float; default 0.5 if d ≤ 3, else 0.65
-                                 # refine ball radius = initial_radius
-                                 #                   * factor^generation
-    max_generations: 25          # int ≥ 1; default 25
-                                 # stop after this many refine rounds (partial ok)
-    max_points: 5000             # int ≥ 10; default 5000 if d ≤ 3, else 20000
-                                 # hard cap on evaluated samples
-    max_new_per_generation: 500  # int ≥ 1; default max_points // 10
-                                 # refine budget per generation; edges ordered
-                                 # longest first, then |Δf|, then (i,j)
-    k_ref: 4                     # int ≥ 1; default 4
-                                 # candidates drawn per crossing edge
-                                 # (uniform in d-ball about edge midpoint)
-
-    # ---- neighbor graph ----------------------------------------------------
-    neighbor_graph: auto         # auto | delaunay | knn; default auto
-                                 # auto → delaunay if d ≤ 3, knn if d ≥ 4
-                                 # delaunay at d ≥ 4 allowed but cost-warned
-                                 # knn at d ≤ 3 allowed (tests / calibration)
-    knn_k: 8                     # int ≥ 1; default 4 * d
-                                 # used when graph is kNN (symmetric cKDTree)
-
-    # ---- high-d finalize (optional) ----------------------------------------
-    # slice_pairs:               # list of [name_a, name_b]; d ≥ 4 only
-    #   - [m0, m12]              # default: all unordered pairs of Variables
-    #                            # exports 2-D projections in levelset.json
-
-    # ---- d = 2 polyline polish (optional; currently reserved) --------------
-    # simplify_tolerance: 0.002  # float; optional Douglas-Peucker-style hook
-                                 # (parsed; polyline chaining always runs for d=2)
-
-  # LogLikelihood:               # optional alias of Likelihood.expressions
-  #   - name: LogL               # (lower precedence than top-level Likelihood)
-  #     expression: …
-
-Mapper:
-  # …  (optional; usually auto-derived from Sampling.Variables)
-
-LibDeps:
-  # …
-
-Calculators:
-  # Modules: …
-
-Operas:
-  # Modules: …                   # typical: pure-Python f(obs) operators
-
-Likelihood:
-  # expressions: …               # if target_expression uses LogL / terms
-```
+Redis is an internal V2 broker; it is **not** configured in task YAML.
 
 ---
 
-## Sampling key table (AdaptiveBridson)
+## Algorithm in one page
 
-### Shared `Sampling` keys
+Geometry in **u-space** \(u\in(0,1)^d\). Physical map only for evaluation.
 
-| Key | Required | Type / values | Default | Notes |
-|-----|----------|---------------|---------|--------|
-| `Method` | **yes** | `AdaptiveBridson` | — | Case-sensitive method name |
-| `Seed` | no | int | `0` | Alias `seed`; seeds all generations |
-| `selection` | no | sympy bool string | none | Physical-param filter before submit |
-| `Variables` | **yes** | list of maps | — | Length **2–5**; each needs `name` + `distribution` |
-| `Variables[].name` | **yes** | string | — | Parameter / sympy symbol |
-| `Variables[].description` | no | string | — | Documentation only |
-| `Variables[].distribution.type` | **yes** | `Flat` / `Log` / `Normal` / `Log-Normal` / `Logit` | — | Same catalog as other samplers |
-| `Variables[].distribution.parameters` | **yes** | map | — | Bounds / mean / etc. per type |
-| `AdaptiveBridson` | **yes** | map | — | Alias `adaptive_bridson` |
-| `LogLikelihood` | no | list | — | Alias of top-level `Likelihood.expressions` |
+1. **Gen-0** — global Bridson with `initial_radius` \(r_0\); evaluate \(f\).
+2. **Classify** absolute bands  
+   - core: \(\lvert f-T\rvert \le w_{\mathrm{core}}\) (densify centers)  
+   - frontier: \(w_{\mathrm{core}} < \lvert f-T\rvert \le w_{\mathrm{outer}}\) (support)  
+   - default \(w_{\mathrm{core}} = w_{\mathrm{outer}}/8\)
+3. **Gate** \(t_{\min}, t_{\max}\) from finite \(f\) inside a **\(2\,r_g\)** ball about best  
+   (\(\arg\min\lvert f-T\rvert\)).
+4. **Same-\(r_g\) fill** (many `fill_pass`, generation does **not** advance):  
+   root-correction on straddles → active endpoints (omni probes) → MST bridge  
+   → local Bridson densify in each core’s \(r_g\) ball (blue-noise sep \(=r_g\)).
+5. **When fill is quiet** — if \(t_{\max}-t_{\min} < \tau\) **and** cores cover the  
+   contour → **converged**; else shrink \(r_g \leftarrow \max(r_{\min}, r_g\times\rho)\),  
+   `generation += 1`, rebuild endpoints, densify finer.
+6. Stop also at `min_radius`, `max_generations`, or `max_points`.
 
-### `Sampling.AdaptiveBridson` keys
-
-| Key | Required | Type | Default | Notes |
-|-----|----------|------|---------|--------|
-| `target_expression` | **yes** | string | — | Sympy over returned observables |
-| `target_value` | **yes** | float | — | Level-set constant |
-| `contour_precision` | no | float | `0.01` | Max crossing-edge length in **u-space** |
-| `function_tolerance` | no | float | `0.05` | Max \|f_i − f_j\| on known crossing edges |
-| `initial_radius` | no | float | `0.08` | Gen-0 spacing scale (u-space) |
-| `refinement_factor` | no | float | `0.5` (d≤3) / `0.65` (d≥4) | Radius decay per generation |
-| `max_generations` | no | int ≥ 1 | `25` | Refine round limit |
-| `max_points` | no | int ≥ 10 | `5000` (d≤3) / `20000` (d≥4) | Hard sample budget |
-| `max_new_per_generation` | no | int ≥ 1 | `max_points // 10` | Per-generation refine budget |
-| `k_ref` | no | int ≥ 1 | `4` | Candidates per crossing edge |
-| `neighbor_graph` | no | `auto` / `delaunay` / `knn` | `auto` | Graph builder |
-| `knn_k` | no | int ≥ 1 | `4 * d` | kNN degree (kNN modes) |
-| `slice_pairs` | no | list of `[name, name]` | all pairs | d≥4 projections in `levelset.json` |
-| `simplify_tolerance` | no | float | off | d=2 polish hook (parsed) |
-
-### Related scheduling keys (not under `Sampling`, but affect this method)
-
-| Key | Effect |
-|-----|--------|
-| `EnvReqs.V2.workers` | Worker process count (factory uses 1 when ≤ 0) |
-| `EnvReqs.V2.batch_size` | Sampler submit-group size (default 256 after normalize) |
-
-Distributed AdaptiveBridson always uses the internal Redis runtime (local service required).
-Workers set `publish_feedback: true` automatically when `Method: AdaptiveBridson` (no YAML flag).
+See the design doc for brackets A/B/C/D, coverage, and non-goals.
 
 ---
 
-## Dimension policy (quick)
+## Public knobs (new cards)
 
-| d = `len(Variables)` | Gen-0 | Neighbor graph | Output emphasis |
-|----------------------|-------|----------------|-----------------|
-| 2 | Bridson | Delaunay | Polylines + crossing cloud |
-| 3 | Bridson | Delaunay | Crossing cloud |
-| 4 | Bridson | kNN | Crossing cloud + slice projections; `fidelity: proximity-approximate` |
-| 5 | **Sobol** | kNN | Same as d=4 |
-| else | — | — | `ValueError` at config time |
+| Key | Required | Default | Meaning |
+|-----|----------|---------|---------|
+| `target_expression` | **yes** | — | sympy over returned observables |
+| `target_value` | **yes** | — | level \(T\) |
+| `outer_half_width` | no | `0.02` | discovery \(\lvert f-T\rvert\le w_{\mathrm{outer}}\) |
+| `min_radius` | no | `1/200` | u-space Euclidean floor for \(r_g\) |
 
----
+Derived automatically:
 
-## Outputs
+- `core_half_width = outer_half_width / 8`
+- `threshold = core_half_width`  (stop on \(t_{\max}-t_{\min}\))
 
-| Artifact | Path / notes |
-|----------|----------------|
-| DATABASE / SAMPLE | Unchanged archive path for every evaluated point |
-| Level-set payload | `<task_result_dir>/levelset.json` |
-
-Typical `levelset.json` fields: `dim`, `mode`, `target_expression`, `target_value`,
-`crossing_points_u` / `_x`, `polylines_u` / `_x` (d=2), `slice_projections` (d≥4),
-`n_points_total`, `n_generations`, `converged`, `stop_reason`, `fidelity`,
-`graph_components`, `failed_regions`.
+Everything else has safe internals. Prefer the **minimal** card unless you
+need to override budgets or radii.
 
 ---
 
-## Minimal worked example (2-D circle / opera-only)
+## 1. Minimal example (recommended)
+
+Opera-only 2-D circle — no external calculator. Run from any project with
+V2 installed:
 
 ```yaml
 project_name: circle-levelset
+
 Scan:
   name: circle-r2
+
 EnvReqs:
   V2:
     workers: 2
     batch_size: 8
+
 Sampling:
   Method: AdaptiveBridson
   Seed: 7
@@ -243,14 +79,14 @@ Sampling:
       distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
     - name: y
       distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
+
   AdaptiveBridson:
     target_expression: "r2"
     target_value: 0.04          # circle radius 0.2 about (0.5, 0.5)
-    contour_precision: 0.05
-    function_tolerance: 0.08
-    initial_radius: 0.12
-    max_generations: 12
-    max_points: 800
+    # Optional public tuning (defaults are fine for this toy):
+    # outer_half_width: 0.05
+    # min_radius: 0.005
+
 Operas:
   Modules:
     - name: Circle
@@ -261,4 +97,243 @@ Operas:
         - { name: y, expression: y }
       output:
         - { name: r2, entry: r2 }
+```
+
+```bash
+Jarvis2 run path/to/circle.yaml
+Jarvis2 convert path/to/circle.yaml    # DATABASE/samples.hdf5 → samples.csv
+```
+
+### Physics-style minimal (iDM-shaped Sampling only)
+
+```yaml
+Sampling:
+  Method: AdaptiveBridson
+  Seed: 21
+  Variables:
+    - name: MChi
+      distribution: { type: Log, parameters: { min: 0.1, max: 100.0 } }
+    - name: Y
+      distribution: { type: Log, parameters: { min: 1.0e-10, max: 1.0e-3 } }
+  selection: "Y < 9.5e-4"       # optional physical filter before submit
+
+  AdaptiveBridson:
+    target_expression: "Omega_h2"
+    target_value: 0.12
+    outer_half_width: 0.02      # |Ω − 0.12| ≤ 0.02 discovery support
+    min_radius: 0.002           # final u-space resolution (~1/500)
+```
+
+`core_half_width` / stop threshold become `0.02/8 = 0.0025` automatically.
+Wire `Calculators` / `Likelihood` as in the full example below.
+
+---
+
+## 2. Full example (explicit internals)
+
+Use when you need budgets, graph mode, or to document every control. Values
+below match the production iDM Vector AdaptiveBridson card defaults.
+
+```yaml
+project_name: adaptive-bridson-full
+
+Scan:
+  name: levelset-full
+  save_dir: "&J/outputs"
+  sample_directory:
+    limit: 200
+    width: 6
+    archive_samples: true
+
+EnvReqs:
+  V2:
+    workers: 8
+    batch_size: 32
+  # Check_default_dependencies: …   # optional host env merge
+
+Sampling:
+  Method: AdaptiveBridson
+  Seed: 21
+
+  Variables:                     # length must be 2..5
+    - name: MChi
+      description: "DM mass [GeV]"
+      distribution:
+        type: Log
+        parameters: { min: 0.1, max: 100.0 }
+    - name: Y
+      description: "dimensionless y"
+      distribution:
+        type: Log
+        parameters: { min: 1.0e-10, max: 1.0e-3 }
+    # - name: third_dim          # optional 3rd–5th axis
+    #   distribution: { type: Flat, parameters: { min: 1.0, max: 60.0 } }
+
+  selection: "Y < 9.5e-4"        # optional sympy bool on *physical* params
+
+  AdaptiveBridson:
+    # ---- required ----------------------------------------------------------
+    target_expression: "Omega_h2"
+    target_value: 0.12
+
+    # ---- public tuning (preferred) -----------------------------------------
+    outer_half_width: 0.02       # discovery |f−T| ≤ 0.02
+    min_radius: 0.002            # u-space floor; no denser than this
+
+    # ---- radii / scale (usually leave defaults) ----------------------------
+    initial_radius: 0.10         # r0 gen-0 Bridson + first windows
+    refinement_factor: 0.5       # r_g ← max(min_radius, r_g × factor)
+    # radius_shrink_mode: on_coverage   # default; alias: on_fill
+
+    # ---- derived / legacy (optional overrides; not needed for new cards) ---
+    # core_half_width: 0.0025    # default = outer_half_width / 8
+    # threshold: 0.0025          # default = core_half_width; t_max−t_min stop
+    # function_tolerance: …      # compat alias of threshold
+    # final_half_width: 0.001    # optional tighter export band ≤ core
+
+    # ---- fill / bridge / endpoints -----------------------------------------
+    bridge_gaps: true
+    bridge_span_factor: 2.5      # max core–core bridge = factor × r_g
+    k_ref: 30                    # Bridson trials per densify center
+    quiet_fill_passes: 3         # no-progress passes → scale quiet
+    # max_fill_passes: 64
+    # endpoint_stall_passes: 12
+    # endpoint_omni_probes: 16
+    # core_spacing_factor: 2.0   # coverage: max core NN gap ≤ factor × r_g
+    # min_cores_for_coverage: 4
+    # outer_shrink_factor: 0.7    # anneal w_outer → w_core when brackets clear
+
+    # ---- budgets -----------------------------------------------------------
+    max_generations: 16          # max r_g shrinks (scale index)
+    max_points: 50000
+    max_new_per_generation: 4000 # densify budget per fill_pass
+
+    # ---- neighbor graph (brackets / support; not densify engine) -----------
+    neighbor_graph: auto         # auto | delaunay | knn
+    # knn_k: 8                   # default 4 * d when kNN
+    # slice_pairs: [[MChi, Y]]   # d≥4 projections in levelset.json
+
+  # Optional soft preference (AdaptiveBridson still drives on target_expression)
+  LogLikelihood:
+    - { name: "LogL_Omega", expression: "LogGauss(Omega_h2, 0.1200, 0.0012)" }
+
+Calculators:
+  # Modules: …                 # external tools (e.g. microOMEGAs)
+  #   execution.input / output with save: true → SAMPLE/
+
+# Operas:
+#   Modules: …                 # pure-Python f(obs) operators
+
+# Likelihood:
+#   expressions: …             # if target needs LogL products
+```
+
+Production reference cards:
+
+- `Jarvis-Examples/iDM/bin/iDM_Vector_AdaptiveBridson_Omega.yaml`
+- `Jarvis-Examples/iDM/bin/iDM_Axial_AdaptiveBridson_Omega.yaml`
+
+---
+
+## Sampling key tables
+
+### Shared `Sampling` keys
+
+| Key | Required | Default | Notes |
+|-----|----------|---------|--------|
+| `Method` | **yes** | — | `AdaptiveBridson` (case-sensitive) |
+| `Seed` | no | `0` | alias `seed`; seeds all gens / fill passes |
+| `selection` | no | — | physical-param filter before submit |
+| `Variables` | **yes** | — | length **2–5** |
+| `AdaptiveBridson` | **yes** | — | alias `adaptive_bridson` |
+| `LogLikelihood` | no | — | alias of top-level `Likelihood.expressions` |
+
+### `Sampling.AdaptiveBridson` keys
+
+#### Public (prefer these)
+
+| Key | Required | Default | Notes |
+|-----|----------|---------|--------|
+| `target_expression` | **yes** | — | sympy over observables |
+| `target_value` | **yes** | — | level \(T\) |
+| `outer_half_width` | no | `0.02` | discovery band in \(f\) |
+| `min_radius` | no | `1/200` | u-space Euclidean floor |
+
+#### Common optional
+
+| Key | Default | Notes |
+|-----|---------|--------|
+| `initial_radius` | `0.10` | \(r_0\) |
+| `refinement_factor` | `0.5` | \(r_g\) shrink multiplier |
+| `bridge_gaps` | `true` | MST reconnection |
+| `bridge_span_factor` | `2.5` | max bridge length factor |
+| `max_generations` | `16` | max \(r_g\) shrinks |
+| `max_points` | `50000` | hard sample budget |
+| `max_new_per_generation` | `4000` | densify budget / fill_pass |
+| `k_ref` | `30` | Bridson trials / densify center |
+| `neighbor_graph` | `auto` | `auto` / `delaunay` / `knn` |
+| `knn_k` | `4 * d` | when graph is kNN |
+
+#### Advanced / legacy
+
+| Key | Default | Notes |
+|-----|---------|--------|
+| `core_half_width` | `outer/8` | densify-center half-width |
+| `threshold` | `= core_half_width` | \(t_{\max}-t_{\min}\) stop |
+| `function_tolerance` | — | compat alias of `threshold` |
+| `final_half_width` | null | optional tighter export band |
+| `radius_shrink_mode` | `on_coverage` | or `every_generation` (legacy) |
+| `outer_shrink_factor` | `0.7` | anneal \(w_{\mathrm{outer}}\) |
+| `core_spacing_factor` | `2.0` | coverage NN gap |
+| `min_cores_for_coverage` | `4` | coverage floor |
+| `quiet_fill_passes` | `3` | scale quiescence |
+| `max_fill_passes` | `max(64, 4·max_gen)` | safety |
+| `endpoint_stall_passes` | `12` | retire a front |
+| `endpoint_omni_probes` | `max(16, 4d)` | directions per front / pass |
+| `slice_pairs` | all pairs | d≥4 projections |
+
+### Related scheduling keys
+
+| Key | Effect |
+|-----|--------|
+| `EnvReqs.V2.workers` | Worker process count |
+| `EnvReqs.V2.batch_size` | submit-group size |
+
+Workers get `publish_feedback: true` automatically for AdaptiveBridson.
+
+---
+
+## Dimension policy
+
+| \(d=\) `len(Variables)` | Gen-0 | Neighbor graph | Output emphasis |
+|-------------------------|-------|----------------|-----------------|
+| 2 | Bridson | Delaunay | Polylines + cloud |
+| 3 | Bridson | Delaunay | Crossing cloud |
+| 4 | Bridson | kNN | Cloud + slice projections |
+| 5 | **Sobol** | kNN | Same as d=4 |
+| else | — | — | `ValueError` at config |
+
+---
+
+## Outputs
+
+| Artifact | Path |
+|----------|------|
+| HDF5 archive | `outputs/<scan>/DATABASE/samples.hdf5` |
+| CSV | `Jarvis2 convert <task.yaml>` → `samples.csv` |
+| Level-set JSON | `outputs/<scan>/levelset.json` |
+| SAMPLE | `outputs/<scan>/SAMPLE/…` when `save: true` |
+
+`levelset.json` includes `algorithm: outer_core_root_correction_bridson`,
+radii, bands, convergence flags, and (for d=2) polylines for jplot.
+
+---
+
+## CLI
+
+```bash
+Jarvis2 run    bin/task.yaml
+Jarvis2 check  bin/task.yaml          # fixed-point smoke if configured
+Jarvis2 convert bin/task.yaml         # HDF5 → CSV
+Jarvis2 convert bin/task.yaml --force # overwrite existing CSV
 ```

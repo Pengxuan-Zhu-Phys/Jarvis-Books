@@ -1,0 +1,292 @@
+\chapter{The Expression Language}
+\label{ch:expressions}
+
+\newthought{One language, everywhere.} Every \yamlkey{expression:} field in a task card
+--- opera inputs, calculator \yamlkey{Dump} variables, likelihood terms, sampler
+\yamlkey{selection} cuts, and \sampler{AdaptiveBridson} targets --- is parsed by the same
+engine, with the same function catalog and the same constants. Learn it once here.
+
+\section{The model}
+\label{sec:expr-model}
+
+An expression is a mathematical string over \emph{symbols} that are resolved against the
+observables dictionary at evaluation time:
+
+\begin{yamlwin}
+expression: "sqrt(x**2 + y**2) * exp(-0.5 * z)"
+\end{yamlwin}
+
+Syntax is standard math notation as accepted by
+\textsc{sympy}\sidenote{Internally: \code{sympify} once, \code{lambdify} to a fast
+numerical callable once, then pure numerical calls per Sample. Compilation is cached per
+process by the expression text and its symbol set --- you pay parsing exactly once per
+Worker, not once per point.}: \code{**} for powers, function calls with parentheses,
+and the usual precedence. The result must be numeric; non-numeric inputs raise a
+\code{ValueError} and fail the Sample.
+
+\section{Constants}
+\label{sec:expr-constants}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Name(s)} & \textbf{Value} & \textbf{Note} \\
+    \midrule
+    \code{Pi}, \code{pi}, \code{PI} & $\pi$ & all three spellings \\
+    \code{E}   & $e$      & Euler's number \\
+    \code{Inf} & $\infty$ & positive infinity \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Reserved constants. They take precedence over identically named observables
+  --- do not name a variable \code{E} or \code{pi}.}
+  \label{tab:expr-constants}
+\end{table}
+
+\section{The function catalog}
+\label{sec:expr-catalog}
+
+Thirty-eight functions are always available, grouped below exactly as the runtime
+groups them (\code{jarvishep2/inner\_func.py}, the single source of truth for both
+this table and the engine itself). Each entry gives the call, the mathematical
+operation it performs, and a one-line note where the behavior is not obvious from the
+name alone. Throughout this section, \textbf{\textcolor{jFunc}{function names} are
+dark green} and \textbf{\textcolor{jVar}{variables/arguments} are pink} --- the same
+two colours everywhere in this book.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Call} & \textbf{Value} & \textbf{Note} \\
+    \midrule
+    \code{\func{log}(\variable{x})} & $\mfunc{\ln}(\mvar{x})$ & natural log --- \emph{not} a base-$a$ logarithm \\
+    \code{\func{ln}(\variable{x})}  & $\mfunc{\ln}(\mvar{x})$ & identical to \func{log} \\
+    \code{\func{exp}(\variable{x})} & $e^{\mvar{x}}$  & \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Logarithmic and exponential.}
+  \label{tab:expr-log}
+\end{table}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Call} & \textbf{Value} & \textbf{Note} \\
+    \midrule
+    \code{\func{sin}(\variable{x})}  & $\mfunc{\sin}(\mvar{x})$ & \\
+    \code{\func{cos}(\variable{x})}  & $\mfunc{\cos}(\mvar{x})$ & \\
+    \code{\func{tan}(\variable{x})}  & $\mfunc{\tan}(\mvar{x})$ & \\
+    \code{\func{sec}(\variable{x})}  & $\mfunc{\sec}(\mvar{x})$ & $=1/\cos(x)$ \\
+    \code{\func{csc}(\variable{x})}  & $\mfunc{\csc}(\mvar{x})$ & $=1/\sin(x)$ \\
+    \code{\func{cot}(\variable{x})}  & $\mfunc{\cot}(\mvar{x})$ & $=1/\tan(x)$ \\
+    \code{\func{sinc}(\variable{x})} & $\sin(\mvar{x})/\mvar{x}$ & \emph{un}normalised convention; \code{\func{sinc}(0)} $=1$ \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Trigonometric.}
+  \label{tab:expr-trig}
+\end{table}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Call} & \textbf{Value} & \textbf{Note} \\
+    \midrule
+    \code{\func{asin}(\variable{x})}     & $\sin^{-1}(\mvar{x})$ & \\
+    \code{\func{acos}(\variable{x})}     & $\cos^{-1}(\mvar{x})$ & \\
+    \code{\func{atan}(\variable{x})}     & $\tan^{-1}(\mvar{x})$ & \\
+    \code{\func{asec}(\variable{x})}     & $\sec^{-1}(\mvar{x})$ & $=\cos^{-1}(1/x)$ \\
+    \code{\func{acsc}(\variable{x})}     & $\csc^{-1}(\mvar{x})$ & $=\sin^{-1}(1/x)$ \\
+    \code{\func{acot}(\variable{x})}     & $\cot^{-1}(\mvar{x})$ & $=\tan^{-1}(1/x)$ \\
+    \code{\func{atan2}(\variable{y}, \variable{x})} & $\tan^{-1}(\mvar{y}/\mvar{x})$ & both real; range $(-\pi,\pi]$ \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Inverse trigonometric.}
+  \label{tab:expr-atrig}
+\end{table}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Call} & \textbf{Value} & \textbf{Note} \\
+    \midrule
+    \code{\func{sinh}(\variable{x})} & $\mfunc{\sinh}(\mvar{x})$ & \\
+    \code{\func{cosh}(\variable{x})} & $\mfunc{\cosh}(\mvar{x})$ & \\
+    \code{\func{tanh}(\variable{x})} & $\mfunc{\tanh}(\mvar{x})$ & \\
+    \code{\func{sech}(\variable{x})} & $\operatorname{sech}(\mvar{x})$ & $=1/\cosh(x)$ \\
+    \code{\func{csch}(\variable{x})} & $\operatorname{csch}(\mvar{x})$ & $=1/\sinh(x)$ \\
+    \code{\func{coth}(\variable{x})} & $\mfunc{\coth}(\mvar{x})$ & $=1/\tanh(x)$ \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Hyperbolic.}
+  \label{tab:expr-hyp}
+\end{table}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Call} & \textbf{Value} & \textbf{Note} \\
+    \midrule
+    \code{\func{asinh}(\variable{x})} & $\sinh^{-1}(\mvar{x})$ & \\
+    \code{\func{acosh}(\variable{x})} & $\cosh^{-1}(\mvar{x})$ & \\
+    \code{\func{atanh}(\variable{x})} & $\tanh^{-1}(\mvar{x})$ & \\
+    \code{\func{acoth}(\variable{x})} & $\coth^{-1}(\mvar{x})$ & $=\tanh^{-1}(1/x)$ \\
+    \code{\func{asech}(\variable{x})} & $\operatorname{sech}^{-1}(\mvar{x})$ & $=\cosh^{-1}(1/x)$ \\
+    \code{\func{acsch}(\variable{x})} & $\operatorname{csch}^{-1}(\mvar{x})$ & $=\sinh^{-1}(1/x)$ \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Inverse hyperbolic.}
+  \label{tab:expr-ahyp}
+\end{table}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Call} & \textbf{Value} & \textbf{Note} \\
+    \midrule
+    \code{\func{sqrt}(\variable{x})}        & $\sqrt{\mvar{x}}$      & \\
+    \code{\func{root}(\variable{x}, \variable{n})}     & $\sqrt[\mvar{n}]{\mvar{x}}$   & optional 3rd arg picks a complex branch
+      (default: principal root) \\
+    \code{\func{Abs}(\variable{x})}         & $|\mvar{x}|$           & \\
+    \code{\func{Min}(\variable{x}, \variable{y}, \ldots)} & $\min(\mvar{x},\mvar{y},\ldots)$ & any number of arguments, not
+      just two \\
+    \code{\func{Max}(\variable{x}, \variable{y}, \ldots)} & $\max(\mvar{x},\mvar{y},\ldots)$ & any number of arguments, not
+      just two \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{General math.}
+  \label{tab:expr-genmath}
+\end{table}
+
+\begin{fullwidth}
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.30\linewidth}p{0.30\linewidth}p{0.36\linewidth}@{}}
+    \toprule
+    \textbf{Call} & \textbf{Value} & \textbf{Note} \\
+    \midrule
+    \code{\func{Gauss}(\variable{x}, \variable{mu}, \variable{sigma})} &
+      $\exp\!\left(-\frac{(\mvar{x}-\mvar{\mu})^2}{2\mvar{\sigma}^2}\right)$ &
+      unnormalised kernel (\emph{not} a log) \\
+    \code{\func{Normal}(\variable{x}, \variable{mu}, \variable{sigma})} &
+      $\frac{1}{\mvar{\sigma}\sqrt{2\pi}}\exp\!\left(-\frac{(\mvar{x}-\mvar{\mu})^2}{2\mvar{\sigma}^2}\right)$ &
+      the normalised density \\
+    \code{\func{LogGauss}(\variable{x}, \variable{mu}, \variable{sigma})} &
+      $-\frac{(\mvar{x}-\mvar{\mu})^2}{2\mvar{\sigma}^2}$ &
+      $\ln(\func{Gauss})$; the workhorse of likelihood terms \\
+    \code{\func{Heaviside}(\variable{x})} & $H(\mvar{x})$ & $H(0)=0.5$ by default; an optional 2nd argument
+      overrides the value at $x=0$ \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Probability / shape kernels.}
+  \label{tab:expr-prob}
+\end{table}
+\end{fullwidth}
+
+\begin{jnote}
+Three behaviors are easy to assume wrongly from other tools' conventions:
+\func{log} takes \textbf{one} argument and is natural log --- there is no
+\code{\func{log}(\variable{x}, base)} form; \func{sinc} follows the
+\emph{unnormalised} $\sin(x)/x$ convention, not the normalised $\sin(\pi x)/(\pi x)$
+some libraries default to; and \func{Min}/\func{Max} accept any number of arguments,
+so \code{\func{Min}(\variable{a}, \variable{b}, \variable{c})} is valid.
+\end{jnote}
+
+\begin{jwarn}
+Domain violations --- \func{sqrt} of a negative number, \func{log} of a non-positive
+one --- raise their usual public errors and \textbf{fail the Sample}, rather than
+propagating a silent \code{nan} into your likelihood.
+\end{jwarn}
+
+\section{Extension functions from \Operas}
+\label{sec:expr-operas-functions}
+
+Beyond the built-ins, every operator registered with the \Operas\ package is callable in
+any expression by its qualified name:
+
+\begin{yamlwin}
+expression: "math.add(x, y) + 2 * physics.width_ratio(mh, mw)"
+\end{yamlwin}
+
+Discovery is automatic: persisted user functions and installed \Operas\ entry points are
+found independently by each Worker at startup --- there is no registration block in the
+task card. \cli{Jarvis2 operas list} shows what is callable
+(Chapter~\ref{ch:jarvis-operas}).
+
+\section{Symbols, names, and collisions}
+\label{sec:expr-collisions}
+
+Symbols in an expression resolve against the observables dictionary
+(Section~\ref{sec:observables}): parameters, captured outputs, and earlier likelihood
+terms. Two naming rules keep you out of trouble:
+
+\begin{jwarn}
+\textbf{Avoid observable names that shadow mathematical notation.} The reserved constants
+always win (\code{Pi}/\code{pi}/\code{PI}, \code{E}, \code{Inf}); and an observable that a given expression's
+compiled contract does not explicitly declare can collide with \textsc{sympy} built-ins
+such as \code{I}, \code{N}, \code{beta}, \code{gamma}, or \code{lambda}
+(\code{lambda} is additionally a Python keyword). Prefer descriptive names ---
+\code{mh}, \code{beta\_eff}, \code{gamma\_inv} are all safe; bare \code{beta} is asking
+for a surprise.
+\end{jwarn}
+
+\begin{jnote}
+Compiled expressions are process-local runtime state: they are never placed in Redis or
+checkpoints, and are rebuilt from the task card after every Worker spawn or resume. You
+cannot --- and never need to --- serialize them.
+\end{jnote}
+
+\section{Where each expression field is evaluated}
+\label{sec:expr-where}
+
+\begin{fullwidth}
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.22\linewidth}p{0.18\linewidth}p{0.56\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{Evaluated in} & \textbf{Over} \\
+    \midrule
+    \yamlkey{Operas.input[].\allowbreak{}expression} & Worker & params + upstream observables \\
+    Calculator \yamlkey{Dump} \yamlkey{expression} & Worker & params + upstream observables \\
+    \yamlkey{Likelihood} terms & Worker & full observables \\
+    \yamlkey{Sampling.\allowbreak{}selection} & control process & physical parameters \\
+    \yamlkey{AdaptiveBridson.\allowbreak{}target\_expression} & control process & returned observables \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Evaluation sites. Worker-side fields compile once per Worker; control-side
+  fields once per run.}
+  \label{tab:expr-where}
+\end{table}
+\end{fullwidth}

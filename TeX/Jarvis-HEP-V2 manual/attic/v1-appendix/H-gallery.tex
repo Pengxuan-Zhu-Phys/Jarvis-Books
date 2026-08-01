@@ -1,0 +1,85 @@
+\chapter{Example Gallery}
+\label{app:gallery}
+
+\newthought{Complete, runnable cards} to copy from. Several full examples already appear in the
+chapters (Table~\ref{tab:gallery}); below is one compact end-to-end card you can run as-is.
+
+\section{Where the complete examples live}
+\label{sec:gal-where}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lp{0.42\linewidth}l@{}}
+    \toprule
+    \textbf{Example} & \textbf{Shows} & \textbf{Where} \\
+    \midrule
+    MCMC $+$ Operas quick-start & full card: sampling, opera, likelihood & \ref{ch:quickstart} \\
+    CSV replay                  & re-running tabulated points            & \ref{ch:quickstart} \\
+    Spectrum calculator         & the five-phase \yamlkey{Calculators} block & \ref{ch:calculators} \\
+    EggBox opera                & an \yamlkey{Operas} module             & \ref{ch:operas} \\
+    HepMC $\to$ Pythia8         & \yamlkey{LibDeps} install recipe       & \ref{ch:libdeps} \\
+    Profile1D nuisance          & an inner nuisance step                 & \ref{ch:nuisance} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Complete worked examples elsewhere in the manual.}
+  \label{tab:gallery}
+\end{table}
+
+\section{A minimal end-to-end card}
+\label{sec:gal-minimal}
+
+This card scans two variables with \sampler{Random}, evaluates the \code{helper.eggbox2d} operator,
+and scores the result---everything a run needs, in one place:
+
+\begin{yamlwin}[eggbox\_min.yaml]
+Scan:
+  name: "eggbox_min"
+  save_dir: "&J/outputs"
+
+Sampling:
+  Method: "Random"
+  Point number: 2000
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0, max: 5}}
+    - name: y
+      distribution: {type: Flat, parameters: {min: 0, max: 5}}
+  LogLikelihood:
+    - {name: "LogL_Z", expression: "LogGauss(z, 100, 10)"}
+
+EnvReqs:
+  OS:
+    - {name: linux,  version: ">=5.10.0"}
+    - {name: Darwin, version: ">=10.14"}
+  Python:
+    version: ">=3.10"
+    Dependencies: []
+
+Operas:
+  make_paraller: 4
+  Modules:
+    - name: EggBox
+      operator: "helper.eggbox2d"
+      call_mode: call
+      required_modules: []
+      input:
+        - {name: x, expression: "x"}
+        - {name: y, expression: "y"}
+      output:
+        - {name: z, entry: z}
+\end{yamlwin}
+
+\noindent Save it in a project's \file{bin/} and run \cmd{Jarvis} \file{bin/eggbox\_min.yaml}. From
+here, swap \sampler{Random} for any sampler in Part~\ref{part:samplers}, or replace \yamlkey{Operas}
+with a \yamlkey{Calculators} block (Chapter~\ref{ch:calculators}) to drive a real \textsc{hep} tool.
+
+\section{Where to go from here}
+\label{sec:gal-next}
+
+\begin{itemize}
+  \item Fetch a curated example: \cmd{Jarvis project fetch} \textit{name}
+        (Chapter~\ref{ch:project-cli}).
+  \item Onboard your own tool with the \sampler{CSV}-first pattern
+        (Chapter~\ref{ch:calculators}).
+  \item Plot the results with \JPlot\ (Chapter~\ref{ch:jarvisplot}).
+\end{itemize}

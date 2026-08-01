@@ -1,0 +1,100 @@
+\chapter{The Jarvis-Operas Package}
+\label{ch:jarvis-operas}
+
+\newthought{A registry of reusable operators.} \Operas\ is the core plugin package
+behind two features you have already met: named operators for \yamlkey{Operas.Modules}
+(Chapter~\ref{ch:operas}) and qualified functions callable inside every expression
+(Chapter~\ref{ch:expressions}). This chapter explains the registry itself: what lives
+in it, how Workers discover it, and how to put your own functions in.
+
+\section{What the registry holds}
+\label{sec:operas-registry}
+
+Functions live under namespaces --- \code{math.add}, \code{helper.eggbox2d},
+\code{user.my\_loglike} --- populated from three sources:
+
+\begin{itemize}
+  \item \textbf{built-ins and catalog functions} shipped with the package;
+  \item \textbf{persisted user operators} --- functions you register once with
+        \Operas's own tools, stored so any process can rediscover them;
+  \item \textbf{entry points} --- any installed Python package advertising
+        \code{jarvis\_operas.core} or \code{jarvis\_operas.user} entry points.
+\end{itemize}
+
+Inspect an installation from the command line:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 operas list            # every registered name, by namespace
+Jarvis2 operas info math.add   # signature and documentation
+\end{jcmd}
+\end{terminal}
+
+\section{The two consumption paths}
+\label{sec:operas-consumption}
+
+\paragraph{As a workflow step.} A registered name is a valid
+\yamlkey{Operas.Modules[].operator} --- tried after dotted-import resolution
+(Section~\ref{sec:opera-resolution}):
+
+\begin{yamlwin}
+Operas:
+  Modules:
+    - name: EggBox
+      operator: helper.eggbox2d
+      output: [{name: z, entry: z}]
+\end{yamlwin}
+
+\paragraph{Inside expressions.} Every registered function is callable by its qualified
+name in any expression field --- likelihood terms, opera inputs, \yamlkey{Dump}
+variables, \yamlkey{selection}, \sampler{AdaptiveBridson} targets:
+
+\begin{yamlwin}
+Likelihood:
+  expressions:
+    - name: LogL
+      expression: user.external_loglike(x, y)
+\end{yamlwin}
+
+There is deliberately \emph{no} function-declaration block in the task card: the card
+names functions; the registry provides them.
+
+\section{Discovery and the spawn boundary}
+\label{sec:operas-discovery}
+
+Each Worker is a fresh \code{spawn} process, so each discovers the registry
+independently at startup --- persisted operators and entry points are found, a local
+parsing/numerical snapshot is built, and compiled expressions call the snapshotted
+functions directly with no per-Sample registry lookups. Discovery is demand-gated:
+cards using only built-in functions never initialize the package at all.
+
+\begin{jwarn}
+The spawn boundary has one consequence worth engraving: \textbf{a function registered
+ad hoc in your launching Python process does not exist in the Workers.} Anything the
+card references must be rediscoverable --- persist it into the registry or install it
+as an entry point. ``Works in my notebook, \code{NameError} in the Worker'' is this
+rule, every time.
+\end{jwarn}
+
+\section{Registering your own}
+\label{sec:operas-registering}
+
+Two supported routes:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Persist with \Operas's tools] --- register the function once via the package's
+        own \textsc{cli}/\textsc{api} (see its documentation); it lands in the
+        persisted user store under \code{user.<name>} and every Worker on the machine
+        finds it. Quickest for personal, single-machine work.
+  \item[Package an entry point] --- expose the function from an installed package
+        under the \code{jarvis\_operas.user} (or \code{core}) entry-point group. The
+        right answer for anything shared: versioned, \code{pip}-installable on the
+        cluster, visible to \cli{Jarvis2 operas list} everywhere.
+\end{description}
+
+\begin{jtip}
+Keep registered functions \emph{pure and picklable-free}: take numbers, return
+numbers (or a mapping, for operator use); load heavy assets lazily inside the module,
+not at import. That keeps Worker startup fast and makes the same function usable both
+as a workflow operator and inside a likelihood expression.
+\end{jtip}

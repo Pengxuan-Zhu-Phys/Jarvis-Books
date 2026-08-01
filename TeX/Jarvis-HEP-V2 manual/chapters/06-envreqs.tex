@@ -1,0 +1,175 @@
+\chapter{EnvReqs \& Runtime Settings}
+\label{ch:envreqs}
+
+\newthought{One block controls the machinery.} \yamlkey{EnvReqs} carries two things: a
+V1-heritage entry point for \emph{shared default settings}, and the \yamlkey{V2} map ---
+the only place scheduling, \file{SAMPLE/} layout, and archiving policy are configured.
+There are deliberately few knobs; this chapter is all of them.
+
+\section{Shared defaults: \yamlkey{Check\_default\_dependencies}}
+\label{sec:check-default-deps}
+
+Projects that keep a common environment file can load runtime defaults from it:
+
+\begin{yamlwin}
+EnvReqs:
+  Check_default_dependencies:
+    required: true
+    default_yaml_path: "&J/deps/environment_default.yaml"
+\end{yamlwin}
+
+When \yamlkey{required} is true, the loader resolves \yamlkey{default\_yaml\_path} (normal
+\marker{\&J/} rules), loads that file, and reads \emph{only} its \yamlkey{EnvReqs.V2} map.
+Those defaults are recursively merged under the task's own \yamlkey{EnvReqs.V2} --- the
+task always wins. With \yamlkey{required: false} the file is skipped; a required but
+missing or malformed file fails the load with a focused error.
+
+\begin{jnote}
+Other keys in \yamlkey{EnvReqs} --- \yamlkey{OS}, \yamlkey{Python},
+\yamlkey{CERN\_ROOT}, and similar dependency declarations --- are preserved as metadata
+but not validated at load time. Only \yamlkey{EnvReqs.V2} changes runtime behavior.
+\end{jnote}
+
+\section{The \yamlkey{V2} map}
+\label{sec:v2-map}
+
+\begin{yamlwin}
+EnvReqs:
+  V2:
+    workers: 4                # Worker processes
+    batch_size: 256           # sampler submit-group size
+    sample_directory:         # SAMPLE/ bucket policy      (S 5.3)
+      enabled: true
+      limit: 200
+      width: 6
+      pack: true
+      start_bucket: 1
+    cleanup:                  # result handoff policy      (S 5.4)
+      strategy: direct        # direct | mv_to_staging
+    archiver:                 # persistence policy         (S 5.5)
+      mode: process           # process | thread
+      handoff: direct
+      pack_buckets: true
+      batch_size: 200
+      flush_interval_sec: 1.0
+      delete_after_archive: true
+\end{yamlwin}
+
+\begin{jwarn}
+\yamlkey{EnvReqs.V2} is validated strictly: an \emph{unknown} key here is a hard error at
+load time, so stale settings cannot silently change a run. The \emph{values}, by
+contrast, are coerced leniently (Section~\ref{sec:validation}).
+\end{jwarn}
+
+\section{Scheduling: \yamlkey{workers} and \yamlkey{batch\_size}}
+\label{sec:workers}
+
+\begin{keylist}
+  \item[workers] \opt, integer $\geq 0$, default \code{0}. The number of long-lived
+        Worker processes. Zero or negative means \emph{one} Worker. The singular alias
+        \yamlkey{worker} is accepted; do not write both.
+  \item[batch\_size] \opt, integer $> 0$, default \code{256}. How many task
+        dictionaries the sampler pushes to Redis per submit group. This is queue
+        pipelining only --- execution is always one Sample per Worker --- so the default
+        is almost always right.
+\end{keylist}
+
+Sizing \yamlkey{workers} is the single most important performance decision you make;
+Chapter~\ref{ch:performance} gives the full guidance. The short version: for
+calculator-bound scans, set it near the number of calculator invocations your machine (and
+license pool) can genuinely sustain.
+
+\section{\yamlkey{sample\_directory}: the SAMPLE bucket policy}
+\label{sec:sample-directory}
+
+Controls the bucketed layout introduced in Section~\ref{sec:sample-lifecycle}:
+\file{SAMPLE/\allowbreak{}<bucket>/\allowbreak{}<uuid>/}, packed to \file{<bucket>.\allowbreak{}tar.\allowbreak{}gz} after archiving. The
+same map is also accepted as \yamlkey{Scan.\allowbreak{}sample\_directory}.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Default} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{enabled} & \code{true} & allocate Samples to buckets on pull \\
+    \yamlkey{limit}   & \code{200}  & Samples per bucket directory \\
+    \yamlkey{width}   & \code{6}    & zero-pad width of bucket names (\file{000001}) \\
+    \yamlkey{pack}    & \code{true} & tar a bucket once fully archived \\
+    \yamlkey{start\_bucket} & \code{1} & first bucket number \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\yamlkey{sample\_directory} keys.}
+  \label{tab:sample-directory}
+\end{table}
+
+A bucket is packed only when it is sealed, no Sample in it is still active, and every
+Sample in it has been archived to the database --- packing can never outrun persistence.
+
+\section{\yamlkey{cleanup}: result handoff}
+\label{sec:cleanup}
+
+\begin{keylist}
+  \item[strategy] \code{direct} (default) or \code{mv\_to\_staging}. With
+        \code{direct}, a finished Sample's products are already in their final home
+        under \file{SAMPLE/} and the Archiver only writes database records. With
+        \code{mv\_to\_staging}, the Worker first moves the Sample directory into a
+        staging area and the Archiver moves it onward --- a buffer hop for setups where
+        final storage is slow or remote.
+\end{keylist}
+
+The same map may be written as \yamlkey{Calculators.Cleanup}, where a
+\yamlkey{staging\_dir} override is also available (default
+\file{<task\_result\_dir>/staging}); the task-card value wins over the
+\yamlkey{EnvReqs.V2} value.
+
+\section{\yamlkey{archiver}: persistence policy}
+\label{sec:archiver-policy}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Default} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{mode} & \code{process} & dedicated Archiver process, or a thread in the
+                                       control process (\code{thread}) \\
+    \yamlkey{handoff} & \code{direct} & mirrors \yamlkey{cleanup.strategy} \\
+    \yamlkey{pack\_buckets} & \code{true} & tar sealed buckets after archiving \\
+    \yamlkey{batch\_size} & \code{200} & Samples buffered per database flush \\
+    \yamlkey{flush\_interval\_sec} & \code{1.0} & time-based flush for partial batches
+                                                  (floor \code{0.05}) \\
+    \yamlkey{strategy} & \code{move} & \code{move} or \code{copy} when a staging hop is
+                                       active \\
+    \yamlkey{delete\_after\_archive} & \code{true} & remove staging residue when a
+                                                     staging hop is active \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\yamlkey{archiver} keys. Also writable as \yamlkey{Calculators.Archiver};
+  task values win.}
+  \label{tab:archiver-keys}
+\end{table}
+
+The defaults --- a dedicated process, direct handoff, batched flushes, packed buckets ---
+are the production configuration; Chapter~\ref{ch:distributed-runtime} explains the
+machinery behind them and when to deviate.
+
+\section{What is \emph{not} here}
+\label{sec:not-here}
+
+Deliberate omissions, so you do not go looking for them:
+
+\begin{itemize}
+  \item \textbf{Redis connection settings.} The broker is always the local service on
+        the default port (Chapter~\ref{ch:installation}).
+  \item \textbf{Per-sampler thread counts or worker pinning.} Workers compete on one
+        shared queue; there is nothing to pin.
+  \item \textbf{A mode switch.} There is exactly one runtime path
+        (Section~\ref{sec:runtime-picture}).
+\end{itemize}

@@ -1,0 +1,158 @@
+\chapter{Installation}
+\label{ch:installation}
+
+\newthought{Getting \Jarvis\ onto your machine} takes a single \cli{pip} command. This
+chapter covers the quick install, the optional extras, how to verify the result, and how to
+keep \Jarvis\ in a clean, isolated environment so it never collides with your other Python
+work.
+
+\section{What you install}
+\label{sec:what-you-install}
+
+\Jarvis\ is distributed on \textsc{PyPI} as a small ecosystem of Python packages
+(Table~\ref{tab:packages}). The core package, \code{Jarvis-HEP}, is the only one you must
+install explicitly; it pulls in \Operas\ automatically because the built-in quick-starts use
+it.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    \textbf{Package} & \textbf{Provides} & \textbf{How it arrives} \\
+    \midrule
+    \code{Jarvis-HEP}        & core runner, samplers, \textsc{cli} (\cmd{Jarvis}) & you install it \\
+    \code{Jarvis-Operas}     & in-process operators (\cmd{jopera})               & pulled in automatically \\
+    \code{Jarvis-HEP-Portal} & supporting runtime services                       & pulled in automatically \\
+    \code{JarvisPLOT}        & plotting \& flowchart rendering (\cmd{jplot})      & optional, install separately \\
+    \bottomrule
+  \end{tabular}
+  \caption{The \Jarvis\ package ecosystem on \textsc{PyPI}.}
+  \label{tab:packages}
+\end{table}
+
+\begin{jnote}
+Most users never need a \textsc{git} checkout of the framework. Install from \textsc{PyPI}
+and work inside a standalone \emph{project} directory (Chapter~\ref{ch:core-concepts}).
+\end{jnote}
+
+\section{Requirements}
+\label{sec:requirements}
+
+\Jarvis\ runs on \textbf{Python 3.10 and newer}, on Linux and macOS. The ``3.10+'' is a
+\emph{supported, continuously-tested range}, not an arbitrary floor: before every release the
+test suite runs automatically across the supported 3.10+ interpreters, so any version in that
+range is one we have actually validated.\sidenote{If you must use an older Python, \Jarvis\
+will not install---upgrade the interpreter or create a dedicated 3.10+ environment as in
+Section~\ref{sec:clean-env}.}
+
+\begin{jtip}
+Install into a \emph{clean virtual environment}. It keeps \Jarvis's dependency set (NumPy,
+SciPy, h5py, PyTorch, and friends) from clashing with other projects, and makes the whole
+thing trivial to remove later.
+\end{jtip}
+
+\section{Quick install}
+\label{sec:quick-install}
+
+For most users, one command is enough:
+
+\begin{shellbox}
+python3 -m pip install -U Jarvis-HEP
+\end{shellbox}
+
+\noindent The \cli{-U} flag upgrades \Jarvis\ and its dependencies to the latest compatible
+versions. This installs the \cmd{Jarvis} executable as a console entry point on your
+\code{PATH} (Section~\ref{sec:verify} shows how to confirm where it landed).
+
+\section{Optional extras}
+\label{sec:extras}
+
+Beyond the core package, two optional pieces are commonly added: the plotting sibling
+package, and any external backends that a particular sampler or calculator needs.
+
+\paragraph{Plotting} lives in the separate \code{JarvisPLOT} package, which provides the
+\cmd{jplot} command and is what \cli{Jarvis ... -{}-plot} hands off to
+(Chapter~\ref{ch:jarvisplot}):
+
+\begin{shellbox}
+python3 -m pip install -U JarvisPLOT
+\end{shellbox}
+
+\paragraph{External backends} such as \textsc{MultiNest}, \textsc{Diver}, or CERN
+\textsc{root} are independent native programs. Install them following their own
+instructions; \Jarvis\ detects and drives them when your task card asks for them. A few
+optional Python-based samplers likewise depend on extra packages. In every case the relevant
+sampler chapter in Part~\ref{part:samplers} states the exact prerequisite and how to install
+it, so you only ever add what your scan actually uses.
+
+\begin{jnote}
+A full ``everything'' install is simply the three \textsc{PyPI} packages together:
+\begin{shellbox}
+python3 -m pip install -U Jarvis-HEP Jarvis-Operas JarvisPLOT
+\end{shellbox}
+After it you will have the \cmd{Jarvis}, \cmd{jopera}, and \cmd{jplot} commands.
+\end{jnote}
+
+\section{A clean environment (recommended)}
+\label{sec:clean-env}
+
+Any environment manager works---\code{venv}, \code{conda}, \code{uv}, or \code{pyenv}---as
+long as it gives you an isolated 3.10+ interpreter. A \code{pyenv}~+~\code{virtualenv}
+recipe:
+
+\begin{shellbox}
+pyenv install 3.10.12
+pyenv virtualenv 3.10.12 jarvis-hep
+pyenv activate jarvis-hep
+python3 -m pip install -U Jarvis-HEP
+\end{shellbox}
+
+\noindent The plain-\code{venv} equivalent:
+
+\begin{shellbox}
+python3 -m venv ~/.venvs/jarvis-hep
+source ~/.venvs/jarvis-hep/bin/activate
+python3 -m pip install -U Jarvis-HEP
+\end{shellbox}
+
+\section{Verifying the install}
+\label{sec:verify}
+
+Two commands confirm everything is in place:
+
+\begin{shellbox}
+Jarvis --version
+Jarvis --help
+\end{shellbox}
+
+\noindent \cli{Jarvis -{}-version} prints the \Jarvis\ banner and the runtime version of the
+installed package (Figure~\ref{fig:version-banner})---a quick way to check exactly which
+release you are running. The coloured dot-matrix on the left is the \Jarvis\ icon; the wordmark
+fades from blue to gold, and the final line carries the live version of \emph{your} install.
+
+\begin{figure}[ht]
+\centering
+\JarvisVersionBanner
+\caption[The \cli{Jarvis -{}-version} banner.]{The \cli{Jarvis -{}-version} banner, reproduced
+in the project's own palette. The version on the last line is read from your installed package
+at runtime; here it shows the release this manual documents.}
+\label{fig:version-banner}
+\end{figure}
+
+\noindent \cli{Jarvis -{}-help} prints the two entry points (a \textsc{yaml} file, or a
+\cli{project} subcommand) and the available options; the full \textsc{cli} is documented in
+Chapter~\ref{ch:cli}.
+
+\begin{jwarn}
+If your shell reports \cli{Jarvis: command not found}, the executable is not on your
+\code{PATH}---almost always because you installed into a different environment than the one
+you are using now. Re-activate the environment where you ran \cli{pip install}, and confirm
+with \cli{which Jarvis}. Under \code{pyenv}, \cmd{Jarvis} lives in that version's \code{bin/}
+directory.
+\end{jwarn}
+
+\section{Where to go next}
+\label{sec:install-next}
+
+With \Jarvis\ installed and verified, head to Chapter~\ref{ch:quickstart} to create a project
+and run your first scan in a couple of minutes.

@@ -1,0 +1,136 @@
+\chapter{Bridson}
+\label{ch:bridson}
+
+\newthought{Blue-noise coverage.} The \sampler{Bridson} method fills u-space with points
+that are never closer than a chosen radius --- Poisson-disk sampling, generated with
+Bridson's dart-throwing algorithm.\cite{Bridson:2007} The result covers space as evenly
+as a grid but without its axis-aligned artifacts, and as irregularly as random draws but
+without their clumps and voids. It is the recommended default for mapping a parameter
+space you intend to interpolate, plot, or train a surrogate on.
+
+\section{Configuration}
+\label{sec:bridson-config}
+
+\begin{yamlwin}
+Sampling:
+  Method: Bridson
+  Radius: 0.35            # REQUIRED: min u-space distance between points
+  MaxAttempt: 30          # REQUIRED: candidates per active point (k)
+  Seed: 42
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0, length: 1.0}}
+    - name: y
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0, length: 1.0}}
+\end{yamlwin}
+
+\begin{keylist}
+  \item[Radius] \req\ (\code{KeyError} if absent). The minimum distance between any two
+        accepted points, \emph{in u-space}. This is the resolution dial: the expected
+        point count scales like $(\mathrm{length}/\mathrm{Radius})^d$.
+  \item[MaxAttempt] \req. Bridson's $k$ --- candidate darts thrown around each active
+        point before it retires. $30$ is the standard literature value; it bounds the
+        \emph{placement} algorithm only and has nothing to do with \yamlkey{selection}
+        retries.
+  \item[MaxWorker] \opt, default \yamlkey{EnvReqs.V2.workers}. Caps in-flight proposals
+        during submission.
+  \item[parameters.length] \req\ \emph{per variable} (\code{KeyError} if absent): the
+        u-space box edge for that dimension. With \code{length: 1.0} everywhere the
+        domain is the unit cube; a larger \yamlkey{length} stretches that dimension's
+        share of the distance metric --- effectively finer sampling along it.
+\end{keylist}
+
+The point count is \emph{emergent}: the generator packs points until no more fit. After
+generation the count is reported in the logs before submission starts
+(\code{NSamples}), so abort early if it is not what you expected.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.22\linewidth}>{\raggedleft\arraybackslash}p{0.24\linewidth}>{\raggedleft\arraybackslash}p{0.24\linewidth}>{\raggedleft\arraybackslash}p{0.24\linewidth}@{}}
+    \toprule
+    \yamlkey{Radius} & $d=2$ & $d=3$ & $d=4$ \\
+    \midrule
+    0.35  & $\sim$10    & $\sim$30     & $\sim$80 \\
+    0.10  & $\sim$130   & $\sim$1{,}500 & $\sim$18{,}000 \\
+    0.05  & $\sim$520   & $\sim$12{,}000 & $\sim$290{,}000 \\
+    0.02  & $\sim$3{,}200 & $\sim$190{,}000 & $\sim$$10^7$ \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Order-of-magnitude accepted point counts on the unit cube. Generate first,
+  check \code{NSamples}, then commit the compute.}
+  \label{tab:bridson-counts}
+\end{table}
+
+\begin{jwarn}
+Both \yamlkey{Radius} and \yamlkey{length} are u-space quantities. Distances between
+\emph{physical} points depend on each variable's distribution --- a \code{Log} variable
+packs more physical resolution per unit of u near its lower bound. That is usually
+exactly what you want; just do not read \yamlkey{Radius} as GeV.
+\end{jwarn}
+
+\section{How it behaves in the runtime}
+\label{sec:bridson-runtime}
+
+Generation happens once, at startup, in the control process; it is pure geometry and
+costs seconds up to $\sim$$10^6$ points. Submission then streams the accepted set to
+Redis in the usual batches, with progress logged. Each point's \textsc{uuid} is
+deterministic in \code{(seed, index)}, and the generated disk set itself is part of the
+sampler's checkpoint state --- resume re-submits only unfinished points of the
+\emph{same} geometry rather than regenerating (Chapter~\ref{ch:checkpoint}).
+
+\yamlkey{selection} applies after generation: rejected points consume their slot
+(Section~\ref{sec:selection}), so a tight cut thins the blue-noise set --- the surviving
+points are still well-spaced inside the allowed region.
+
+\section{Choosing between Bridson and the alternatives}
+
+\begin{itemize}
+  \item \textbf{vs \sampler{Random}:} at equal budget, Bridson's worst empty void is
+        dramatically smaller; interpolation and contour plots come out visibly cleaner.
+  \item \textbf{vs \sampler{Grid}:} no axis alignment means no moiré artifacts in
+        derived contours, and resolution degrades gracefully as $d$ grows instead of
+        exploding as a product.
+  \item \textbf{Dimension limit:} the generator is practical for $2 \le d \lesssim 4$;
+        beyond that the packing count explodes (Table~\ref{tab:bridson-counts}) ---
+        switch to \sampler{Random}.
+  \item \textbf{Boundary hunting:} if what you actually want is a \emph{contour}, let
+        \sampler{AdaptiveBridson} (next chapter) spend the same budget on the boundary
+        instead of the bulk.
+\end{itemize}
+
+\begin{jtip}
+Two-stage mapping works well: a coarse Bridson pass (\yamlkey{Radius} $\sim$0.1) to see
+the landscape, then export the interesting region's points and refine --- either a finer
+Bridson scan with tightened variable bounds, or a \sampler{CSV} replay with the heavy
+workflow (Chapter~\ref{ch:csv-sampler}).
+\end{jtip}
+
+\section{Summary}
+\label{sec:bridson-summary}
+
+\sampler{Bridson} is the default once you are past debugging: blue-noise coverage with
+no axis artifacts and no combinatorial blow-up, at the cost of an emergent (not dialed)
+point count and a $d \lesssim 4$ practical ceiling.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{\sampler{Bridson}} \\
+    \midrule
+    Kind & fixed set \\
+    Point count & emergent from \yamlkey{Radius} \\
+    Dimensions & $2$--$\sim$$4$ \\
+    Required keys & \yamlkey{Radius}, \yamlkey{MaxAttempt}, \yamlkey{length} per var \\
+    u$\to$x mapping & yes \\
+    \yamlkey{Seed} role & disk generation (\code{0} = unseeded) \\
+    \yamlkey{selection} & consumes slots, no top-up \\
+    Extra output & --- \\
+    \bottomrule
+  \end{tabular}
+  \caption{\sampler{Bridson} at a glance.}
+  \label{tab:bridson-summary}
+\end{table}

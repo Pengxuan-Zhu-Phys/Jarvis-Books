@@ -1,6 +1,7 @@
 # DESIGN — Multi-mode Calculators (`Calculators.Modules[].modes`, V2, D20)
 
 **Status**: design proposal 2026-08-01 — **awaiting maintainer decision on §10**; implementation `todo`
+**Scope**: **V2-only。不回移 V1**（维护者定调 2026-08-01，见 §1.1）
 **更新 2026-08-01**: 补 §5.1-5.3（触发语义）与 §5.4（主场景为原地重建，新增可选 build 阶段）
 **Date**: 2026-08-01
 **Requirement (maintainer)**: *"一个软件包原则上有多种用法，即在一次扫描任务中需要调用两次，
@@ -11,13 +12,67 @@
 ## 1. 现状
 
 `Calculators.Modules[].modes` 在 V2 schema 里被声明为 `string | [string]`，**零代码消费**
-（`Module/calculator.py` 与 `worker.py` 中出现次数均为 0）。V1 也只在
-`Module/calculator.py:18-19` 设了个布尔标志后从不使用——**是没做完的设计，不是废弃功能**
+（`Module/calculator.py` 与 `worker.py` 中出现次数均为 0）——**是没做完的设计，不是废弃功能**
 （维护者澄清，2026-08-01）。
+
+V1 侧的准确状态（实测，非读 diff）：`config.py:487` 见到 `modes` 只打一行日志；
+`calculator.py:18` 据此分派到 `analyze_config_multi()`，而该方法体是 **`pass`**
+（`calculator.py:135-136`）。实际构造一个带 `modes` 的 `CalculatorModule` 验证：
+
+```
+constructed ok; modes attr = True
+execution   -> MISSING
+installation-> MISSING
+basepath    -> MISSING
+type        -> MISSING
+```
+
+即 V1 **不报错地造出一个空壳模块**，直到运行期才在离病因很远的地方抛 `AttributeError`。
+比"设了个标志没用"更糟——它是一条会静默走通装载期的死路。
 
 注意：现有的 `string | [string]` 形态**表达不了**需求——它只能列出模式名，装不下"每个模式
 各自的 initialization / execution / 构建"。所以这个键无论如何都要重新定义，不存在
 "保持向后兼容"的包袱（0 张真实卡片在用）。
+
+## 1.1 范围：V2-only，不回移（维护者定调，2026-08-01）
+
+> *"multimode 功能只支持 V2，V1 已经是设计定型的产品了，非 bug 不加新功能。"*
+
+这条定调不只是排期，它**实质性地放松了本设计的约束**，值得单列：
+
+| | 其他 V2 设计（D18 LibDeps、D12.1 命令归一化） | **D20 multimode** |
+|---|---|---|
+| 参照物 | V1 有可运行的实现，要对齐其行为与 YAML 形态 | **没有实现可对齐**（V1 是 `pass`） |
+| 兼容包袱 | 要接受 V1 卡片的老写法（字符串命令、`installed: false`、`--skip-library-installation`） | **零**——0 张卡片在用，且不会有 |
+| 形态自由度 | 受限：改形态就是破坏老卡片 | **完全自由**：`build` 阶段、`mode_packs`、`@Mode` token 都可以按 V2 自己的最优解定 |
+
+**三条直接推论**，实现者按此办：
+
+1. **不动 V1 的 `analyze_config_multi()` 桩**。它是设计未完，不是 bug，按定调不补。
+2. **不改 V1 文档**。`modes` 只写进 V2 的 YAML_REFERENCE 与 skill；V1 手册保持不提。
+3. **多模式卡片是 V2 专属，不可回跑 V1**。这一点要写进 skill：拿到 V2 多模式卡片的 V1
+   会造出上面那个空壳模块，报的错与真正病因无关。
+
+### 1.1.1 唯一一处可以商量的 V1 改动（不建议现在做）
+
+上面那个空壳模块，严格说属于**装载期该拒绝却没拒绝**——按"非 bug 不加新功能"的界线，
+它更像 bug 而非缺功能。若维护者想封这个坑，代价是 `calculator.py:135` 里三行：
+
+```python
+def analyze_config_multi(self):
+    raise ConfigError(f"Module '{self.name}': multi-mode calculators require Jarvis-HEP V2")
+```
+
+**但我不建议现在做**：触发它需要用户手写一个 V1 从未文档化过的块，实际发生概率极低，
+而 V1 的每一次改动都要重跑其回归。列在此处只为把这个选项记录在案，不作为 WP。
+
+### 1.1.2 什么仍然是 V2 内部的一致性要求（别和 V1 parity 混淆）
+
+放松的只是"对 V1 的兼容"，**不是"对 V2 自身的一致"**。最容易混淆的一处：模式级
+`installation` **仍应接受纯字符串命令列表**——理由不是 V1 兼容，而是**模块级 `installation`
+在 V2 里就是这个形态**，同一个键名在同一张卡片里出现两种写法会让用户困惑。
+凡遇到"要不要照着某个老形态做"的问题，先分清是 **V1 遗产**（可自由抛弃）还是
+**V2 内部一致性**（必须遵守）。
 
 ## 2. 需求拆解
 
@@ -552,6 +607,7 @@ Worker B 此时看到 ng 已被占、ns 空闲，于是先做 ns——不需要�
 
 1. **寻址分隔符用点号还是冒号**：本设计用 `MadGraph.ProcA`。若担心与 Operas 的
    `namespace.function` 视觉混淆，可改 `MadGraph:ProcA`。两者实现代价相同，纯偏好问题。
+   §1.1 定调后这一条**没有任何外部输入**（V1 不参与），完全是 V2 的口味选择。
 2. **裸名 `required_modules: ["MadGraph"]` 的语义**：本设计定为"全部模式"。
    另一种选择是"报错，必须写明模式"——更严格但会让老卡片在加 modes 后失效。
    建议维持"全部模式"，理由见 §6.2。

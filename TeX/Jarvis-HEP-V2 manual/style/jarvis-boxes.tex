@@ -1,0 +1,192 @@
+%==============================================================================
+% jarvis-boxes.tex
+% Admonition boxes for the Jarvis-HEP manual, built on tcolorbox.
+%
+% Four flavours, used sparingly (see the style guide in the writing plan):
+%   \begin{jnote} ... \end{jnote}        general clarification
+%   \begin{jtip} ... \end{jtip}          best-practice advice
+%   \begin{jwarn} ... \end{jwarn}        foot-guns / things that bite
+%   \begin{jschema}{File_schema.json} ... \end{jschema}
+%                                        "verify these keys against the schema"
+%
+% Boxes are sized to the Tufte text column.  For a full-width box, wrap the
+% environment in {fullwidth}.
+%==============================================================================
+
+\usepackage[most]{tcolorbox}
+\usepackage{soul}   % \hl{}: line-breakable background highlight, for inline \cli{}
+
+% Reuse the palette defined in jarvis-listings.tex.
+\providecolor{jNote}{HTML}{1F4E79}
+\providecolor{jTip}{HTML}{2E7D32}
+\providecolor{jWarn}{HTML}{B3261E}
+\providecolor{jSchema}{HTML}{6A1B9A}
+\providecolor{jOpt}{HTML}{B8860B}   % \opt badge -- goldenrod, legible as text/border/fill
+
+\tcbset{
+  jbox/.style={
+    enhanced, breakable,
+    boxrule=0pt, leftrule=2.5pt,
+    arc=1pt, outer arc=1pt,
+    left=8pt, right=6pt, top=5pt, bottom=5pt,
+    fonttitle=\sffamily\bfseries\footnotesize,
+    fontupper=\small,
+    before skip=0.8\baselineskip, after skip=0.8\baselineskip,
+  }
+}
+
+% Title bar: a LIGHT tint of the accent colour, with the accent itself as the
+% (dark) title text -- so the heading reads but is no longer a heavy dark band.
+\newtcolorbox{jnote}{%
+  jbox, colback=jNote!4, colframe=jNote,
+  colbacktitle=jNote!15, coltitle=jNote!90!black,
+  title={Note}}
+
+\newtcolorbox{jtip}{%
+  jbox, colback=jTip!5, colframe=jTip,
+  colbacktitle=jTip!15, coltitle=jTip!90!black,
+  title={Tip}}
+
+\newtcolorbox{jwarn}{%
+  jbox, colback=jWarn!5, colframe=jWarn,
+  colbacktitle=jWarn!15, coltitle=jWarn!90!black,
+  title={Warning}}
+
+% Schema-check box takes the schema file name as a mandatory argument.
+\newtcolorbox{jschema}[1]{%
+  jbox, colback=jSchema!4, colframe=jSchema,
+  colbacktitle=jSchema!15, coltitle=jSchema!90!black,
+  title={Verify against \texttt{#1}}}
+
+%==============================================================================
+% Shell-command box: a terminal-styled wrapper for CLI snippets, matching the
+% call-out boxes above (light title bar + accent left rule + light body).
+% Uses tcblisting (listings engine) with the `shellinner' style from
+% jarvis-listings.tex; \faTerminal is provided by fontawesome5 (loaded later but
+% expanded only at use time).  Use \begin{shellbox} ... \end{shellbox}.
+%==============================================================================
+\definecolor{jShell}{HTML}{334155}   % terminal slate
+
+% \cli{}'s real definition (jarvis-preamble.tex has a placeholder, overridden
+% here once jShell/soul exist): a shell fragment mentioned mid-sentence gets the
+% same slate identity as a shellbox, as a highlighted "chip" -- \hl{} (not
+% \colorbox/\tcbox) specifically because it stays breakable at spaces, and real
+% commands run up to ~45 characters (e.g. \cli{pip install -e
+% '.[distributed,plot,dev]'}), too long to risk as one unbreakable box in the
+% narrow tufte column. \color{jShell} is a plain declaration, not \textcolor{}{} --
+% soul's \hl reconstructs its argument token-by-token and chokes on a nested
+% braced-argument macro like \textcolor{X}{...} inside it (confirmed by trying).
+\sethlcolor{jShell!10}
+\renewcommand{\cli}[1]{{\color{jShell}\ttfamily\hl{#1}}}
+
+%==============================================================================
+% YAML "window" box: a GUI-editor look for YAML listings -- a title bar with
+% traffic-light dots and a filename, faint indentation guides, and light line
+% numbers.  Use \begin{yamlwin}[filename] ... \end{yamlwin} (the optional title
+% defaults to "YAML").  The yamlwindow style (jarvis-listings.tex) colours
+% expression values pink and &J paths dark green.
+%==============================================================================
+\definecolor{jWinFrame}{HTML}{CDD2D8}  % window border
+\definecolor{jWinBar}{HTML}{ECEEF1}    % title-bar background
+\definecolor{jWinTitle}{HTML}{5A6470}  % title-bar text
+\definecolor{tlRed}{HTML}{FF5F56}
+\definecolor{tlYel}{HTML}{FFBD2E}
+\definecolor{tlGrn}{HTML}{27C93F}
+\newcommand{\trafficlights}{\tikz[baseline=-0.6ex]{%
+  \fill[tlRed](0,0)circle(2.1pt);\fill[tlYel](7pt,0)circle(2.1pt);\fill[tlGrn](14pt,0)circle(2.1pt);}}
+
+\newtcblisting{yamlwin}[1][YAML]{%
+  enhanced, breakable,
+  colback=jBg, colframe=jWinFrame,
+  % `colupper' reasserts the key colour as the ambient text colour on every
+  % page a listing is split across -- without it, `breakable' loses the
+  % \color set inside listings' `basicstyle' the moment the box crosses a
+  % page boundary, and the continuation renders in plain black. Text-level
+  % overrides (string/keyword/expression/path colours) are unaffected either
+  % way, since those are applied token-by-token as each line is typeset.
+  colupper=jYKey,
+  boxrule=0.7pt, arc=4pt, outer arc=4pt,
+  boxsep=0pt, left=4pt, right=5pt, top=5pt, bottom=5pt,
+  colbacktitle=jWinBar, coltitle=jWinTitle,
+  fonttitle=\sffamily\footnotesize,
+  toptitle=4pt, bottomtitle=4pt,
+  title={\trafficlights\hspace{0.8em}{\ttfamily\footnotesize #1}},
+  before skip=0.9\baselineskip, after skip=0.9\baselineskip,
+  % faint vertical indentation guides (one per 2-space level), like an editor
+  underlay={\begin{tcbclipinterior}\foreach \k in {1,...,7}{%
+    \draw[jGuide,line width=0.4pt]
+      ([xshift=2.4em+\k*1em]interior.north west)--([xshift=2.4em+\k*1em]interior.south west);}%
+    \end{tcbclipinterior}},
+  listing only,
+  listing options={style=yamlwindow},
+}
+
+% RETIRED 2026-07-25 in favour of `terminal' + `jcmd' below, which unifies the three
+% shapes a transcript takes (command only / output only / command then output) under
+% one chrome. Kept defined so an old draft still compiles; do not introduce new uses.
+\newtcblisting{shellbox}{%
+  enhanced, breakable,
+  boxrule=0pt, leftrule=2.5pt, arc=1pt, outer arc=1pt,
+  boxsep=0pt, left=8pt, right=6pt, top=4pt, bottom=4pt,
+  colback=jShell!4, colframe=jShell,
+  colbacktitle=jShell!15, coltitle=jShell!90!black,
+  fonttitle=\sffamily\bfseries\footnotesize,
+  toptitle=3.5pt, bottomtitle=3.5pt,
+  title={\raisebox{-0.2pt}{\scalebox{0.8}{\faTerminal}}\ \ Shell},
+  before skip=0.8\baselineskip, after skip=0.8\baselineskip,
+  listing only,
+  listing options={style=shellinner},
+}
+
+%%
+% --- The unified terminal box -------------------------------------------------
+% ONE chrome for all three shapes a terminal transcript takes in this book. The
+% box supplies the frame, the title bar and (when both halves are present) the
+% divider; the two inner listing environments supply the only thing that differs,
+% namely whether a line is something you TYPE or something a program PRINTED.
+%
+%   commands only          \begin{terminal} \begin{jcmd} ... \end{jcmd} \end{terminal}
+%   output only            \begin{terminal} \begin{jout} ... \end{jout} \end{terminal}
+%   commands then output   \begin{terminal} \begin{jcmd} ... \end{jcmd}
+%                            \termsep      \begin{jout} ... \end{jout} \end{terminal}
+%
+% The optional argument renames the title bar (default `Terminal'); use it when a
+% block is a named artifact rather than a session, e.g. \begin{terminal}[Jarvis2 -h].
+%
+% Why a plain tcolorbox hosting two lstlistings, and not a tcblisting: a
+% tcblisting writes its whole body out verbatim, so a \tcblower inside one is
+% printed as the literal text "\tcblower" instead of splitting the box (verified).
+% A plain tcolorbox scans its body normally, which lets each half run through its
+% own listings style AND lets tcolorbox draw its native segmentation line between
+% them -- that faint dashed rule is the divider, and it costs nothing.
+\lstnewenvironment{jcmd}{\lstset{style=shellinner}}{}
+\lstnewenvironment{jout}{\lstset{style=termout}}{}
+\newcommand{\termsep}{\tcblower}
+
+\newtcolorbox{terminal}[1][Terminal]{%
+  enhanced, breakable,
+  boxrule=0pt, leftrule=2.5pt, arc=1pt, outer arc=1pt,
+  boxsep=0pt, left=8pt, right=6pt, top=4pt, bottom=4pt,
+  colback=jShell!4, colframe=jShell,
+  colbacktitle=jShell!15, coltitle=jShell!90!black,
+  fonttitle=\sffamily\bfseries\footnotesize,
+  toptitle=3.5pt, bottomtitle=3.5pt,
+  title={\raisebox{-0.2pt}{\scalebox{0.8}{\faTerminal}}\ \ #1},
+  before skip=0.8\baselineskip, after skip=0.8\baselineskip,
+  % --- the command/output divide ---
+  % The two halves are told apart by ink, not by background: commands in jShell,
+  % output in the lighter jOut (see `termout' in jarvis-listings.tex), with this
+  % faint dashed rule between them. A background tint for the lower half was tried
+  % and rejected -- colbacklower needs skin=bicolor, and bicolor strokes the whole
+  % lower fill path with `segmentation style', which drags the dashes around the
+  % box's bottom edge as well.
+  % `middle' is the total vertical room the divider occupies (the rule sits in the
+  % centre of it), so it is the only knob for the divider's height. Compared 6/3/1.5/0pt
+  % side by side: 0pt makes the rule read as an underline of the last command rather
+  % than a separator, 6pt was airier than the transcript needs. 2pt keeps a hairline of
+  % air on both sides while costing almost nothing vertically.
+  middle=2pt,
+  lower separated=true,
+  segmentation style={draw=jShell!45, line width=0.4pt,
+                      dash pattern=on 1.4pt off 1.6pt},
+}

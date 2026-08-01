@@ -1,0 +1,116 @@
+\chapter{Environment Requirements}
+\label{ch:envreqs}
+
+\newthought{The \yamlkey{EnvReqs} block} is a safety gate. It says what a scan expects from the
+machine---operating system, Python version, packages---and \Jarvis\ checks all of it \emph{before}
+the run starts. A failed check stops the run early with a clear message, instead of crashing
+halfway through.
+
+\section{The minimal form}
+\label{sec:env-minimal}
+
+For most users this is enough:
+
+\begin{yamlwin}
+EnvReqs:
+  OS:
+    - name: linux
+      version: ">=5.10.0"
+    - name: Darwin
+      version: ">=10.14"
+  Python:
+    version: ">=3.10"
+    Dependencies: []
+\end{yamlwin}
+
+\noindent It says ``run on Linux $\geq 5.10$ or macOS (\code{Darwin}) $\geq 10.14$, with Python
+$3.10$ or newer.'' That covers a typical setup.
+
+\section{The keys}
+\label{sec:env-keys}
+
+\paragraph{\yamlkey{OS}} A list of acceptable operating systems. Each item has a \yamlkey{name}
+(\code{linux} or \code{Darwin}) and a \yamlkey{version} condition. \Jarvis\ compares the current
+machine against the list and stops if none match.
+
+\paragraph{\yamlkey{Python}} The Python requirement. \yamlkey{version} is the minimum interpreter
+version. \yamlkey{Dependencies} is a list of required packages, each with a \yamlkey{name},
+\yamlkey{required} (\code{true}/\code{false}), and minimum \yamlkey{version}:
+
+\begin{yamlwin}
+  Python:
+    version: ">=3.10"
+    Dependencies:
+      - name: numpy
+        required: true
+        version: ">=1.24"
+      - name: scipy
+        required: true
+        version: ">=1.10"
+\end{yamlwin}
+
+\noindent If a required package is missing or too old, \Jarvis\ stops and prints the exact
+\cli{pip install -U ...} command to fix it.
+
+\paragraph{\yamlkey{Check\_default\_dependencies}} An optional way to reuse a shared environment
+file. When \yamlkey{required: true}, \Jarvis\ loads the \textsc{yaml} at
+\yamlkey{default\_yaml\_path} and merges its \yamlkey{EnvReqs} before validating:
+
+\begin{yamlwin}
+  Check_default_dependencies:
+    required: true
+    default_yaml_path: "&J/deps/environment_default.yaml"
+\end{yamlwin}
+
+\noindent New projects ship a \file{deps/environment\_default.yaml} for exactly this purpose
+(Chapter~\ref{ch:quickstart}).
+
+\paragraph{\yamlkey{CERN\_ROOT}} An optional block for scans that need CERN \textsc{root}. Add it
+only if your tooling really depends on \textsc{root}; it can check the version and run a discovery
+command:
+
+\begin{yamlwin}
+  CERN_ROOT:
+    required: true
+    version: ">=6.28"
+    get_path_command: "root-config --prefix"
+    Dependencies: []
+\end{yamlwin}
+
+\begin{jtip}
+Start with just \yamlkey{OS} and \yamlkey{Python}. Add \yamlkey{Check\_default\_dependencies} when
+your group maintains a shared default card, and \yamlkey{CERN\_ROOT} only when a scan truly needs
+\textsc{root}. Less is more here---each requirement is one more thing that can block a run.
+\end{jtip}
+
+\section{A fuller example}
+\label{sec:env-example}
+
+\begin{yamlwin}
+EnvReqs:
+  OS:
+    - name: linux
+      version: ">=5.10.0"
+    - name: Darwin
+      version: ">=10.14"
+  Python:
+    version: ">=3.10"
+    Dependencies:
+      - name: numpy
+        required: true
+        version: ">=1.24"
+      - name: xslha
+        required: true
+        version: ">=0.2"
+  Check_default_dependencies:
+    required: true
+    default_yaml_path: "&J/deps/environment_default.yaml"
+\end{yamlwin}
+
+\section{Summary}
+\label{sec:env-summary}
+
+\yamlkey{EnvReqs} checks the platform before a run. Declare acceptable \yamlkey{OS} entries and a
+\yamlkey{Python} version (plus any required packages); optionally merge a shared default card or
+require \textsc{root}. It is the difference between a clean ``please upgrade NumPy'' message now
+and a confusing crash an hour into a scan.

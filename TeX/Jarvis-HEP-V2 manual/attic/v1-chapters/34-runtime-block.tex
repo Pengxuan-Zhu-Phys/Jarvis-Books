@@ -1,0 +1,177 @@
+\chapter{The Runtime Block}
+\label{ch:runtime-block}
+
+\newthought{The optional \yamlkey{Runtime} block} tunes \emph{how} a scan executes---how many
+workers, how points are batched, whether per-sample folders are written, and how external commands
+are scheduled. You never need it to get a correct result; you reach for it to go faster or to
+control disk use on large runs.
+
+\section{The keys}
+\label{sec:rt-keys}
+
+\yamlkey{Runtime} is a top-level block (Table~\ref{tab:rt-keys}). Every key has a sensible default,
+so an empty or absent block behaves exactly as before.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.33\linewidth}lp{0.40\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Default} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{mode}             & \code{auto}  & execution mode: \code{auto}, \code{thread}, or \code{process} \\
+    \yamlkey{writer}           & \code{auto}  & \textsc{hdf5} writer: \code{auto}, \code{thread}, or \code{process} \\
+    \yamlkey{workers}          & \code{0}     & process-worker count (\code{0} = choose automatically) \\
+    \yamlkey{batch\_size}      & \code{256}   & points proposed and persisted per batch \\
+    \yamlkey{writer\_record\_batch\_size}     & \code{100} & process writer: records micro-batched before a flush \\
+    \yamlkey{writer\_record\_flush\_interval} & \code{5.0} & process writer: max seconds between flushes \\
+    \yamlkey{sample\_artifacts} & \code{auto} & per-sample folders: \code{auto}, \code{always}, \code{never} \\
+    \yamlkey{Subprocess}       & ---          & external-command scheduler knobs (below) \\
+    \bottomrule
+  \end{tabular}
+  \caption{\yamlkey{Runtime} keys and defaults. Every key is optional, and each defaults to
+  v1-equivalent behaviour.}
+  \label{tab:rt-keys}
+\end{table}
+
+\begin{yamlwin}
+Runtime:
+  mode: auto           # thread today; opt into processes with: process
+  workers: 0           # 0 = auto (min(cpu, 4))
+  batch_size: 256      # rows per group; 1 reproduces v1 exactly
+  writer: auto         # follow the execution mode
+  sample_artifacts: auto
+\end{yamlwin}
+
+\section{Execution mode: thread and process}
+\label{sec:rt-mode}
+
+\yamlkey{mode} chooses how worker points are executed:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\code{auto}] (default) the v1-compatible single-process \emph{thread} path. Today
+        \code{auto} always resolves to \code{thread}---process workers are strictly opt-in.
+  \item[\code{thread}] force the thread path.
+  \item[\code{process}] opt into multiple worker \emph{processes}, which scale throughput with
+        \textsc{cpu} cores. Available for \yamlkey{Operas}-only scans (see below).
+\end{description}
+
+\noindent \yamlkey{workers} sets the process count under \code{mode: process}; \code{0} (the default)
+chooses \code{min(cpu\_count, 4)}, then caps it at \yamlkey{make\_paraller}.
+
+\begin{jwarn}
+\code{mode: auto} is \emph{not} process mode---auto is thread today. To run on processes you must
+write \code{mode: process} explicitly.
+\end{jwarn}
+
+\Jarvis\ enables \code{mode: process} only when it is safe to. If \emph{any} of the following hold,
+the scan silently and safely runs as \code{thread} instead---the reason is logged, never a crash:
+
+\begin{itemize}
+  \item the workflow contains a \yamlkey{Calculators} module (external calculators stay thread-only
+        for now);
+  \item any module references the \token{@Sdir} token;
+  \item \yamlkey{sample\_artifacts} is \code{always};
+  \item the normalized config cannot be pickled out to the workers;
+  \item the platform has no \textsc{posix} shared memory.
+\end{itemize}
+
+\begin{jnote}
+Process mode is reproducible. At a fixed seed the persisted records are identical whether you run
+with one worker or many, \textsc{uuid}s stay unique, and \cli{-{}-resume} never duplicates points:
+each worker draws a deterministic child random stream from a master seed stored in the checkpoint.
+\end{jnote}
+
+\section{Batching}
+\label{sec:rt-batch}
+
+\yamlkey{batch\_size} sets how many points \Jarvis\ proposes, executes, and persists as one
+group---default \code{256}, rather than one at a time. Batching the data plane cuts per-point
+overhead and keeps workers fed; larger batches amortise more overhead at the cost of coarser
+checkpoint granularity. \code{batch\_size: 1} reproduces the exact v1 per-sample sequence (it is
+golden-tested), occasionally useful for bit-for-bit comparisons. Tuning is the subject of
+Chapter~\ref{ch:performance}.
+
+\section{The HDF5 writer}
+\label{sec:rt-writer}
+
+\yamlkey{writer} chooses where persistence runs. \code{auto} (default) follows the execution
+mode---a separate writer \emph{process} when \yamlkey{mode} resolves to process and shared memory is
+available, otherwise an in-process writer \emph{thread}. Force either with \code{thread} or
+\code{process}. Two keys tune the process writer, and \emph{only} the process writer:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{writer\_record\_batch\_size}] (default \code{100}) how many single-record hand-offs
+        to micro-batch before a flush.
+  \item[\yamlkey{writer\_record\_flush\_interval}] (default \code{5.0}) the longest a record waits,
+        in seconds, before it is flushed.
+\end{description}
+
+\begin{jwarn}
+The \yamlkey{writer\_record\_*} keys do nothing unless the writer actually runs as a process---under
+the default thread writer they are ignored.
+\end{jwarn}
+
+\section{Per-sample artifacts}
+\label{sec:rt-artifacts}
+
+\yamlkey{sample\_artifacts} decides whether \Jarvis\ creates a working folder on disk for every
+sample---which, for fast in-process scans, can dominate the runtime:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\code{auto}] (default) skip per-sample folders for opera-only scans, where they are not
+        needed; create them when a workflow actually needs them.
+  \item[\code{always}] always create per-sample folders (the classic behaviour).
+  \item[\code{never}] never create them, even to record a failure.
+\end{description}
+
+\begin{jnote}
+Using \token{@Sdir} in a path, or running any \yamlkey{Calculators} workflow, forces a sample to
+\emph{materialize} its folder regardless of \code{auto}. So \code{auto} only skips disk work when
+it is genuinely safe to---typically pure-\yamlkey{Operas} scans. Failed lazy samples still get a
+replayed log (Chapter~\ref{ch:logging}).
+\end{jnote}
+
+\section{The subprocess scheduler}
+\label{sec:rt-subprocess}
+
+External calculator commands run through a shared subprocess scheduler whose knobs live under
+\yamlkey{Runtime.Subprocess}:
+
+\begin{yamlwin}
+Runtime:
+  Subprocess:
+    max_concurrency: 8
+    max_pending: 256
+    per_task_timeout_sec: 300
+    terminate_grace_sec: 5
+    log_policy: logger
+    progress_interval_sec: 5
+    diagnostics_enabled: false
+    diagnostics_interval_sec: 10
+\end{yamlwin}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{max\_concurrency}] how many external commands may run at once.
+  \item[\yamlkey{max\_pending}] how many may queue waiting for a slot.
+  \item[\yamlkey{per\_task\_timeout\_sec}] a per-command time limit.
+  \item[\yamlkey{terminate\_grace\_sec}] grace period before a timed-out command is killed.
+  \item[\yamlkey{log\_policy}, \yamlkey{progress\_interval\_sec}] how command output and progress
+        are logged.
+  \item[\yamlkey{diagnostics\_enabled}, \yamlkey{diagnostics\_interval\_sec}] optional extra
+        scheduler diagnostics.
+\end{description}
+
+\begin{jwarn}
+\yamlkey{per\_task\_timeout\_sec} is a \emph{per-command} limit; a calculator's \yamlkey{timeout}
+(Chapter~\ref{ch:calculators}) is a \emph{total} limit for one sample's whole \yamlkey{execution}.
+When both are set, the effective per-command limit is bounded by the remaining calculator budget.
+\end{jwarn}
+
+\section{Summary}
+\label{sec:rt-summary}
+
+\yamlkey{Runtime} is the performance and execution-control block: \yamlkey{mode}/\yamlkey{workers}
+for parallelism, \yamlkey{batch\_size} for batching, \yamlkey{writer} for persistence,
+\yamlkey{sample\_artifacts} for disk use, and \yamlkey{Subprocess} for external-command scheduling.
+Every key defaults to v1 behaviour, so adding a \yamlkey{Runtime} block only ever changes speed and
+disk use---never your results. The next chapter puts these to work.

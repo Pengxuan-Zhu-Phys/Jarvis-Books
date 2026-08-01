@@ -1,0 +1,117 @@
+\chapter{Scan Variables and Distributions}
+\label{ch:variables}
+
+\newthought{\yamlkey{Sampling.Variables}} lists the parameters you want to scan and tells \Jarvis\
+how to draw values for each one. Every sampler reads the same variable format, so once you learn
+it here it works everywhere.
+
+\section{One variable at a time}
+\label{sec:var-schema}
+
+\yamlkey{Variables} is a list; each item defines \emph{one} variable:
+
+\begin{yamlwin}
+Sampling:
+  Variables:
+    - name: x1
+      description: "A flat variable"
+      distribution:
+        type: Flat
+        parameters:
+          min: 0
+          max: 10
+\end{yamlwin}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{name}] A short identifier, unique within the scan. You use this name later in
+        likelihood and mapping expressions.
+  \item[\yamlkey{description}] A one-line note on what the variable means. Optional but
+        recommended---it shows up in diagnostics.
+  \item[\yamlkey{distribution.type}] Which distribution to draw from (the next section lists
+        them).
+  \item[\yamlkey{distribution.parameters}] The numbers that distribution needs (for example
+        \yamlkey{min} and \yamlkey{max}).
+\end{description}
+
+\section{The five distributions}
+\label{sec:distributions}
+
+\Jarvis\ supports the five one-dimensional distributions in Table~\ref{tab:distributions}. Each
+has its own required parameters.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    \textbf{\yamlkey{type}} & \textbf{Parameters} & \textbf{Use it when\ldots} \\
+    \midrule
+    \yamlkey{Flat}       & \yamlkey{min}, \yamlkey{max}        & values are equally likely across a range \\
+    \yamlkey{Log}        & \yamlkey{min}, \yamlkey{max}        & the range spans orders of magnitude (\yamlkey{min}$>0$) \\
+    \yamlkey{Normal}     & \yamlkey{mean}, \yamlkey{stddev}    & values cluster around a central value \\
+    \yamlkey{Log-Normal} & \yamlkey{mean}, \yamlkey{stddev}    & the \emph{logarithm} clusters around a value \\
+    \yamlkey{Logit}      & \yamlkey{location}, \yamlkey{scale} & a bell-like shape with heavier tails \\
+    \bottomrule
+  \end{tabular}
+  \caption{The supported variable distributions.}
+  \label{tab:distributions}
+\end{table}
+
+\paragraph{Flat (uniform)} Every value between \yamlkey{min} and \yamlkey{max} is equally likely:
+$x \sim \mathcal{U}(\mathrm{min}, \mathrm{max})$. This is the default choice when you have no
+prior preference.
+
+\paragraph{Log (log-uniform)} Equally likely \emph{per decade}, so a scan covers
+$10^{-3}$ as densely as $10^{3}$: $\ln x \sim \mathcal{U}(\ln\mathrm{min}, \ln\mathrm{max})$.
+Requires \yamlkey{min}$>0$.
+
+\paragraph{Normal (Gaussian)} A bell curve centred on \yamlkey{mean} with width
+\yamlkey{stddev}: $x \sim \mathcal{N}(\mathrm{mean}, \mathrm{stddev})$. About 68\% of values land
+within one \yamlkey{stddev} of the \yamlkey{mean}.
+
+\paragraph{Log-Normal} A Normal distribution in $\ln x$ rather than $x$, useful for positive
+quantities that vary multiplicatively: $\ln x \sim \mathcal{N}(\mathrm{mean}, \mathrm{stddev})$.
+
+\paragraph{Logit (logistic)} A bell-like distribution with heavier tails than the Normal, set by
+a centre \yamlkey{location} and width \yamlkey{scale}:
+$x = \mathrm{location} + \mathrm{scale}\cdot\ln\!\big(\tfrac{u}{1-u}\big)$ for a uniform
+$u \in (0,1)$, i.e. $x \sim \mathrm{Logistic}(\mathrm{location}, \mathrm{scale})$.
+
+\begin{jwarn}
+The \yamlkey{Log} distribution requires \yamlkey{min}$>0$: you cannot take the logarithm of zero
+or a negative number. If part of your range must include zero or negatives, use \yamlkey{Flat}.
+\end{jwarn}
+
+\section{A multi-variable example}
+\label{sec:var-example}
+
+A scan usually mixes distributions---a flat mass here, a log-scaled coupling there:
+
+\begin{yamlwin}
+Sampling:
+  Variables:
+    - name: m0
+      description: "Scalar mass (flat)"
+      distribution: {type: Flat, parameters: {min: 100, max: 3000}}
+    - name: tanb
+      description: "tan(beta), log-scaled"
+      distribution: {type: Log, parameters: {min: 1, max: 60}}
+    - name: A0
+      description: "Trilinear term (normal)"
+      distribution: {type: Normal, parameters: {mean: 0, stddev: 1000}}
+\end{yamlwin}
+
+\begin{jnote}
+All five distributions support \Jarvis's internal mapping from a uniform number in $[0,1]$, which
+is what lets nested samplers and \textsc{mcmc} methods use them. Other families (Binomial,
+Poisson, Beta, and so on) are not available as scan variables in the current version.
+\end{jnote}
+
+\section{Summary}
+\label{sec:var-summary}
+
+Each variable has a \yamlkey{name} and a \yamlkey{distribution} (a \yamlkey{type} plus its
+\yamlkey{parameters}). Pick \yamlkey{Flat} for plain ranges, \yamlkey{Log} for wide positive
+ranges, and the \yamlkey{Normal}/\yamlkey{Log-Normal}/\yamlkey{Logit} family when values should
+concentrate around a centre. The variable names you choose here are exactly the symbols you will
+use in the likelihood (Chapter~\ref{ch:loglikelihood}) and in expressions
+(Chapter~\ref{ch:symbols}).

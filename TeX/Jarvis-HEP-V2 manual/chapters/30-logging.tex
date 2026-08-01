@@ -1,0 +1,152 @@
+\chapter{Logging}
+\label{ch:logging}
+
+\newthought{This chapter is for anyone reading a running or finished scan's logs} ---
+which, in practice, is everyone: the console output during a run and the files under
+\file{logs/} after it \emph{are} the Jarvis-logger format, and every later chapter
+that shows a log excerpt (Chapter~\ref{ch:multinest} and Chapter~\ref{ch:dynesty}
+especially) assumes you recognise it on sight. Read this chapter once and every log
+line in this book --- and every log line your own scans produce --- becomes legible.
+
+\section{Two layers, two audiences}
+\label{sec:two-layer-logging}
+
+\Jtwo\ separates the \emph{run's} story from each \emph{Sample's} story:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[The process layer] is what you watch live: one file per long-lived process
+        component, plus the console. High-level events only --- this is where every
+        log excerpt in this book comes from.
+  \item[The Sample layer] is what you debug with: one detailed file per Sample,
+        written next to its artifacts, silent unless that Sample fails.
+\end{description}
+
+\section{The process layer: one file per component}
+\label{sec:top-logs}
+
+Every scan opens a fixed, named set of files under \file{logs/<scan>/} --- not one
+undifferentiated log, but one per \emph{component}, so a busy Sampler never buries a
+quiet Archiver:
+
+\begin{jfiletree}
+\dirtree{%
+.1 \dtfoldopen{logs/<scan>/}.
+.2 \dtfile{core.log}\DTcomment{control process: startup, Worker lifecycle, checkpoints, run summary}.
+.2 \dtfile{factory.log}\DTcomment{TaskFactory: Worker supervision, monitor snapshots}.
+.2 \dtfile{sampler.log}\DTcomment{the Sampler: every method, including Dynesty/MultiNest}.
+.2 \dtfile{archiver.log}\DTcomment{the Archiver process: batches, bucket packing}.
+.2 \dtfile{datarecorder.log}\DTcomment{DATABASE/samples.hdf5 writer progress}.
+.2 \dtfile{worker-00.log}\DTcomment{one per Worker, zero-padded id}.
+.2 \dtfile{worker-01.log}.
+}
+\end{jfiletree}
+
+\begin{jwarn}
+\textbf{Sampler output --- including every \sampler{Dynesty}/\sampler{MultiNest}
+progress line --- lands in \file{sampler.log}, not \file{core.log}.} If you are
+watching the wrong file, a long nested-sampling run looks silent when it is not.
+\end{jwarn}
+
+Content stays high-level by design: startup and configuration, Workers spawned and
+respawned, per-Sample one-liners, queue and archive milestones, checkpoint saves, the
+closing \code{[Scan Performance]} block --- and, for the Sampler specifically,
+everything Chapter~\ref{ch:multinest} and Chapter~\ref{ch:dynesty} walk through in
+detail. File sinks are buffered through a queue so heavy logging never blocks the hot
+path.
+
+\section{The visual format}
+\label{sec:log-visual-format}
+
+Every single log entry --- console or file, any component --- renders as the same
+three-part block, not a single line:
+
+\begin{terminal}
+\begin{jout}
+·•· Jarvis-HEP.Sampler.MultiNest
+	-> 07-21 15:47:05.001 - [INFO] >>>
+Starting NestedSampler nlive=100 ndim=2 dynamic=False bound=multi sample=auto
+\end{jout}
+\end{terminal}
+
+\begin{keylist}
+  \item[the bullet line] \code{·•·} followed by a dotted \emph{module label} ---
+        always \code{Jarvis-HEP} plus one segment per component, e.g.\
+        \code{Jarvis-HEP.Sampler}. This is the fastest way to tell \emph{who} logged
+        a line without reading the file it came from.
+  \item[the arrow line] a timestamp (\code{MM-DD HH:MM:SS.mmm}) and the log level in
+        brackets --- \code{[INFO]}, \code{[WARNING]}, \code{[ERROR]}.
+  \item[the message] one or more plain lines beneath, exactly as the component wrote
+        them.
+\end{keylist}
+
+\begin{jnote}
+This three-line shape --- not a single line per event --- is normal, not a
+misconfiguration or a wrapped terminal. Every example log excerpt in this book uses
+it verbatim; a log file that does not look like this was not produced by \Jtwo.
+\end{jnote}
+
+Two presentation details worth knowing:
+
+\begin{itemize}
+  \item \textbf{Colour is built in, not an extra.} On an interactive terminal, the
+        module label, timestamp, and level colour automatically (level colour follows
+        severity: green for \code{INFO}, yellow for \code{WARNING}, red for
+        \code{ERROR}). File sinks stay plain text. No package or extra controls
+        this --- it is native to the runtime and always on when your terminal
+        supports it.
+  \item \textbf{A different bullet for the DataRecorder.}
+        \file{datarecorder.log} lines open with a small Coptic letter (\emph{sampi},
+        \code{U+03E0}) instead of \code{·•·} --- a deliberate visual tag, not an
+        encoding problem, so a DATABASE-write line is recognisable even pasted out
+        of context.
+  \item \textbf{\code{WARNING} does not always mean trouble.} A handful of
+        high-frequency messages --- notably \sampler{Dynesty}/\sampler{MultiNest}
+        progress lines every $100^{\text{th}}$ iteration --- are deliberately logged
+        at \code{WARNING} purely so they stand out in a long \code{INFO} stream, not
+        because anything is wrong (Section~\ref{sec:nested-log-progress}).
+\end{itemize}
+
+\section{The Sample layer: one file per Sample}
+\label{sec:sample-logs}
+
+Every Sample owns \file{SAMPLE/<bucket>/<uuid>/Sample\_running.log}: materialization,
+each calculator's banner, the \emph{resolved} command line, raw stdout/stderr of every
+external command, captured observables, likelihood evaluation, and --- on failure ---
+the exception. It is created and closed inside the Worker that ran the Sample, next to
+whatever artifacts the Sample \yamlkey{save}d, in the same visual format as
+Section~\ref{sec:log-visual-format}.
+
+\begin{jnote}
+\textbf{Success is cheap, failure is complete.} A Sample logs into a bounded in-memory
+buffer while it runs; success discards the buffer (an opera-only success writes no file
+at all), while failure replays the \emph{entire} buffered trace into the file. You get
+full forensics exactly where you need them, at near-zero cost where you do not.
+\end{jnote}
+
+During \cli{Jarvis2 check} runs, the same rendered text is mirrored to the terminal
+(Chapter~\ref{ch:check-modules}); production scans stay file-only.
+
+\section{The post-mortem recipe}
+\label{sec:postmortem}
+
+\begin{enumerate}
+  \item \textbf{Which points failed?} --- \file{samples.csv}: filter on the status
+        column, take the \textsc{uuid}s (or grep \file{worker-*.log} for
+        \code{Failed}).
+  \item \textbf{Why?} --- \file{SAMPLE/<bucket>/<uuid>/Sample\_running.log}: the last
+        entries are the failing command and its stderr, or the missing-observable
+        error.
+  \item \textbf{Reproduce it} --- re-run the logged command in the logged \yamlkey{cwd},
+        or replay just that point: a one-line \textsc{csv} with its parameters and
+        \cli{Jarvis2 run} a \sampler{CSV} card (Chapter~\ref{ch:csv-sampler}).
+\end{enumerate}
+
+If the bucket was already packed, the log is inside \file{<bucket>.tar.gz} under the
+same relative path.
+
+\begin{jtip}
+When reporting a bug, attach \file{core.log}, \file{sampler.log} (if the Sampler is
+involved), the failing Sample's \file{Sample\_running.log}, and
+\file{run\_summary.json}. Those four files reconstruct almost any incident without
+access to your machine.
+\end{jtip}

@@ -1,0 +1,93 @@
+\chapter{The Workflow Model}
+\label{ch:workflow-model}
+
+\newthought{The workflow is step two} of the per-point loop: it turns a parameter point into
+observables. This short chapter explains the shared ideas behind both workflow backends---how
+modules connect, what order things run in, and the flowchart \Jarvis\ draws---before the next
+chapters dive into each backend.
+
+\section{Two backends, one job}
+\label{sec:wf-backends}
+
+A workflow is built from \emph{modules}. Each module takes some inputs and produces some named
+observables. \Jarvis\ offers two kinds of modules, and a card uses one kind or the other:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{Calculators}] wrap external programs --- you give \Jarvis\ the commands to run
+        and the files to read and write (Chapter~\ref{ch:calculators}).
+  \item[\yamlkey{Operas}] call in-process Python operators --- no files, no shell, just a
+        function call (Chapter~\ref{ch:operas}).
+\end{description}
+
+\begin{jtip}
+Reach for \yamlkey{Operas} when the calculation already exists as an operator (it is the fastest
+path), and \yamlkey{Calculators} when you must drive a compiled \textsc{hep} package through
+files. The rest of this part covers both.
+\end{jtip}
+
+\section{Modules and their order}
+\label{sec:wf-order}
+
+Modules rarely run in isolation---one often needs another's output. You declare those
+dependencies with \yamlkey{required\_modules}, and \Jarvis\ uses them to build a dependency
+graph and run modules in a valid order:
+
+\begin{yamlwin}
+Modules:
+  - name: Spectrum
+    required_modules: []          # runs first
+  - name: DarkMatter
+    required_modules: [Spectrum]  # waits for Spectrum
+\end{yamlwin}
+
+\noindent Here \yamlkey{DarkMatter} only starts once \yamlkey{Spectrum} has produced its
+observables. A module with \yamlkey{required\_modules: []} has no prerequisites and can run as
+soon as the parameter point is ready.
+
+\begin{jnote}
+The scan parameters themselves are provided by a built-in \yamlkey{Parameters} layer that runs
+first. A module that consumes scan variables directly can declare
+\yamlkey{required\_modules: [Parameters]} so it is scheduled after that layer.
+\end{jnote}
+
+\section{The order inside a calculator}
+\label{sec:wf-calc-order}
+
+Within a single calculator module, the execution order is fixed and always the same:
+
+\begin{enumerate}
+  \item \textbf{write input files} --- turn the parameter point into the program's input format;
+  \item \textbf{run the external commands} --- execute the program;
+  \item \textbf{read output files} --- extract the observables you asked for.
+\end{enumerate}
+
+\noindent Keeping this order in mind makes calculator cards (Chapter~\ref{ch:calculators}) easy
+to read: every one is just ``write, run, read.''
+
+\section{The workflow flowchart}
+\label{sec:wf-flowchart}
+
+When a run starts, \Jarvis\ writes a \emph{semantic} description of your workflow to
+\file{images/<scan>/flowchart.json} --- the modules, their inputs and outputs, and the
+dependency edges between them. If \JPlot\ is installed, \Jarvis\ also asks it to render a
+picture, \file{images/<scan>/flowchart.png}.
+
+\begin{jnote}
+\Jarvis\ always writes \file{flowchart.json}; the \textsc{png} is only produced when \JPlot\ is
+available. Pass \cmd{-{}-skip-draw-flowchart} to skip the picture while still exporting the
+\textsc{json} (Chapter~\ref{ch:cli}).
+\end{jnote}
+
+\noindent The flowchart is a quick way to confirm \Jarvis\ understood your workflow: check that
+the modules appear in the order you expect and that the dependency arrows match your
+\yamlkey{required\_modules}.
+
+\section{Where to go next}
+\label{sec:wf-next}
+
+\begin{itemize}
+  \item External programs: Chapter~\ref{ch:calculators}, then the I/O formats in
+        Chapter~\ref{ch:io-types}.
+  \item In-process operators: Chapter~\ref{ch:operas}.
+  \item Shared libraries that must be built before any of this: Chapter~\ref{ch:libdeps}.
+\end{itemize}

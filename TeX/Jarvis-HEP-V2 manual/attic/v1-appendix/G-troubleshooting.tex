@@ -1,0 +1,63 @@
+\chapter{Troubleshooting and FAQ}
+\label{app:troubleshooting}
+
+\newthought{Common problems and quick fixes.} Each entry points to the chapter with the full
+explanation.
+
+\section{Installation and startup}
+\label{sec:ts-install}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\cli{Jarvis: command not found}] You are in a different environment than the one you
+        installed into. Re-activate it and check \cli{which Jarvis} (Chapter~\ref{ch:installation}).
+  \item[A required package is too old] \Jarvis\ prints the exact \cmd{pip install -U} command from
+        the \yamlkey{EnvReqs} check---run it (Chapter~\ref{ch:envreqs}).
+  \item[\sampler{Dynesty} is unavailable] It is an optional dependency; install it as noted in the
+        nested-sampler chapter (Chapter~\ref{ch:nested}).
+\end{description}
+
+\section{Writing the card}
+\label{sec:ts-card}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Validation failed] The error names the block and key at fault---almost always an
+        indentation slip (use spaces, not tabs) or a wrong value (Chapter~\ref{ch:task-yaml}).
+  \item[``Unable to resolve path''] You used a marker other than \marker{\&J/}. Only \marker{\&J/}
+        is resolved; keep files under the project and reference \marker{\&J/...}
+        (Chapter~\ref{ch:symbols}).
+  \item[\yamlkey{make\_parallel} ignored] The key is spelled \yamlkey{make\_paraller} (legacy
+        spelling); the misspelling is silently unrecognised (Chapter~\ref{ch:calculators}).
+  \item[A \yamlkey{Log} variable errors] \yamlkey{Log} requires \yamlkey{min}$>0$; use
+        \yamlkey{Flat} if the range must include zero (Chapter~\ref{ch:variables}).
+  \item[``name is not defined'' in an expression] An observable is used before the module that
+        produces it runs; fix the \yamlkey{required\_modules} order (Chapter~\ref{ch:symbols}).
+\end{description}
+
+\section{Running and monitoring}
+\label{sec:ts-run}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\cli{-{}-monitor} shows nothing] It attaches to a \emph{running} process; start it while
+        the scan is running (Chapter~\ref{ch:run-summary}).
+  \item[A sample hangs] Set a calculator \yamlkey{timeout}, or
+        \yamlkey{Runtime.Subprocess.per\_task\_timeout\_sec}, to cap a stuck command
+        (Chapters~\ref{ch:calculators},~\ref{ch:runtime-block}).
+  \item[Too many sample folders] Cap and archive them with \yamlkey{Scan.sample\_directory}. For
+        opera-only scans, \yamlkey{Runtime.sample\_artifacts: auto} can skip them altogether
+        (Chapters~\ref{ch:scan-block},~\ref{ch:runtime-block}).
+  \item[I want to restart, not resume] Answer \code{y} to the resume prompt (discards the
+        checkpoint); use \cli{-{}-resume} to continue without prompting
+        (Chapter~\ref{ch:checkpoint}).
+\end{description}
+
+\section{After the run}
+\label{sec:ts-after}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Where are my results?] In \file{outputs/<scan>/DATABASE/} (\textsc{hdf5} $+$ \textsc{csv});
+        get a fresh \textsc{csv} with \cli{-{}-convert} (Chapter~\ref{ch:outputs}).
+  \item[A sample failed---why?] Read the failed sample's replayed log under \file{SAMPLE/}; it
+        holds the tool output and likelihood diagnostics (Chapter~\ref{ch:logging}).
+  \item[Throughput totals exceed wall-clock] Expected: the execution-breakdown times are cumulative
+        across parallel points, not wall-clock (Chapter~\ref{ch:run-summary}).
+\end{description}

@@ -1,0 +1,75 @@
+\chapter{Nuisance Samplers}
+\label{ch:nuisance}
+
+\newthought{A nuisance sampler is an inner step}, not a main sampler. While the main sampler
+(Chapters~\ref{ch:basic-samplers}--\ref{ch:mcmc-3}) chooses the physics points, a nuisance sampler
+runs \emph{around each of those points} to optimise a nuisance parameter. \Jarvis\ provides one:
+\sampler{Profile1D}.
+
+\section{Where it fits}
+\label{sec:nui-where}
+
+A nuisance sampler is configured inside \yamlkey{Sampling.Nuisance} of the \emph{main} sampler's
+block---it augments the main scan rather than replacing it. For every point the main sampler
+proposes, the nuisance step is run before the point's score is finalised.
+
+\section{Profile1D}
+\label{sec:s-profile1d}
+
+\paragraph{How it works} \sampler{Profile1D} profiles a \emph{single} nuisance parameter over a
+one-dimensional range using \emph{golden-section search}---an efficient bracketing method that
+repeatedly narrows the interval toward the optimum without needing derivatives. At each main point
+it searches the nuisance parameter for the value that minimises or maximises the nuisance
+likelihood (\yamlkey{TargetMode}), within \yamlkey{MaxAttempt} evaluations, optionally subject to
+\yamlkey{PassCondition} checks. The profiled value then feeds the main point's likelihood.
+
+\paragraph{Configuration} Under \yamlkey{Sampling.Nuisance}:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{Method}] must be \sampler{Profile1D}.
+  \item[\yamlkey{Variables}] the nuisance parameter (in practice exactly one), with the usual
+        \yamlkey{name}/\yamlkey{description}/\yamlkey{distribution} (typically \yamlkey{Flat} or
+        \yamlkey{Log} with \yamlkey{min}/\yamlkey{max}).
+  \item[\yamlkey{LogLikelihood}] the nuisance objective, as \yamlkey{name}/\yamlkey{expression}
+        terms.
+  \item[\yamlkey{TargetMode}] \code{min} or \code{max}---whether to minimise or maximise the
+        nuisance objective.
+  \item[\yamlkey{MaxAttempt}] the search budget (golden-section iterations).
+  \item[\yamlkey{PassCondition}] a list of boolean expressions a point must satisfy (use \code{[]}
+        for none).
+\end{description}
+
+\begin{yamlwin}
+Sampling:
+  Method: "Bridson"
+  Radius: 0.25
+  MaxAttempt: 30
+  Variables: [ ... ]            # the physics parameters
+  LogLikelihood:
+    - {name: L_total, expression: "-0.5 * ((z - 100.0) / 10.0)**2"}
+  Nuisance:
+    Method: Profile1D
+    Variables:
+      - name: nu
+        description: nuisance scale
+        distribution: {type: Flat, parameters: {min: 0.8, max: 1.2}}
+    LogLikelihood:
+      - {name: L_nu, expression: "-0.5 * ((nu - 1.0) / 0.05)**2"}
+    TargetMode: max
+    MaxAttempt: 12
+    PassCondition: []
+\end{yamlwin}
+
+\begin{jnote}
+\sampler{Profile1D} profiles \emph{one} parameter per main point. To profile several nuisance
+parameters, the recommended pattern is to keep the parameter of interest in the main scan and treat
+each nuisance dimension explicitly; multi-dimensional nuisance profiling is not a single built-in
+step in the current version.
+\end{jnote}
+
+\section{Summary}
+\label{sec:nui-summary}
+
+A nuisance sampler optimises nuisance parameters at each physics point instead of sampling them
+jointly. \sampler{Profile1D} does this in one dimension by golden-section search, set up under
+\yamlkey{Sampling.Nuisance} with a \yamlkey{TargetMode} and a search budget.

@@ -231,6 +231,17 @@ V2 拒绝它是**有意为之且正确的**。Jarvis-Operas 的 `interp1.*` / `d
 多模式与 PackID 槽位的关系（每模式一套 pack 还是共享）、`required_modules` 如何引用某个模式、
 以及 `execution.input/output` 是否按模式分别声明。记录在此以免再被误判为死代码。
 
+**后续（2026-08-01）**：三个问题均已在
+[`DESIGN_CALCULATOR_MODES_2.0.md`](DESIGN_CALCULATOR_MODES_2.0.md)（D20）中作答，
+且维护者定调 **multimode 为 V2-only 功能，不回移 V1**（V1 已设计定型，非 bug 不加新功能）。
+
+**因此 `modes` 从本文的"迁移"框架里移出**：它不是"V1 有、V2 缺"的迁移项，
+而是**两侧都没有实现的 V2 原生新功能**。V1 侧的 `analyze_config_multi()` 方法体是 `pass`
+（实测：带 `modes` 的模块会被无声地造成空壳——`execution` / `installation` / `basepath` /
+`type` 全缺——直到运行期才抛与病因无关的 `AttributeError`），按定调**保持原样不补**；
+该桩的可选三行封堵见 D20 设计 §1.1.1，明确**不立 WP**。
+本文后续统计 V1 迁移缺口时不再计入 `modes`。
+
 ### 7.3 新增：`--refs` 确认要补进 CLI
 
 维护者确认这是要做的。V1 的 `--refs` 打印 logo + 内置采样器的**参考文献**，供用户写论文引用

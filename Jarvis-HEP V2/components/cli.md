@@ -15,7 +15,7 @@ console logging flags. Entry: `Jarvis2 = jarvishep2.client:main`.
 | `Jarvis2 -v` / `--version` | `dispatch_version` | logo + Author + Version (**no** scan init) |
 | `Jarvis2 run <task.yaml> [flags]` | `Jarvis2Core.run` | full scan; validates YAML first |
 | `Jarvis2 <task.yaml>` | → `run` | legacy alias via `normalize_argv` |
-| `Jarvis2 check <task.yaml>` | `check_modules` | smoke: **1 worker**, `SAMPLE/test/<uuid>/` flat, **no tar**; CSV or N draws |
+| `Jarvis2 check <task.yaml>` | `check_modules` | smoke: **1 worker**, **1 calculator PackID** (`make_paraller`/Pools pinned), `SAMPLE/test/<uuid>/` flat, **no tar**; CSV or N draws |
 | `Jarvis2 validate <task.yaml> [--strict] [--json]` | `dispatch_validate` | D13.9 config gate only (no Redis) |
 | `Jarvis2 monitor` | `dispatch_monitor` | one Redis snapshot |
 | `Jarvis2 plot <plot.yaml>` | `plot_bridge` | JarvisPLOT scene |

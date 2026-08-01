@@ -1,0 +1,113 @@
+\chapter{Reproducibility}
+\label{ch:reproducibility}
+
+\newthought{A scan you cannot reproduce is an anecdote.} \Jtwo\ is built so that the
+expensive thing --- months later, on another machine, by another person --- is
+re-obtainable. Most of the machinery has appeared in earlier chapters; this one
+assembles it into a discipline.
+
+\section{Determinism: what is guaranteed}
+\label{sec:determinism}
+
+With a fixed task card and a fixed \yamlkey{Seed}:
+
+\begin{itemize}
+  \item \textbf{The point set is deterministic --- for every fixed-set and
+        contour-tracing method.} \sampler{Random}, \sampler{Grid}, \sampler{CSV},
+        \sampler{Bridson}, and \sampler{AdaptiveBridson} mint \textsc{uuid}s as a hash
+        of \code{(method, seed, index)}, and per-Sample random streams derive from a
+        master seed sequence --- \emph{independently of Worker count}. Two Workers or
+        two hundred: same points, same \textsc{uuid}s.
+  \item \textbf{Resume is exact} for those same methods. The checkpoint's config hash
+        refuses a silently edited card; re-proposal plus idempotent archiving yields no
+        missing, no duplicate points (Chapter~\ref{ch:checkpoint}).
+  \item \textbf{Replay is exact.} A \sampler{CSV} card re-runs exported points under
+        their original \textsc{uuid}s (Chapter~\ref{ch:csv-sampler}).
+\end{itemize}
+
+\begin{jwarn}
+\textbf{Nested sampling (\sampler{Dynesty}, \sampler{MultiNest}) is the exception.}
+Its proposed points carry a fresh random \textsc{uuid} each run, not a seed-derived
+hash, and there is no mid-run checkpoint (Section~\ref{sec:nested-distributed}). A
+fixed \yamlkey{Seed} still gives you the same \emph{sequence of proposals} from
+\code{numpy}'s generator, so results are statistically reproducible to the algorithm's
+own randomness --- but not point-for-point replayable by \textsc{uuid} the way the
+other methods are. For exact resume on a long nested run, use \code{dynesty}'s native
+\yamlkey{checkpoint\_file} (Section~\ref{sec:nested-distributed}).
+\end{jwarn}
+
+What is \emph{not} guaranteed by the framework: your calculators. A tool that is
+itself nondeterministic (unseeded internal Monte Carlo, hardware-dependent floating
+point) reproduces to its own tolerance, not bit-exactly. Record tool versions and
+seeds in the card --- \yamlkey{Dump} a seed derived from the parameters if the tool
+accepts one.
+
+\begin{jwarn}
+\yamlkey{Seed: 0} means \emph{unseeded} for \sampler{Random} and \sampler{Bridson} ---
+a different point set every launch. The single highest-value reproducibility habit is
+a nonzero \yamlkey{Seed} in every card you might ever re-run.
+\end{jwarn}
+
+\section{Identity: knowing what ran}
+\label{sec:identity}
+
+Every record carries its \textsc{uuid}; every run carries a \yamlkey{run\_id} (fresh
+\textsc{uuid4} unless you set it) stamped into records and the run summary. Set
+\yamlkey{run\_id} explicitly when a scan is one arm of a systematic study ---
+\code{mssm-grid-mg2400-v2} in a filename beats a hash in a spreadsheet.
+
+The run summary adds the rest of the receipt: card name, scan name, timestamps,
+counters, throughput (Section~\ref{sec:run-summary-file}).
+
+\section{The reproducibility bundle}
+\label{sec:repro-bundle}
+
+Everything needed to re-run lives in the project, and the packer knows it
+(Chapter~\ref{ch:project-cli}):
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 project pack . --repro
+\end{jcmd}
+\end{terminal}
+
+That tarball carries the cards (with their seeds), the data files, the
+\yamlkey{LibDeps} declarations that name external tools, the outputs, and the project
+markers. What it cannot carry --- the external tools themselves, their compilers, the
+\textsc{os} --- is exactly the list to record in the project's \file{README.md}:
+
+\begin{itemize}
+  \item tool names and versions (\textsc{spheno} 4.0.5, \ldots), and how they were
+        built;
+  \item the \Jtwo\ version (\cli{pip show jarvishep2}) and the plugin package
+        versions (\Portal, \Operas, \JPlot);
+  \item the Python version.
+\end{itemize}
+
+\begin{jnote}
+The frozen contracts (Section~\ref{sec:contracts}) are themselves a reproducibility
+feature: a card that ran under \Jversion\ keeps its meaning under later releases ---
+new keys are always optional, and the output layout your analysis scripts parse does
+not move.
+\end{jnote}
+
+\section{The workflow, end to end}
+\label{sec:repro-workflow}
+
+\begin{enumerate}
+  \item \textbf{Card in version control}, nonzero \yamlkey{Seed}, explicit
+        \yamlkey{run\_id}, tools pinned in \file{README.md}.
+  \item \textbf{Run} --- resumable by construction; interruptions cost nothing.
+  \item \textbf{Archive} \file{outputs/<scan>/} (or \cli{pack --repro} the whole
+        project).
+  \item \textbf{Publish} figures whose scenes live in the same project
+        (Chapter~\ref{ch:jarvisplot}).
+  \item \textbf{Re-verify} on demand: fetch the pack, \cli{Jarvis2 check} against
+        known points, then re-run or \sampler{CSV}-replay the published set.
+\end{enumerate}
+
+\begin{jtip}
+Test your own bundle once: unpack it in \file{/tmp}, follow your \file{README.md} on a
+colleague's account, and reproduce one benchmark point. Twenty minutes now, versus a
+referee report in eighteen months.
+\end{jtip}

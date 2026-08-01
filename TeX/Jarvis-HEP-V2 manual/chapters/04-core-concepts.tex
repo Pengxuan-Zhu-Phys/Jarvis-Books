@@ -1,0 +1,340 @@
+\chapter{Core Concepts}
+\label{ch:core-concepts}
+
+\newthought{You have already met all five of them.} If you ran the quick start, you
+created a \emph{project}, wrote paths in a \emph{token language}, had a sampler propose
+points in \emph{u-space}, watched twenty \emph{Samples} go through a lifecycle, and read
+back a table of \emph{observables}. What you did not have was the vocabulary. This
+chapter supplies it --- once, precisely, for the whole book --- and after it every
+\textsc{yaml} key you meet and every file a run writes is recognisable as one of five
+things.
+
+\section{One point, end to end}
+\label{sec:one-point}
+
+Before the definitions, the whole machine in one pass. Take a single point out of the
+quick-start scan and follow it from the moment the sampler invents it to the moment you
+open it in a spreadsheet.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Stage} & \textbf{It is now} & \textbf{Where it lives} \\
+    \midrule
+    sampler proposes &
+      \code{u = (0.37,\allowbreak{} 0.82)} &
+      a task on the Redis queue: \textsc{uuid}, u-coords, execution plan \\
+    Worker maps it &
+      \code{x = 0.37,\allowbreak{} y = 0.82} &
+      the Worker's memory: physical values your workflow can use \\
+    workflow runs &
+      \code{+ z = 57.24} &
+      the observables dictionary, one entry richer \\
+    likelihood scores &
+      \code{+ LogL\_Z,\allowbreak{} LogL} &
+      the same dictionary; \code{LogL} is what the sampler steers by \\
+    Archiver files it &
+      one row &
+      \file{DATABASE/\allowbreak{}samples.hdf5}, exported to \file{samples.csv} \\
+    \bottomrule
+  \end{tabular}
+  \caption[One point, from proposal to spreadsheet.]{One point, from proposal to
+  spreadsheet. Each row is one of this chapter's five ideas at work.}
+  \label{tab:one-point}
+\end{table}
+
+Two things in that table are worth pausing on, because they are the two most common
+sources of confusion later.
+
+First, \textbf{the point exists twice}: once as \code{u}, the sampler's currency, and
+once as \code{x}, your physics. In the quick start those two happened to be numerically
+identical --- both variables were \yamlkey{Flat} on $[0,1]$, so the map between them was
+the identity, which is exactly why you did not notice there was a map at all. Change one
+line, to \yamlkey{Log} on $[100, 10000]$, and \code{u = 0.37} becomes \code{x = 549.54}.
+Section~\ref{sec:uspace} is about that map and about which of your \textsc{yaml} numbers
+live on which side of it.
+
+Second, \textbf{the dictionary only ever grows}. It starts as the parameters, gains one
+entry per calculator or opera output, gains the likelihood terms last, and is then
+written out whole. Nothing edits it in place and nothing hands values around behind its
+back. Section~\ref{sec:observables} makes that precise, and it is the reason expressions
+anywhere in a card can refer to anything computed before them.
+
+\section{Projects and the project root}
+\label{sec:projects}
+
+The first question a run must answer is \emph{where am I}, and it answers it before
+anything else happens. Every path in your card, and every file the run writes, hangs off
+one directory: the \emph{project root}.
+
+Normal usage runs from a standalone project directory, not from a checkout of the
+framework. A project is any directory holding your task cards, data, external tools, and
+outputs. When \cli{Jarvis2} loads a task card, it resolves the root in this order, and
+stops at the first hit:
+
+\begin{enumerate}
+  \item The environment variables \code{JARVIS\_HEP\_TASK\_ROOT} or
+        \code{JHEP\_TASK\_ROOT}, when set. This one wins over everything, which makes it
+        the right lever on a batch system where the card is not where you think it is.
+  \item Otherwise, walk up from the task card's directory looking for a marker file:
+        \file{.jarvis-project.json} or \file{jarvis.project.yaml}.
+  \item Failing that, a parent directory containing \file{bin/}; failing that, the task
+        card's own directory.
+\end{enumerate}
+
+That last clause is why the quick start worked with nothing but a loose \textsc{yaml}
+file: no marker anywhere, so the card's own directory became the root, and \file{outputs/}
+appeared beside it. \cli{Jarvis2 project create} scaffolds a properly marked project
+instead (Chapter~\ref{ch:project-cli}), and the difference shows the moment you move the
+card: a marked project keeps its root, a loose card takes its root with it.
+
+Everything a run writes is project-local. The output root is
+\file{<project-root>/outputs/<scan-name>/}, where the scan name resolves as
+\yamlkey{Scan.name} $\rightarrow$ \yamlkey{scan\_name} $\rightarrow$ \code{default}, and
+can be overridden wholesale with the top-level key \yamlkey{task\_result\_dir}
+(Chapter~\ref{ch:task-yaml}).
+
+\section{Path markers and tokens}
+\label{sec:tokens}
+
+Task cards never need absolute paths --- a card that hard-codes \file{/home/you/} is a
+card nobody else can run, and one you cannot move to a cluster. A small token language
+keeps every card portable.
+
+The important structure is that tokens resolve in two \emph{phases}, at two different
+times, in two different processes. Knowing which phase a token belongs to tells you
+exactly where it may appear.
+
+\textbf{Phase 1 --- static, resolved once at load time} in the control process:
+
+\begin{keylist}
+  \item[\marker{\&J/}] The project root. \marker{\&J/data/points.csv} means
+        ``\file{data/points.csv} under the project root''.
+  \item[\$\{Scan:name\}] The scan name; \code{\$\{Scan:root\}} (and any other suffix,
+        e.g.\ \code{output}) resolves to the output root
+        \file{<root>/outputs/<scan>}.
+  \item[\$\{LibDeps:<name>\}] The path registered for an external tool under
+        \yamlkey{LibDeps.Modules} (Chapter~\ref{ch:libdeps}); an unknown name is a hard
+        error at load time.
+  \item[registered executable names] A bare tool name registered under
+        \yamlkey{LibDeps.registered\_executables} is replaced by its absolute path inside
+        any command string.
+  \item[\jtt{\textasciitilde}] Expanded to your home directory.
+  \item[\code{\$\{source\}}, \code{\$\{path\}}] Only inside a module's
+        \yamlkey{installation}/\yamlkey{initialization} commands: the calculator's
+        \yamlkey{source} and runtime \yamlkey{path} (Chapter~\ref{ch:calculators}).
+\end{keylist}
+
+\textbf{Phase 2 --- per-Sample, resolved inside the Worker} just before execution:
+
+\begin{keylist}
+  \item[\token{@SampleID}] The Sample's \textsc{uuid}.
+  \item[\token{@Sdir}] The Sample's save directory under \file{SAMPLE/}; using it forces
+        the directory to be created.
+  \item[\token{@PackID}] The calculator slot id the Worker holds --- the key to physical
+        isolation for non-thread-safe tools (Chapter~\ref{ch:calculators}).
+\end{keylist}
+
+\subsection{Watching one string get resolved}
+
+A single string can carry both phases, and each half is filled in by whichever process
+knows the answer. Written in the card:
+
+\begin{terminal}[as written in the task card]
+\begin{jcmd}
+${LibDeps:SPheno}/bin/SPheno @Sdir/LesHouches.in.@SampleID
+\end{jcmd}
+\end{terminal}
+
+The control process resolves the static half once, at load time, for every Sample that
+will ever run. The \token{@Sdir} and \token{@SampleID} survive untouched --- they cannot
+be known yet, because no Sample exists. Later, in a Worker, moments before the program
+starts:
+
+\begin{terminal}[what the Worker actually ran]
+\begin{jcmd}
+/scratch/tools/SPheno-4.0.5/bin/SPheno \
+  /work/proj/outputs/scan/SAMPLE/000003/8f2c.../LesHouches.in.8f2c...
+\end{jcmd}
+\end{terminal}
+
+This is why the phases are worth remembering rather than looking up: a Phase-1 token is
+resolved once and costs nothing per Sample, while a Phase-2 token is what makes two
+Samples running the same program at the same instant not collide. Putting a token in the
+wrong place does not silently produce a literal string --- Phase 2 refuses:
+
+\begin{terminal}
+\begin{jout}
+Phase 2 cannot resolve static tokens in stage 'execution' field 'command': ...
+\end{jout}
+\end{terminal}
+
+The two lists above are the complete set. Appendix~\ref{app:markers-tokens} repeats them
+as one flat table if you want a print or skim copy.
+
+\section{u-space and physical space}
+\label{sec:uspace}
+
+Samplers do not think in your physics units, and this is deliberate. Every sampler
+proposes points in \emph{u-space} --- the unit hypercube $[0,1]^d$, one dimension per
+entry of \yamlkey{Sampling.Variables} --- and a \emph{mapper} converts each coordinate to
+the physical value your workflow sees, using that variable's declared distribution
+(Chapter~\ref{ch:variables}).
+
+\begin{marginfigure}
+\centering
+\smallcaps{u-space} $[0,1]^d$\\[2pt]
+$\big\downarrow$ \emph{mapper (per variable)}\\[2pt]
+\smallcaps{physical point} $x$\\[2pt]
+$\big\downarrow$ \emph{workflow}\\[2pt]
+\smallcaps{observables}
+\caption{Samplers propose in the unit cube; the Worker maps to physical values.}
+\label{fig:uspace}
+\end{marginfigure}
+
+The same \code{u} means completely different physics depending on what you declared:
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{u} & \textbf{Flat 0--5} & \textbf{Log 100--10000} \\
+    \midrule
+    0.00 & 0.00 & 100.00 \\
+    0.25 & 1.25 & 316.23 \\
+    0.37 & 1.85 & 549.54 \\
+    0.50 & 2.50 & 1000.00 \\
+    1.00 & 5.00 & 10000.00 \\
+    \bottomrule
+  \end{tabular}
+  \caption[One u-coordinate, two declared distributions.]{One u-coordinate, two declared
+  distributions. Half of u-space is below 1000 in the log case and below 2.5 in the flat
+  one --- and the sampler cannot tell the difference.}
+  \label{tab:uspace-mapping}
+\end{table}
+
+\begin{jwarn}
+\textbf{Sampler geometry keys are u-space quantities, never physical ones.}
+\sampler{Bridson}'s \yamlkey{Radius} and \sampler{AdaptiveBridson}'s
+\yamlkey{initial\_radius} and \yamlkey{min\_radius} are fractions of the unit cube. Writing
+\yamlkey{Radius: 50} for a mass you think of in \textsc{gev} does not request 50\,GeV of
+spacing --- it requests fifty times the entire width of every axis, and you get one
+point.
+\end{jwarn}
+
+The split also pays for itself in the distributed runtime: the only payload a task
+carries through Redis is its u-coordinates. The u\,$\rightarrow$\,x map is rebuilt
+identically inside every Worker, so proposing stays cheap and the wire stays light
+(Chapter~\ref{ch:distributed-runtime}).
+
+The exception is the \sampler{CSV} method, which replays already-physical points: there
+the mapper is a no-op and parameters travel with the task
+(Chapter~\ref{ch:csv-sampler}).
+
+\section{The Sample lifecycle}
+\label{sec:sample-lifecycle}
+
+A \emph{Sample} is one parameter point together with everything it accumulates: a
+\textsc{uuid}, u-coordinates, an execution plan, a working directory, a private log, and
+finally a result record. Its life crosses three processes, and each one leaves something
+on disk you can go and look at:
+
+\begin{enumerate}
+  \item \textbf{Proposed} (Sampler). The sampler mints a deterministic \textsc{uuid} and
+        pushes a light task dictionary --- \textsc{uuid}, u-coordinates, execution plan
+        --- onto the Redis queue. \emph{Leaves behind:} a queue entry, and a line in
+        \file{sampler.log}.
+  \item \textbf{Executed} (one Worker). A Worker pulls the task, maps
+        u\,$\rightarrow$\,x, allocates the Sample a slot in the current \emph{bucket}
+        (below), and runs the execution plan layer by layer: same-layer calculators run
+        concurrently, layers run in order, operas run in-process, and the likelihood is
+        evaluated last. Success or failure, the Worker submits a result record and moves
+        on. \emph{Leaves behind:} \file{SAMPLE/<bucket>/<uuid>/} with the Sample's own
+        artifacts and its private log.
+  \item \textbf{Archived} (Archiver). The Archiver batches finished Samples into the
+        \textsc{hdf5} database and packs completed buckets. \emph{Leaves behind:} a row in
+        \file{DATABASE/\allowbreak{}samples.hdf5}, and eventually
+        \file{<bucket>.\allowbreak{}tar.gz}.
+\end{enumerate}
+
+\begin{jnote}
+Failure is a first-class outcome, not an exception path: a failed Sample keeps its
+working directory and its detailed log for forensics, is counted in the statistics, and
+is archived as a failed record. One bad point never aborts the scan --- which is the
+whole reason a scan can run overnight unattended.
+\end{jnote}
+
+\paragraph{Buckets.} Per-sample artifacts live under
+\file{SAMPLE/<bucket>/<uuid>/}, where buckets are numbered directories
+(\file{000001}, \file{000002}, \ldots) holding a bounded number of Samples --- 200 by
+default. A full, fully-archived bucket is packed to \file{<bucket>.tar.gz}. The reason is
+mundane and important: a directory with a million entries makes a network filesystem
+crawl, and \code{ls} in it stops returning. The knobs live under
+\yamlkey{EnvReqs.V2.sample\_directory} (Chapter~\ref{ch:envreqs}).
+
+\section{Observables}
+\label{sec:observables}
+
+As a Sample executes, it accumulates a single flat dictionary of named values, the
+\emph{observables}. For the quick-start point of Section~\ref{sec:one-point}, the finished
+dictionary is exactly this:
+
+\begin{terminal}[one Sample's observables]
+\begin{jout}
+x        = 0.37        # parameter, from the mapper
+y        = 0.82        # parameter, from the mapper
+z        = 57.2436     # opera output: (sin(x)*cos(y) + 2)^5
+LogL_Z   = 57.2436     # named likelihood term, expression: z
+LogL     = 57.2436     # the total, written for you
+\end{jout}
+\end{terminal}
+
+Five names, and every one of them is addressable by name from anywhere else in the card.
+That is what makes this dictionary the lingua franca of the whole system:
+
+\begin{itemize}
+  \item calculator \yamlkey{output} specs and opera \yamlkey{output} lists \emph{add}
+        entries to it (Chapters~\ref{ch:calculators} and~\ref{ch:operas});
+  \item every expression --- opera inputs, \yamlkey{Dump} variables,
+        \yamlkey{LogLikelihood} terms, sampler \yamlkey{selection} cuts,
+        \sampler{AdaptiveBridson} targets --- is evaluated \emph{over} it
+        (Chapter~\ref{ch:expressions});
+  \item one record per Sample lands in \file{DATABASE/samples.hdf5}, and
+        \file{samples.csv} exports every column (Chapter~\ref{ch:outputs}).
+\end{itemize}
+
+Note \code{LogL} in that listing: you named one term, \code{LogL\_Z}, and the runtime
+also wrote the total. \code{LogL} is what the sampler steers by, and it is the sum of
+every term you declared --- with a single term the two coincide, which is why the quick
+start's numbers look redundant.
+
+Name collisions are resolved by order: later writers win. Keep observable names unique
+and expression-friendly --- they double as symbols.
+
+\section{The frozen contracts}
+\label{sec:contracts}
+
+A few behaviors are \emph{contracts}: stable surfaces you may build analysis pipelines
+on, revised only with a major release. If you are writing a script that will still be run
+next year, these are the parts to write it against.
+
+\begin{itemize}
+  \item The task-card schema --- every key documented in Part~\ref{part:task-card}; new
+        keys are always optional.
+  \item The \cli{Jarvis2} command surface and its exit codes (Chapter~\ref{ch:cli}).
+  \item The output layout: \file{DATABASE/samples.hdf5} record structure, the
+        full-column \file{samples.csv}, the \file{SAMPLE/} bucket layout, and
+        \file{run\_summary} fields.
+  \item Checkpoint and resume behavior (Chapter~\ref{ch:checkpoint}).
+\end{itemize}
+
+\begin{jtip}
+Every task card in Part~\ref{part:task-card} is the same four sentences in \textsc{yaml}:
+\emph{name a project-local scan} (\S\ref{sec:projects}), \emph{declare variables, which
+defines a u-space} (\S\ref{sec:uspace}), \emph{declare a workflow, which fills the
+observables} (\S\ref{sec:observables}), and \emph{score them}. The runtime does the rest
+--- moving Samples through their lifecycle (\S\ref{sec:sample-lifecycle}) along paths
+that stayed portable (\S\ref{sec:tokens}). When a key in a later chapter seems to come
+from nowhere, ask which of those four sentences it belongs to.
+\end{jtip}

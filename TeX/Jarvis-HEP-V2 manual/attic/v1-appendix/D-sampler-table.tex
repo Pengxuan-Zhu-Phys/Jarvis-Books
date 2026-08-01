@@ -1,0 +1,50 @@
+\chapter{Sampler Quick Reference}
+\label{app:sampler-table}
+
+\newthought{Every sampler at a glance}---family, the control keys it reads, and where it is
+documented. The \textsc{mcmc} family shares the \yamlkey{Bounds}
+\yamlkey{num\_chains}/\yamlkey{num\_iters}/\yamlkey{proposal\_scale} (written ``std \textsc{mcmc}''
+below); parallel-tempering methods add \yamlkey{exchange\_interval} and \yamlkey{proposal\_scales}.
+
+\footnotesize
+\setlength{\LTpre}{0.6\baselineskip}\setlength{\LTpost}{0.6\baselineskip}
+\begin{longtable}{@{}p{0.17\linewidth}p{0.20\linewidth}p{0.45\linewidth}p{0.05\linewidth}@{}}
+\toprule
+\textbf{Method} & \textbf{Family} & \textbf{Primary keys} & \textbf{Ch.} \\
+\midrule
+\endhead
+\sampler{Random}     & basic            & \yamlkey{Point number}                          & \ref{ch:basic-samplers} \\
+\sampler{Grid}       & basic            & per-variable \yamlkey{num}                      & \ref{ch:basic-samplers} \\
+\sampler{Bridson}    & basic            & \yamlkey{Radius}, \yamlkey{MaxAttempt}; per-var \yamlkey{length} & \ref{ch:basic-samplers} \\
+\sampler{CSV}        & basic (replay)   & \yamlkey{CSV}: \yamlkey{path}, \yamlkey{uuid\_column}, \yamlkey{variables} & \ref{ch:basic-samplers} \\
+\addlinespace
+\sampler{DNN}        & ML-guided        & \yamlkey{Bounds}: \yamlkey{Ninit}, \yamlkey{Niters}, \yamlkey{Hidden\_layers}, \ldots & \ref{ch:ml-evolutionary} \\
+\sampler{Diver}      & evolutionary     & \yamlkey{run}: \yamlkey{mode}, \yamlkey{NP}, \yamlkey{maxgen}, \yamlkey{F}, \yamlkey{Cr} & \ref{ch:ml-evolutionary} \\
+\addlinespace
+\sampler{Dynesty}    & nested           & \yamlkey{nlive}, \yamlkey{rseed}, \yamlkey{run\_nested} & \ref{ch:nested} \\
+\sampler{MultiNest}  & nested           & \yamlkey{nlive}, \yamlkey{rseed}, \yamlkey{run\_nested} & \ref{ch:nested} \\
+\addlinespace
+\sampler{MCMC}       & MCMC (alias \sampler{ToyMCMC}) & std \textsc{mcmc}                & \ref{ch:mcmc-1} \\
+\sampler{AMMCMC}     & MCMC adaptive    & std \textsc{mcmc}                                & \ref{ch:mcmc-1} \\
+\sampler{RobustAM}   & MCMC adaptive    & std \textsc{mcmc}                                & \ref{ch:mcmc-1} \\
+\sampler{DRAM}       & MCMC adaptive    & std \textsc{mcmc}                                & \ref{ch:mcmc-1} \\
+\addlinespace
+\sampler{DEMCMC}     & population (DE)  & std \textsc{mcmc}                                & \ref{ch:mcmc-2} \\
+\sampler{DREAM}      & population (DE)  & std \textsc{mcmc}                                & \ref{ch:mcmc-2} \\
+\sampler{DREAMLite}  & population (alias \sampler{DREAM-lite}) & std \textsc{mcmc}        & \ref{ch:mcmc-2} \\
+\sampler{EnsembleMCMC} & ensemble       & std \textsc{mcmc}                                & \ref{ch:mcmc-2} \\
+\sampler{PTMCMC}     & tempering        & std \textsc{mcmc} $+$ \yamlkey{exchange\_interval}, \yamlkey{proposal\_scales} & \ref{ch:mcmc-2} \\
+\sampler{PTEnsemble} & tempering ensemble & std \textsc{mcmc} $+$ \yamlkey{exchange\_interval}, \yamlkey{proposal\_scales} & \ref{ch:mcmc-2} \\
+\addlinespace
+\sampler{SliceMCMC}  & slice            & std \textsc{mcmc}                                & \ref{ch:mcmc-3} \\
+\sampler{ESS}        & elliptical slice & std \textsc{mcmc}                                & \ref{ch:mcmc-3} \\
+\addlinespace
+\sampler{MALA}       & gradient \emph{(placeholder)} & std \textsc{mcmc}                  & \ref{ch:gradient} \\
+\sampler{HMC}        & gradient \emph{(placeholder)} & std \textsc{mcmc}                  & \ref{ch:gradient} \\
+\sampler{NUTS}       & gradient \emph{(placeholder)} & std \textsc{mcmc}                  & \ref{ch:gradient} \\
+\addlinespace
+\sampler{Profile1D}  & nuisance         & under \yamlkey{Sampling.Nuisance}               & \ref{ch:nuisance} \\
+\sampler{RLTPMCMC}   & experimental     & tempering $+$ \textsc{rl} control               & \ref{ch:experimental} \\
+\bottomrule
+\end{longtable}
+\normalsize

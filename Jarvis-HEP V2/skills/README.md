@@ -13,6 +13,7 @@
 | 第一次跑通一个扫描，确认安装没问题 | [first-scan](first-scan.md) | ⭐ |
 | 知道该选哪个采样算法 | [choose-sampler](choose-sampler.md) | ⭐ |
 | 接入我自己的计算程序（SPheno、micrOMEGAs、自写脚本…） | [external-calculator](external-calculator.md) | ⭐⭐ |
+| 首次构建/复用多个共享第三方库 | [shared-libraries](shared-libraries.md) | ⭐⭐ |
 | 用 MCMC 做后验扫描 | [mcmc-posterior](mcmc-posterior.md) | ⭐⭐ |
 | 算贝叶斯 evidence（logZ，模型比较） | [nested-evidence](nested-evidence.md) | ⭐⭐ |
 | 扫描完了，找到我的结果 | [find-your-results](find-your-results.md) | ⭐ |

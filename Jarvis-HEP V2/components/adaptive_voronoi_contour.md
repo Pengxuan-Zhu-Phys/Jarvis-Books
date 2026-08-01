@@ -1,19 +1,22 @@
 # Component — AdaptiveBridson Sampler (`jarvishep2/Sampling/adaptive_bridson.py`)
 
-**Role**: a feedback-driven sampler (2 ≤ d ≤ 5) that traces a target level-set
-(`f(observables) = target_value`) efficiently: a global **Bridson-like** low-discrepancy pass
-explores `[0,1]^d`, then **crossing detection on a neighbor graph** over the evaluated points
-identifies where the level-set passes, and refinement batches are spent **only** near those
-crossings until the level-set is resolved to a preset precision. The neighbor graph is
-**exact Delaunay adjacency for d ≤ 3** and an **approximate kNN graph for d = 4–5**.
-**Status**: ✅ **Implemented** on `jarvis2` — `adaptive_bridson.py`,
-`hep:feedback` channel, `Distributor` registration **`AdaptiveBridson` only** (`stateless=False`).
-Former name `AdaptiveLevelSet` is **not** accepted. Target expressions use shared
+> **Target adaptive loop (accepted 2026-07-21):** live-band + per-core local Bridson
+> densification — see
+> [`DESIGN_ADAPTIVE_BRIDSON_LIVE_BAND.md`](../DESIGN_ADAPTIVE_BRIDSON_LIVE_BAND.md).
+> That design **supersedes** the crossing-edge midpoint refine described in §4 as the
+> *intended* proposal engine. Sections below retain the **historical D10** edge-refine
+> design for context until the live-band loop is fully landed in code.
+
+**Role**: a feedback-driven sampler (2 ≤ d ≤ 5) that concentrates evaluations near a
+target level-set (`f(observables) ≈ target_value`) in **u-space**.  
+**Status**: ✅ **Registered** on `jarvis2` — `adaptive_bridson.py`, `hep:feedback`,
+`Distributor` name **`AdaptiveBridson` only** (`stateless=False`). Former name
+`AdaptiveLevelSet` is **not** accepted. Target expressions use shared
 `ExpressionContext`. YAML inventory: §6.9 of
 [`YAML_REFERENCE_2.0.md`](../YAML_REFERENCE_2.0.md) and
 [`YAML-Example/ADAPTIVE_BRIDSON.md`](../YAML-Example/ADAPTIVE_BRIDSON.md).
-Milestone **D10**: D10.1–D10.5 **done** (2026-07-16: Hausdorff §9.1–9.8; d=3 sphere /
-d=4 proximity shell / d=5 Sobol gen-0; resume-safe `run_adaptive`).
+Milestone **D10**: D10.1–D10.5 **done** (edge-refine generation); **live-band redesign**
+is the next control-loop revision (design doc above).
 **Origin**: maintainer's Bridson + Voronoi adaptive-contour idea, elaborated in two external
 drafts (2026-07-11: 2-D detailed design; same day: dimension-hybrid extension) and
 **corrected here against the as-built runtime** — the deltas from those drafts are listed in

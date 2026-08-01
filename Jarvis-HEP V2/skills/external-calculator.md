@@ -89,14 +89,17 @@ Jarvis2 run my_card.yaml
   （命令、路径、source 位置），**故意不去扫描源码内容**。所以你改完程序直接重跑，
   跑的还是上次装进 pack 目录的旧版本，而且没有提示。
 
+  在 **calculator 文件夹**（`00*` 之外）的 `jarvis_install.json` 里把
+  `"reinstall"` 设为 `true`，重跑一次即可——该模块的所有 pack 都会重装一次。
+  控制进程会把它转换成单调递增的 `reinstall_epoch`，Worker 只更新自己 pack
+  内的 `.jarvis_install_stamp.json`；不要手动修改 epoch，也不要在 pack 目录里
+  写控制文件。旧的全局应急开关仍兼容：
+
   ```bash
-  JARVIS_FORCE_CALC_INSTALL=1 Jarvis2 run my_card.yaml   # 当前唯一开关（全局生效）
+  JARVIS_FORCE_CALC_INSTALL=1 Jarvis2 run my_card.yaml
   ```
 
-  D13.11 落地后会改成更好用的方式：在 **calculator 文件夹**（`00*` 之外）的
-  `jarvis_install.json` 里把 `"reinstall"` 设为 `true`，重跑一次即可——
-  该模块的所有 pack 都会重装一次。设计见
-  `../DESIGN_CALC_INSTALL_CONTROL_2.0.md`。
+  设计见 `../DESIGN_CALC_INSTALL_CONTROL_2.0.md`。
 - **installation 命令必须幂等**：工作目录跨扫描复用，可能对已存在的目录重跑安装
   （覆盖式 `cp -r` 天然安全，`mkdir` 记得加 `-p`）。
 - **程序留了旧输出** → 在 `execution.commands` 前面加一条 `"rm -f output.json"`，

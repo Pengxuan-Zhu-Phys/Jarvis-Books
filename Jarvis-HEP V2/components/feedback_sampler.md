@@ -116,7 +116,7 @@ Methods whose stop conditions are not “propose returned None” **override**
 |---|---|
 | `_init_seed_sequence(seed)` / `_generation_rng(g)` | Deterministic per-generation RNGs |
 | `_submit_sample_batch(samples)` | Pending track + batched Redis publish |
-| `wait_for_generation(timeout=…)` | Barrier drain → list of feedback dicts |
+| `wait_for_generation(timeout=…)` | Barrier drain → list of feedback dicts; `run_adaptive(generation_timeout=…)` applies this timeout **per generation**, not to the total run budget. Legacy `timeout=` remains accepted as an alias. |
 | `absorb_generation(results)` | Method science after the barrier |
 | `checkpoint_at_barrier(reason=…)` | Force resume checkpoint (safe when pending empty) |
 | `at_safe_barrier()` | `not _pending_uuids` (heartbeat / D6.2 gate) |

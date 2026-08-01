@@ -1,0 +1,91 @@
+\chapter{Preface}
+\label{ch:preface}
+
+\newthought{This book documents \Jtwo}, the distributed runtime of the \Jarvis\
+framework: a Python system for orchestrating likelihood-based parameter scans in
+high-energy physics. \Jtwo\ drives many long-lived worker processes through a Redis task
+queue, runs external calculators and in-process operators for every parameter point, and
+persists everything through an asynchronous archiver --- while you describe the whole scan
+in a single \textsc{yaml} \emph{task card}.
+
+The manual is written to be read in two ways. Read Part~\ref{part:getting-started} front to
+back once: it installs the software, runs a first scan, and builds the vocabulary the rest
+of the book leans on. After that, treat the book as a reference --- every \textsc{yaml} key,
+every \cli{Jarvis2} subcommand, and every output file has a home chapter, and the
+appendices provide flat lookup tables that point back into the prose.
+
+\section{Who this book is for}
+
+You should be comfortable with a Unix shell, a text editor, and elementary Python. No prior
+exposure to any version of \Jarvis\ is assumed: everything the runtime does is explained
+here, from scratch. Familiarity with the physics tooling you plan to orchestrate
+(\textsc{spheno}, \textsc{madgraph}, \textsc{rivet}, private codes, \ldots) helps for
+Part~\ref{part:backends}, but the built-in examples run without any of them.
+
+\section{How the book is organised}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Part~\ref{part:getting-started}: Getting Started] What \Jtwo\ is, installation
+        (including the Redis service it depends on), a ten-minute quick start, and the core
+        concepts: projects, tokens, u-space, and the Sample lifecycle.
+  \item[Part~\ref{part:task-card}: The Task Card] A field-by-field reference for the
+        \textsc{yaml} task card: how it is loaded, the runtime settings under
+        \yamlkey{EnvReqs.V2}, the \yamlkey{Sampling} block, variables and distributions,
+        the likelihood, and the shared expression language.
+  \item[Part~\ref{part:backends}: Workflow Backends] How a parameter point becomes
+        observables: the layered workflow model, external \yamlkey{Calculators}, file
+        formats through \Portal, in-process \yamlkey{Operas}, and the \yamlkey{LibDeps}
+        tool registry.
+  \item[Part~\ref{part:samplers}: Samplers] The five sampling methods --- \sampler{Random},
+        \sampler{Grid}, \sampler{CSV}, \sampler{Bridson}, and the feedback-driven
+        \sampler{AdaptiveBridson} --- plus the \cli{check} smoke path.
+  \item[Part~\ref{part:running}: Running, Monitoring \& Outputs] The \cli{Jarvis2} command
+        line, project tools and the official example catalog, checkpoint/resume, the output
+        tree, live monitoring, the run summary, and logging.
+  \item[Part~\ref{part:advanced}: Advanced \& Performance] The distributed runtime in
+        depth (Redis schema, Workers, the Archiver), performance tuning, plotting with
+        \JPlot, extending the expression language with \Operas, and reproducibility.
+\end{description}
+
+\section{Conventions}
+
+\begin{itemize}
+  \item \yamlkey{Sampling.Method} --- a \textsc{yaml} key or block, written as a dotted
+        path from the top of the task card.
+  \item A command you type in a shell appears in a titled box, exactly as you would
+        type it:
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 run task.yaml
+\end{jcmd}
+\end{terminal}
+  \item A short command mentioned mid-sentence uses \cli{Jarvis2 -{}-help} instead.
+  \item \token{@SampleID}, \marker{\&J/} --- runtime tokens and path markers, coloured
+        like a \textsc{yaml} value (Chapter~\ref{ch:core-concepts}; full table in
+        Appendix~\ref{app:markers-tokens}).
+  \item \sampler{Bridson} --- a sampler method name.
+  \item \req\ / \opt\ --- whether omitting a key raises an error or silently applies a
+        default.
+\end{itemize}
+
+Three kinds of boxes interrupt the text:
+
+\begin{jnote}
+A \textbf{note} adds background or records a contract you can rely on.
+\end{jnote}
+
+\begin{jtip}
+A \textbf{tip} is advice from production use --- defaults to keep, habits that save time.
+\end{jtip}
+
+\begin{jwarn}
+A \textbf{warning} marks behavior that can cost you data, hours of compute, or an evening
+of debugging.
+\end{jwarn}
+
+\section{Versions and errata}
+
+This manual is a living document revised in step with the software; this build documents
+\Jarvis\ \Jversion. The authoritative, machine-checked inventory of every \textsc{yaml} key
+lives with the source; where the book and the code disagree, the code wins --- and we would
+appreciate an issue on the project tracker so the book can be fixed.

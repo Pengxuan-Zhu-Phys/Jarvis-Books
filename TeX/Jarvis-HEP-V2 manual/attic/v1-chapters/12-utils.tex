@@ -1,0 +1,93 @@
+\chapter{Utility Functions}
+\label{ch:utils}
+
+\newthought{The \yamlkey{Utils} block} lets you define your own helper functions and then call
+them inside expressions. Today its main feature is \yamlkey{interpolations\_1D}: turning a table
+of numbers into a function you can evaluate anywhere a likelihood or mapping is computed.
+
+\section{Why you would want this}
+\label{sec:utils-why}
+
+A lot of \textsc{hep} input comes as tables rather than formulas---an experimental limit curve, a
+tabulated efficiency, a cross-section fit, a detector response. \yamlkey{interpolations\_1D}
+reads such a table and gives you a function \expr{f(x)} that interpolates between the points, so
+you can use it directly in a \yamlkey{LogLikelihood} term.
+
+\section{Defining an interpolation}
+\label{sec:utils-shape}
+
+\yamlkey{interpolations\_1D} is a list; each item defines one function. You can supply the data
+from a \textsc{csv} file or inline.
+
+\paragraph{From a CSV file}
+
+\begin{yamlwin}
+Utils:
+  interpolations_1D:
+    - name: XenonSD2019
+      file: "&J/data/xenon_sd_2019.csv"
+      logX: false
+      logY: true
+      kind: cubic
+\end{yamlwin}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\yamlkey{name}] the function name you will call in expressions.
+  \item[\yamlkey{file}] path to a \textsc{csv} with two columns named \code{x} and \code{y}.
+  \item[\yamlkey{logX}, \yamlkey{logY}] optional (default \code{false}); set \code{true} when the
+        data really lives in log space along that axis.
+  \item[\yamlkey{kind}] optional interpolation method: \code{linear}, \code{quadratic},
+        \code{cubic}, or \code{nearest}.
+\end{description}
+
+\paragraph{Inline}
+
+For a short curve you can write the points directly, with \yamlkey{x\_values} and
+\yamlkey{y\_values} instead of \yamlkey{file}:
+
+\begin{yamlwin}
+Utils:
+  interpolations_1D:
+    - name: EffApprox
+      x_values: [100, 200, 400, 800]
+      y_values: [0.02, 0.10, 0.32, 0.55]
+      logX: false
+      logY: false
+      kind: linear
+\end{yamlwin}
+
+\section{Using it in an expression}
+\label{sec:utils-use}
+
+Once declared, the name behaves like any other function (Chapter~\ref{ch:symbols}). For example,
+comparing a predicted cross-section against a tabulated limit:
+
+\begin{yamlwin}
+Sampling:
+  LogLikelihood:
+    - name: LogL_DD
+      expression: "LogGauss(sigSD_p_pb, XenonSD2019(mN1), 0.1 * XenonSD2019(mN1))"
+\end{yamlwin}
+
+\noindent It also works in calculator input actions:
+
+\begin{yamlwin}
+actions:
+  - type: "Dump"
+    variables:
+      - {name: "limit", expression: "EffApprox(mass)"}
+\end{yamlwin}
+
+\begin{jtip}
+Use \yamlkey{logX}/\yamlkey{logY} only when the table is genuinely log-spaced. Prefer a
+\textsc{csv} file for long experimental tables, and inline values for small control curves. Keep
+the function name short and descriptive---you will type it in every expression that uses it.
+\end{jtip}
+
+\section{Summary}
+\label{sec:utils-summary}
+
+\yamlkey{Utils.interpolations\_1D} turns tabulated data into named functions you can call from any
+expression. Supply the data from a two-column \textsc{csv} or inline, choose an interpolation
+\yamlkey{kind}, and use the \yamlkey{name} just like a built-in function. This is the bridge
+between experimental tables and your likelihood.

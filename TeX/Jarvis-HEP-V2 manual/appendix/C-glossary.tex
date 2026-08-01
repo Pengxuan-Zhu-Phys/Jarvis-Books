@@ -1,0 +1,70 @@
+\chapter{Glossary}
+\label{app:glossary}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Archiver] The dedicated process that persists finished Samples in batches:
+        database rows, bucket packing (Chapters~\ref{ch:envreqs},
+        \ref{ch:distributed-runtime}).
+  \item[bucket] A numbered directory under \file{SAMPLE/} holding a bounded number of
+        Samples (default 200), packed to \file{.tar.gz} once fully archived
+        (Section~\ref{sec:sample-directory}).
+  \item[calculator] An external program declared under \yamlkey{Calculators.Modules},
+        driven through the write-inputs / run-commands / read-outputs cycle
+        (Chapter~\ref{ch:calculators}).
+  \item[clone shadow] Per-pack physical copies of a non-thread-safe tool's directory
+        tree (\yamlkey{clone\_shadow: true}, Section~\ref{sec:clone-shadow}).
+  \item[evidence ($\log Z$)] The Bayesian evidence a nested-sampling run estimates ---
+        the total probability of the data under the model, used to compare models
+        against each other (Section~\ref{sec:nested-what}).
+  \item[execution plan] The layered step sequence --- calculators, then operas, then
+        likelihood --- every Sample follows (Chapter~\ref{ch:workflow-model}).
+  \item[expression] A math string in the shared language, evaluated over the
+        observables (Chapter~\ref{ch:expressions}).
+  \item[fixed-set sampler] A method whose whole point set exists before the first
+        result: \sampler{Random}, \sampler{Grid}, \sampler{CSV}, \sampler{Bridson}
+        (Chapter~\ref{ch:choosing-sampler}).
+  \item[layer] A group of calculators with no mutual dependency, eligible to run
+        concurrently within one Sample (Section~\ref{sec:layers}).
+  \item[live point] One member of a nested-sampling run's active population; the
+        lowest-likelihood live point is retired at every step
+        (Section~\ref{sec:nested-what}).
+  \item[LogL] The total log-likelihood: a term literally named \code{LogL}, else the
+        sum of all terms (Section~\ref{sec:logl-semantics}).
+  \item[marker] A Phase-1 path token such as \marker{\&J/}
+        (Appendix~\ref{app:markers-tokens}).
+  \item[nested sampling] The evidence-estimating sampler family
+        (\sampler{Dynesty}, \sampler{MultiNest}) that shrinks a live-point population
+        toward high likelihood, tracking the Bayesian evidence as it goes
+        (Chapters~\ref{ch:multinest}--\ref{ch:dynesty}).
+  \item[observables] The per-Sample dictionary of named values: parameters, captured
+        outputs, likelihood terms (Section~\ref{sec:observables}).
+  \item[opera] An in-process Python operator declared under \yamlkey{Operas.Modules}
+        (Chapter~\ref{ch:operas}).
+  \item[pack / PackID] A stable calculator concurrency slot (\code{001}\ldots\code{N})
+        and its persistent directory; \token{@PackID} in paths
+        (Section~\ref{sec:clone-shadow}).
+  \item[pool] A global concurrency cap for one calculator type, enforced through Redis
+        across all Workers (Section~\ref{sec:pools}).
+  \item[project] A directory holding cards, data, tools, and outputs; pinned by marker
+        files (Section~\ref{sec:projects}).
+  \item[registered executable] A tool name declared under
+        \yamlkey{LibDeps.registered\_executables}, substituted with its absolute path
+        in command strings (Section~\ref{sec:registered-executables}).
+  \item[Sample] The unit of work: one parameter point plus its \textsc{uuid}, working
+        directory, log, and result (Section~\ref{sec:sample-lifecycle}).
+  \item[safe barrier] The state in which checkpoints are written: sampler at rest and
+        all submitted points acknowledged by the Archiver
+        (Section~\ref{sec:safe-barrier}).
+  \item[scan] One execution of a task card; names the output directory
+        \file{outputs/<scan>/}.
+  \item[selection] A boolean expression filtering candidate points before submission;
+        rejected candidates consume budget (Section~\ref{sec:selection}).
+  \item[task card] The \textsc{yaml} file describing a scan
+        (Part~\ref{part:task-card}).
+  \item[token] A per-Sample placeholder (\token{@SampleID}, \token{@Sdir},
+        \token{@PackID}) resolved in the Worker (Appendix~\ref{app:markers-tokens}).
+  \item[u-space] The unit hypercube $[0,1]^d$ samplers propose in, mapped to physical
+        values per variable (Section~\ref{sec:uspace}).
+  \item[Worker] A long-lived process executing one Sample at a time
+        (Section~\ref{sec:worker-loop}).
+\end{description}

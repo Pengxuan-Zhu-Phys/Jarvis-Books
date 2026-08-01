@@ -1,0 +1,120 @@
+\chapter{CSV}
+\label{ch:csv-sampler}
+
+\newthought{Replay physical points, not u-space draws.} \sampler{CSV} reads rows from a
+file and submits each as a Sample directly --- there is no u-space and no
+\yamlkey{Mapper} step (\yamlkey{Mapper} auto-derives to \yamlkey{type: none}; each
+row's values travel with the task exactly as written). It is the second half of
+\Jtwo's iterative pattern: scan broadly with a cheap method, select offline, then
+replay the survivors through a heavier workflow under their original identity.
+
+\section{Configuration}
+\label{sec:csv-config}
+
+\begin{yamlwin}
+Sampling:
+  Method: CSV
+  CSV:
+    path: "&J/data/points.csv"   # REQUIRED
+    variables: [m0, m12, tanb]   # default: all non-uuid columns
+    uuid_column: uuid            # default "uuid"
+    delimiter: ","
+    encoding: utf-8
+\end{yamlwin}
+
+\begin{keylist}
+  \item[path] \req\ (\code{ValueError} if absent). \marker{\&J/}, absolute, or relative
+        to the task card.
+  \item[variables] \opt\ list --- the column subset to use as parameters; default every
+        column except the \textsc{uuid} column. Any name not found in the file's header
+        row is a \code{ValueError}.
+  \item[uuid\_column] \opt, default \code{uuid} (case-insensitive match against the
+        header). When the column exists, its values become the Sample \textsc{uuid}s
+        --- reusing the \textsc{uuid}s of a previous scan's export makes re-runs
+        traceable point-for-point. When the column is absent, or empty for a given row,
+        that row gets a fresh \textsc{uuid4}. A duplicate non-empty \textsc{uuid} value
+        appearing twice in the file is a \code{ValueError} naming the offending row.
+  \item[delimiter, encoding] \opt; defaults \code{","} and \code{utf-8}.
+\end{keylist}
+
+\section{How it behaves in the runtime}
+\label{sec:csv-runtime}
+
+Rows are read with Python's \code{csv} module as a generator, one at a time, from the
+first submission onward --- the file is never loaded whole into memory, so a
+ten-million-row replay costs no more \textsc{ram} than a ten-row one. Each cell is
+type-coerced (booleans, integers, floats, else left as text) before it reaches
+\yamlkey{selection} or the workflow, so a numeric column compares numerically without
+you writing a cast in the expression.
+
+\yamlkey{selection} filters rows exactly as for the u-space methods
+(Section~\ref{sec:selection}): a rejected row consumes nothing but is simply skipped,
+since there is no fixed budget to account against here --- \sampler{CSV}'s "budget" is
+just the file's row count. Resume tracks a row-index cursor as part of the checkpoint,
+together with every accepted row's parameters and the set of source \textsc{uuid}s seen
+so far (for duplicate detection): an interrupted replay picks up scanning from the next
+unread row rather than re-reading the file from the top.
+
+\paragraph{The replay loop.} Export a filtered subset of a previous run's
+\file{samples.\allowbreak{}csv}, keeping the \code{uuid} column, and point a new card's
+\yamlkey{CSV.\allowbreak{}path} at it:
+
+\begin{terminal}
+\begin{jcmd}
+python3 - <<'PY'
+import pandas as pd
+df = pd.read_csv("outputs/broad/DATABASE/samples.csv")
+df[df.LogL > -3.0][["uuid", "m0", "m12", "tanb"]] \
+  .to_csv("data/survivors.csv", index=False)
+PY
+\end{jcmd}
+\end{terminal}
+
+Swap in the expensive calculators on the new card, and every surviving point re-runs
+under its original \textsc{uuid}.
+
+\begin{jtip}
+Keep the \code{uuid} column when exporting subsets. Identical \textsc{uuid}s across
+scans make joining the cheap pass and the expensive pass a one-line \code{merge}.
+\end{jtip}
+
+\section{Choosing \sampler{CSV} over the alternatives}
+
+\begin{itemize}
+  \item \textbf{Re-running known points.} Benchmarks, another paper's published set, or
+        a previous scan's survivors --- anywhere the point set itself, not a generation
+        rule, is the input.
+  \item \textbf{No u-space semantics apply.} \yamlkey{Radius}, \yamlkey{"Point number"},
+        and the distribution catalog (Chapter~\ref{ch:variables}) are all irrelevant
+        here; only the file's columns matter.
+  \item \textbf{Not a generator.} If you need \emph{new} points, \sampler{CSV} is never
+        the answer --- pick one of \sampler{Random}, \sampler{Grid},
+        \sampler{Bridson}, or \sampler{AdaptiveBridson} to produce the file first.
+\end{itemize}
+
+\section{Summary}
+\label{sec:csv-summary}
+
+\sampler{CSV} is not a generator --- it is the replay half of the map-then-refine
+pattern, submitting rows a file already contains under their own identity, with no
+u-space or \yamlkey{Mapper} involved at all.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{\sampler{CSV}} \\
+    \midrule
+    Kind & fixed set \\
+    Point count & file rows \\
+    Dimensions & any \\
+    Required keys & \yamlkey{CSV.path} \\
+    u$\to$x mapping & none --- physical rows travel as-is \\
+    \yamlkey{Seed} role & --- \\
+    \yamlkey{selection} & consumes rows, no top-up \\
+    Extra output & --- \\
+    \bottomrule
+  \end{tabular}
+  \caption{\sampler{CSV} at a glance.}
+  \label{tab:csv-summary}
+\end{table}

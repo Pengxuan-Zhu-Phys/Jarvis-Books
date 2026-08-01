@@ -1,0 +1,209 @@
+\chapter{Calculators}
+\label{ch:calculators}
+
+\newthought{Calculators are the external programs} --- spectrum generators, event
+generators, analysis tools --- that \Jtwo\ exists to orchestrate. Each entry under
+\yamlkey{Calculators.Modules} declares one program: where it lives, how to isolate it,
+what environment it needs, and the \emph{write input $\rightarrow$ run commands
+$\rightarrow$ read output} cycle every Sample drives it through. This is the longest
+block in a real card and the longest chapter in this part.
+
+\section{The execution model}
+\label{sec:calc-model}
+
+Each Worker holds \textbf{one instance per calculator type} for its whole life:
+templates are parsed once, \yamlkey{env\_setup} scripts are sourced once, and every
+Sample the Worker handles reuses them. Per run, the cycle is fixed:
+
+\begin{enumerate}
+  \item \textbf{Acquire a slot.} The Worker blocks on the calculator's global
+        concurrency pool and receives a \emph{pack id}
+        (\S\ref{sec:pools},~\S\ref{sec:clone-shadow}).
+  \item \textbf{Prepare the runtime.} Shadow install (first time a Worker sees this
+        pack) or a symlink into the Sample directory.
+  \item \textbf{Write inputs} --- each \yamlkey{execution.input} spec, through \Portal\
+        (Chapter~\ref{ch:io-types}).
+  \item \textbf{Run commands} --- each \yamlkey{execution.commands} entry, sequentially,
+        under the module's timeout.
+  \item \textbf{Read outputs} --- each \yamlkey{execution.output} spec; captured
+        variables merge into the observables.
+  \item \textbf{Release the slot} --- always, success or failure.
+\end{enumerate}
+
+A non-zero exit code, a timeout, or an I/O error fails the Sample (never the scan) and
+the slot is released.
+
+\section{Global concurrency: \yamlkey{Calculators.Pools}}
+\label{sec:pools}
+
+\begin{yamlwin}
+Calculators:
+  Pools:            # alias: pools
+    SPheno: 8       # at most 8 concurrent SPheno runs, across ALL Workers
+    MadGraph: 2
+\end{yamlwin}
+
+Pools are global caps enforced through Redis: a Worker needing a slot blocks until one
+frees anywhere in the system (up to an internal 30\,s acquire timeout, after which the
+Sample fails). Values have floor 1. When a module has no pool entry, its per-module
+\yamlkey{make\_paraller} value (sic --- the historical spelling, default 1) is used.
+
+\begin{jtip}
+Give every expensive calculator an explicit pool sized to what the machine actually
+sustains --- licenses, memory, scratch bandwidth. Pools are the throttle that lets you
+run more Workers than any single tool could survive.
+\end{jtip}
+
+\section{\yamlkey{Modules[]}: the per-module keys}
+\label{sec:calc-module-keys}
+
+\begin{fullwidth}
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.18\linewidth}p{0.10\linewidth}p{0.18\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Req.} & \textbf{Default} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{name}               & \req & ---     & module name; nameless entries are silently dropped \\
+    \yamlkey{required\_modules}  &      & \code{[]} & dependencies $\rightarrow$ layers (Ch.~\ref{ch:workflow-model}) \\
+    \yamlkey{clone\_shadow}      &      & \code{false} & physical per-pack copy for non-thread-safe tools \\
+    \yamlkey{path}               &      & \yamlkey{execution.path} $\to$ \code{"."} & runtime directory; may contain \token{@PackID} when shadowed \\
+    \yamlkey{source}             &      & ---     & shadow: copy source; non-shadow: tool symlinked into the Sample dir \\
+    \yamlkey{symlink\_name}      &      & module name & name of that symlink \\
+    \yamlkey{timeout}            &      & none    & seconds; one deadline across \emph{all} execution commands \\
+    \yamlkey{make\_paraller}     &      & \code{1} & pool fallback (\S\ref{sec:pools}) \\
+    \yamlkey{env\_setup}         &      & \code{[]} & environment scripts (\S\ref{sec:env-setup}) \\
+    \yamlkey{installation}       &      & \code{[]} & shadow install commands, once per pack (\S\ref{sec:clone-shadow}) \\
+    \yamlkey{initialization}     &      & \code{[]} & post-install commands, once per pack \\
+    \yamlkey{execution}          & \req & \code{\{\}} & commands + I/O specs, required in practice (\S\ref{sec:execution-block}) \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\yamlkey{Calculators.Modules[]} keys.}
+  \label{tab:calc-module-keys}
+\end{table}
+\end{fullwidth}
+
+\section{Isolation: safe tools vs \yamlkey{clone\_shadow}}
+\label{sec:clone-shadow}
+
+Two isolation strategies, chosen per module:
+
+\paragraph{Concurrency-safe tools} (default). The installed tool is shared; each Sample
+gets a \emph{symlink} to it inside the Sample directory (named \yamlkey{symlink\_name}),
+so commands can call it with a stable relative name and nothing is copied. Combine with
+\yamlkey{LibDeps.registered\_executables} (Chapter~\ref{ch:libdeps}) to skip even the
+symlink.
+
+\paragraph{Non-thread-safe tools: \yamlkey{clone\_shadow: true}.} Tools that scribble on
+their own installation directory (\textsc{madgraph}-style generators) get \emph{physical
+copies}. Each concurrency slot --- each \emph{pack} --- owns a private directory tree:
+
+\begin{yamlwin}
+- name: MadGraph
+  clone_shadow: true
+  source: "&J/External/MG5"          # copied per pack when no installation given
+  path: "&J/packs/MG5-@PackID"       # each slot's private tree
+  installation:
+    - cmd: "cp -r ${source}/* ${path}/"
+      cwd: "${path}"
+  initialization:
+    - cmd: "./bin/compile"
+      cwd: "${path}"
+\end{yamlwin}
+
+Pack ids are \textbf{stable slots} (\code{001}\,\ldots\,\code{N}, one per pool slot)
+whose directories persist across Samples, Workers, and runs. The tokens
+\code{\$\{source\}} and \code{\$\{path\}} are available inside
+\yamlkey{installation} / \yamlkey{initialization} commands only.
+
+\begin{jwarn}
+Because packs persist, \textbf{installation commands must be idempotent}: every new
+Worker re-runs \yamlkey{installation} on a possibly already-populated pack directory. A
+plain overwrite-copy (as above) is fine; an \code{append}, a \code{patch}, or an
+unconditional \code{configure} that fails on a second run is not.
+\end{jwarn}
+
+\section{Environments: \yamlkey{env\_setup}}
+\label{sec:env-setup}
+
+Tools that need a sourced environment (\textsc{rivet}, \textsc{root}-based stacks)
+declare it per module:
+
+\begin{yamlwin}
+- name: RivetAnalysis
+  env_setup:
+    - source: "&J/External/Rivet/rivet_env.sh"
+  execution:
+    commands:
+      - cmd: "rivet --analysis=MY_ANALYSIS input.hepmc"
+        cwd: "@Sdir"
+\end{yamlwin}
+
+At first use, the Worker runs \cli{source <script> \&\& env} in an isolated shell,
+captures the resulting environment, merges it over its own, and \textbf{caches it for the
+process lifetime} --- each script runs once per Worker, not once per Sample. All
+subsequent commands of that module run under the captured environment.
+
+\section{The \yamlkey{execution} block}
+\label{sec:execution-block}
+
+\begin{yamlwin}
+execution:
+  path: "&J/calc/eggbox"       # fallback for the module path
+  commands:
+    - cmd: python3 eggboxlk    # registered names + all tokens resolve here
+      cwd: "@Sdir"
+  input:
+    - name: inpjson
+      path: "@Sdir/input.json"
+      type: JSON
+      actions:
+        - type: Dump
+          variables:
+            - name: xx
+              expression: x * Pi     # write a computed value
+            - name: yy               # no expression -> copy observable yy
+  output:
+    - name: oupjson
+      path: "@Sdir/output.json"
+      type: JSON
+      variables:
+        - name: z
+          entry: z                   # dotted path into the file
+\end{yamlwin}
+
+\begin{keylist}
+  \item[commands] A list of \code{\{cmd, cwd\}} maps, run \emph{sequentially} through
+        the Worker's scheduler; \yamlkey{cwd} defaults to \code{"."} relative to the
+        module path. Registered executable names, static tokens, and per-Sample tokens
+        all resolve inside \yamlkey{cmd} and \yamlkey{cwd}.
+  \item[input] File specs written \emph{before} the commands run.
+  \item[output] File specs read \emph{after} the commands finish.
+\end{keylist}
+
+The \yamlkey{input}/\yamlkey{output} spec format --- \yamlkey{type}, the \yamlkey{Dump}
+action, \yamlkey{entry} paths, and the \yamlkey{save} flag for keeping copies under
+\file{SAMPLE/} --- is the subject of Chapter~\ref{ch:io-types}.
+
+\section{Failure and diagnostics}
+\label{sec:calc-failure}
+
+Everything a calculator run does is logged to the Sample's own log: the resolved
+command line, raw stdout/stderr, exit status, and timing. On failure the Sample keeps
+its working files, so the standard post-mortem is:
+
+\begin{enumerate}
+  \item find the failed \textsc{uuid} in the console or \file{samples.csv};
+  \item open \file{SAMPLE/<bucket>/<uuid>/Sample\_running.log};
+  \item re-run the recorded command by hand in the recorded \yamlkey{cwd}.
+\end{enumerate}
+
+\begin{jnote}
+The module \yamlkey{timeout} is a deadline across the \emph{whole} command list of one
+run, not per command. On expiry the process group receives \textsc{sigterm}, then
+\textsc{sigkill}, the Sample fails, and the slot is released --- a hung external tool
+cannot wedge the scan.
+\end{jnote}

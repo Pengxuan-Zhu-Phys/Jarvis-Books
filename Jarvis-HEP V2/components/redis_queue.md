@@ -66,7 +66,7 @@ Redis broker for tasks, calculator pools, results, and monitor counters.
 | `push_many_tasks` | `(tasks) -> None` | validate all, pipeline `rpush` + single `incrby` (**task** op_count). |
 | `register_calc_pool` | `(name, n) -> None` | reset `CALC_FREE`/`CALC_BUSY_PACKS`, seed **stable PackIDs `001`…`N`** (`format_calc_pack_id`), set status free=n busy=0. |
 | `acquire_calc` | `(name, timeout=30) -> str\|None` | `blpop` a slot → the popped value **is** the stable PackID (no minting; legacy `ready` junk discarded), mark busy, flip free/busy counters, bump **calculator** op_count. |
-| `release_calc` | `(name, pack_id) -> None` | **atomic `HDEL` guard** (single winner under Worker-finally vs watchdog-sweep races), push the **same PackID** back, flip counters, bump **calculator** op_count; raises on unknown pack_id, ignores legacy junk ids. |
+| `release_calc` | `(name, pack_id) -> None` | Lua-atomic `HDEL` guard + `RPUSH` + free/busy counter updates + calculator op count; a second release is reported as already free, while Redis errors propagate. Worker held-pack state is removed only after confirmed release. |
 | `submit_result` | `(info) -> None` | validate, `rpush(ARCHIVE_QUEUE)`, update `SAMPLE_STATS` (completed/failed + running−1), **exactly one** `incr` **sample** op_count per sample (D1.1). |
 | `pull_result` | `(timeout=1) -> dict\|None` | `blpop(ARCHIVE_QUEUE)` for the Archiver. |
 | `init_sample_buckets` | `(sample_root, limit, width, …)` | reset bucket meta for a run. |

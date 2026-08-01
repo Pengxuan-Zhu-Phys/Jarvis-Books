@@ -1,0 +1,171 @@
+\chapter{Troubleshooting}
+\label{app:troubleshooting}
+
+Symptoms, causes, fixes --- ordered roughly by how early in a run they bite.
+
+\section{Validation error codes}
+\label{sec:validation-codes}
+
+Every \cli{run}/\cli{check}/\cli{validate} loads the card through one gate
+(Section~\ref{sec:cli-validate}) before anything else happens. Each finding carries a
+stable code, the exact \textsc{yaml} path, and a message; this table is every code the
+gate can raise.
+
+\begingroup
+\setlength{\tabcolsep}{0pt}
+\begin{longtable}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+  \toprule
+  \textbf{Code} & \textbf{Path / trigger} & \textbf{Meaning} \\
+  \midrule
+  \endhead
+  \code{JV2-LOAD-001} & \code{\$} & the loaded config is not a mapping \\
+  \code{JV2-MTH-001} & \yamlkey{Sampling} & block missing or not a mapping on a
+    non-check run \\
+  \code{JV2-MTH-002} & \yamlkey{Sampling.Method} & missing on a scan run \\
+  \code{JV2-MTH-003} & \yamlkey{Sampling.Method} & set to a value \Jtwo\ does not
+    implement (Section~\ref{sec:method}) \\
+  \code{JV2-MTH-010}/\code{011} & \yamlkey{Sampling.Radius} & \sampler{Bridson}:
+    missing / not a positive number \\
+  \code{JV2-MTH-012}/\code{013} & \yamlkey{Sampling.\allowbreak{}MaxAttempt} & \sampler{Bridson}:
+    missing / not an integer $\geq 1$ \\
+  \code{JV2-MTH-020}/\code{021} & \yamlkey{Sampling."Point number"} &
+    \sampler{Random}: missing / not an integer $\geq 1$ \\
+  \code{JV2-MTH-030}/\code{031} & \yamlkey{Sampling.CSV} / \code{.path} &
+    \sampler{CSV}: block or path missing \\
+  \code{JV2-MTH-040} & \yamlkey{Sampling.data} & check-modules: neither
+    \yamlkey{Method} nor a resolvable \textsc{csv} (Section~\ref{sec:check-points-source}) \\
+  \code{JV2-VAR-001} & \yamlkey{Sampling.\allowbreak{}Variables} & required list missing, empty, or
+    not a list \\
+  \code{JV2-VAR-002} & \yamlkey{\ldots.\allowbreak{}distribution.\allowbreak{}type} & missing or not one of
+    \code{Flat}/\allowbreak\code{Log}/\allowbreak\code{Logit}/\allowbreak\code{Normal}/\allowbreak\code{Log-Normal} --- names are
+    \textbf{case-sensitive} \\
+  \code{JV2-VAR-010}--\code{037} & \yamlkey{Sampling.\allowbreak{}Variables[i]} & per-entry shape,
+    unknown keys, missing/invalid distribution parameters
+    (Chapter~\ref{ch:variables}) \\
+  \code{JV2-BND-000} & \yamlkey{Sampling.Bounds} & not a mapping \\
+  \code{JV2-BND-001} & \yamlkey{Bounds} & unknown key directly under it \\
+  \code{JV2-BND-010} & \yamlkey{Bounds.nlive} & missing or $< 2$ \\
+  \code{JV2-BND-012} & \yamlkey{Bounds.dynamic} / \code{Dynamic} & present at all ---
+    removed; switch \yamlkey{Method} instead (Section~\ref{sec:multinest-no-switch}) \\
+  \code{JV2-BND-013} & \yamlkey{Bounds.dlogz} / \code{dlogz\_init} & not a number \\
+  \code{JV2-BND-020}/\code{021} & \yamlkey{Bounds.run\_nested} & not a mapping / has
+    an unknown key \\
+  \code{JV2-BND-030}--\code{032} & \yamlkey{Bounds.sampler} & not a mapping, a
+    HEP-injected key pasted in, or an unknown constructor key
+    (Section~\ref{sec:multinest-yaml-bridge}) \\
+  \code{JV2-DEAD-001}/\code{002} & \yamlkey{Runtime.\allowbreak{}Subprocess} /
+    \yamlkey{execution.\allowbreak{}\{input,\allowbreak{}output\}[].save} & warning: dead key, silently ignored
+    at runtime \\
+  \code{JV2-OPR-001} & \yamlkey{Operas.\allowbreak{}Modules[].\allowbreak{}call\_mode} & not \code{call} or
+    \code{acall} \\
+  \bottomrule
+\end{longtable}
+\endgroup
+
+\begin{jnote}
+Every code above is a hard \code{error} except \code{JV2-DEAD-001}/\code{002}, which
+are \code{warning}s --- the card still runs, but the dead key is flagged.
+\cli{--strict} promotes those warnings to errors too (\S\ref{sec:cli-validate}).
+\end{jnote}
+
+\section{Startup}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Connection error mentioning Redis, immediately]
+        The local Redis service is not running. \cli{redis-cli ping} must answer
+        \code{PONG}; see Section~\ref{sec:redis-install}. Connection details are
+        internal --- there is nothing to configure in the card.
+  \item[\code{KeyError: 'max'} (or \code{'min'}, \code{'length'}, \code{'num'}) at start]
+        A variable's \yamlkey{distribution.parameters} map is missing a required key
+        for its type or method --- the full catalog is
+        Table~\ref{tab:distributions} (Section~\ref{sec:variables-entry}).
+  \item[Validation error \code{JV2-MTH-003}: \yamlkey{Sampling.Method} not
+        implemented]
+        A typo'd or unsupported method name; the seven valid values are listed in
+        Section~\ref{sec:method}. Under \yamlkey{mode: check\_modules} this
+        only fires when \emph{no} check-points \textsc{csv} also resolves --- delete
+        the stray \yamlkey{Method} or fix it (Section~\ref{sec:check-points-source}).
+  \item[\code{FileNotFoundError} for a registered executable]
+        \yamlkey{registered\_executables[].source} is checked at load time
+        (Section~\ref{sec:registered-executables}). Fix the path --- this error firing
+        early is the feature.
+  \item[\code{KeyError} on \code{\$\{LibDeps:...\}}]
+        The name is not registered --- typo, or its list entry was malformed and
+        silently dropped (Section~\ref{sec:libdeps-modules}).
+  \item[Error naming a top-level \yamlkey{Runtime} block or an unknown
+        \yamlkey{EnvReqs.V2} key]
+        Scheduling lives under \yamlkey{EnvReqs.V2}, with a closed key set
+        (Chapter~\ref{ch:envreqs}).
+\end{description}
+
+\section{During the scan}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[A setting is silently ignored]
+        You are in the lenient half of validation --- malformed values coerce to
+        defaults, malformed list entries drop (Section~\ref{sec:validation}). Diff
+        against the skeleton in Appendix~\ref{app:yaml-index}.
+  \item[Fewer samples than requested]
+        A \yamlkey{selection} cut: rejected candidates consume budget for every
+        fixed-set method (Section~\ref{sec:selection}).
+  \item[Every Sample fails fast]
+        Read one Sample's log (Section~\ref{sec:postmortem}). Usual suspects: a
+        command not found in the Worker's environment (\yamlkey{env\_setup},
+        Section~\ref{sec:env-setup}), a wrong \yamlkey{entry} path, or a likelihood
+        referencing an observable no module produces
+        (Section~\ref{sec:likelihood-failure}).
+  \item[Opera runs but produces nothing]
+        Missing or empty \yamlkey{output} list --- unlisted keys are discarded
+        (Section~\ref{sec:opera-io}).
+  \item[\code{NameError} / unknown function only inside Workers]
+        The function exists in your launching process but is not rediscoverable after
+        \code{spawn} --- persist it or install it as an entry point
+        (Section~\ref{sec:operas-discovery}).
+  \item[\code{TimeoutError} acquiring a calculator slot]
+        The pool is chronically starved --- raise it, or lower \yamlkey{workers}
+        (Section~\ref{sec:perf-pools}).
+  \item[Unknown IO type listing available formats]
+        The installed \Portal\ does not expose that format --- upgrade it, and check
+        \cli{Jarvis2 portal man} (Chapter~\ref{ch:io-types}).
+  \item[Second Worker fails during a clone-shadow install]
+        Non-idempotent \yamlkey{installation} commands re-running on a populated pack
+        (Section~\ref{sec:clone-shadow}).
+  \item[Throughput far below \yamlkey{workers}]
+        Read the monitor: pool saturation, empty queue, or archive backlog
+        (Section~\ref{sec:monitor-diagnosis}; dials in
+        Chapter~\ref{ch:performance}).
+  \item[\sampler{Dynesty} / \sampler{MultiNest}: \code{logz} will not settle]
+        Check the progress line's \code{eff(\%)} first --- if it is healthy, an
+        intermittently $-\infty$ likelihood from a flaky calculator slows convergence
+        far more than any \yamlkey{Bounds} tuning fixes
+        (Section~\ref{sec:nested-feedback-return}). If \code{eff(\%)} is very low
+        instead, try \yamlkey{sample: rslice} or \yamlkey{hslice}
+        (Section~\ref{sec:nested-log-progress}).
+  \item[\sampler{Dynesty} / \sampler{MultiNest}: a set key does not appear in the log]
+        Read the \code{run\_nested kwargs} line at startup --- an unrecognised key
+        logs a \code{WARNING} naming it and is dropped, never silently kept
+        (Section~\ref{sec:nested-log-startup}).
+\end{description}
+
+\section{Resume and outputs}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Resume refused: format / config-hash mismatch]
+        The checkpoint belongs to another product line or the card changed since the
+        checkpoint (Section~\ref{sec:resuming}). New intent $\Rightarrow$ new scan
+        name; same intent $\Rightarrow$ restore the card.
+  \item[Interrupted \sampler{Dynesty} / \sampler{MultiNest} run restarts from zero]
+        Expected: nested sampling has no mid-run checkpoint in \Jtwo's own resume
+        system. Opt into \code{dynesty}'s native
+        \yamlkey{run\_nested.checkpoint\_file} \emph{before} a long run, then relaunch
+        with \yamlkey{resume: true} (Section~\ref{sec:nested-distributed}).
+  \item[Exit code 1 but results exist]
+        Partial failure: some samples failed and were archived as failed records
+        (Section~\ref{sec:exit-codes}). Count them in \file{run\_summary.json}.
+  \item[A Sample's artifacts are ``missing'']
+        Its bucket was packed --- look inside \file{SAMPLE/<bucket>.tar.gz}
+        (Section~\ref{sec:sample-outputs}); records in the database carry the paths.
+  \item[\cli{Jarvis2 plot} exits 2]
+        The \code{plot} extra is not installed, or you passed a scan card instead of a
+        \JPlot\ scene (Chapter~\ref{ch:jarvisplot}).
+\end{description}

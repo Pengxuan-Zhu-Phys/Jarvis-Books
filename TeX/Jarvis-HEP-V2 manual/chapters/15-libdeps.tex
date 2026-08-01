@@ -1,0 +1,114 @@
+\chapter{LibDeps: The Tool Registry}
+\label{ch:libdeps}
+
+\newthought{Declare a tool once, reference it everywhere.} \yamlkey{LibDeps} is the task
+card's registry of external software locations. It contributes two things: the
+\code{\$\{LibDeps:<name>\}} path tokens usable anywhere in the card, and
+\emph{registered executables} --- bare tool names that resolve to absolute paths inside
+every command string. Both are Phase-1 features: resolved once at load time, in the
+control process.
+
+\section{\yamlkey{LibDeps.Modules}: path tokens}
+\label{sec:libdeps-modules}
+
+\begin{yamlwin}
+LibDeps:
+  path: "&J/External"           # base dir for fallbacks (default: project root)
+  Modules:
+    - name: SPheno              # defines ${LibDeps:SPheno}
+      path: "&J/External/SPheno-4.0.5"
+    - name: EggBoxSafe          # no path -> <LibDeps.path>/EggBoxSafe
+\end{yamlwin}
+
+Each entry defines the token \code{\$\{LibDeps:<name>\}}. The path resolves by the first
+hit in a fixed search order:
+
+\begin{enumerate}
+  \item \yamlkey{installation.path}
+  \item \yamlkey{installation.source}
+  \item \yamlkey{path}
+  \item \yamlkey{source}
+  \item \file{<LibDeps.path>/<name>} --- the fallback
+\end{enumerate}
+
+\begin{jnote}
+\yamlkey{LibDeps} provides \emph{paths only} --- there is no install executor behind the
+\yamlkey{installation} spelling; it participates in path resolution and nothing else.
+Installing and building external tools is your project's setup step (or a calculator's
+\yamlkey{installation} block, for per-pack shadow installs ---
+Section~\ref{sec:clone-shadow}).
+\end{jnote}
+
+Referencing an unregistered name --- \code{\$\{LibDeps:SPHENO\}} for \code{SPheno} ---
+is a hard \code{KeyError} at load time. Malformed list entries (not a mapping, or no
+\yamlkey{name}) are silently dropped, so a stray indentation error can also surface as
+this \code{KeyError} one line later.
+
+\section{\yamlkey{registered\_executables}}
+\label{sec:registered-executables}
+
+\begin{yamlwin}
+LibDeps:
+  registered_executables:
+    - name: eggboxlk
+      source: "${LibDeps:EggBoxSafe}/eggbox"
+      resolution: direct_path        # direct_path (default) | symlink
+\end{yamlwin}
+
+After registration, the bare name works in any \yamlkey{cmd} string of any calculator:
+
+\begin{yamlwin}
+execution:
+  commands:
+    - cmd: python3 eggboxlk          # expands to the absolute source path
+      cwd: "@Sdir"
+\end{yamlwin}
+
+\begin{keylist}
+  \item[name] \req; an empty name is a \code{ValueError}.
+  \item[source] \req; any static tokens allowed. The file \textbf{must exist at load
+        time} --- a missing tool is a \code{FileNotFoundError} before any Worker starts,
+        not a mid-scan surprise.
+  \item[resolution] \code{direct\_path} (default) substitutes the absolute path in
+        place --- zero filesystem footprint. \code{symlink} instead materializes a link
+        under \file{<project-root>/deps/registered/<name>} and substitutes that ---
+        useful when a tool resolves resources relative to its invoked path.
+\end{keylist}
+
+Replacement is word-boundary based, longest name first, so a registered name that is a
+substring of another (\code{eggbox} vs \code{eggboxlk}) still resolves correctly, and
+\code{myeggboxlk.py} is never touched.
+
+\section{Putting the pieces together}
+\label{sec:libdeps-pattern}
+
+The idiomatic layout for a card with real external tools:
+
+\begin{yamlwin}
+LibDeps:
+  path: "&J/External"
+  Modules:
+    - name: SPheno
+    - name: MicrOmegas
+  registered_executables:
+    - name: spheno
+      source: "${LibDeps:SPheno}/bin/SPheno"
+
+Calculators:
+  Modules:
+    - name: Spectrum
+      execution:
+        commands:
+          - cmd: "spheno LesHouches.in"
+            cwd: "@Sdir"
+\end{yamlwin}
+
+One place declares where software lives; every command stays a readable one-liner; and
+moving the project to another machine means editing \yamlkey{LibDeps} --- or nothing at
+all, if the tools sit under \file{External/} beside the card.
+
+\begin{jtip}
+Prefer registered executables over hand-written symlinks or absolute paths in commands.
+The load-time existence check catches a bad path in seconds; command strings stay
+portable; and \code{direct\_path} keeps Sample directories free of link clutter.
+\end{jtip}

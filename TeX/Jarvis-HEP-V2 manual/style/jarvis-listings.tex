@@ -1,0 +1,266 @@
+%==============================================================================
+% jarvis-listings.tex
+% Code-listing setup for the Jarvis-HEP manual.
+%
+% Provides:
+%   - a Jarvis color palette
+%   - a custom YAML language definition (listings has none built in)
+%   - styles:  yaml   (task-card YAML)
+%              bash   (shell / CLI sessions)
+%              plain  (generic / SLHA / output dumps)
+%   - convenience inline/float macros
+%
+% Long real-world cards should be \lstinputlisting'd from ../listings/ so they
+% stay byte-true with jarvishep/project_template.  Inside Tufte's narrow text
+% column, wrap wide listings in a {fullwidth} environment.
+%==============================================================================
+
+\usepackage{listings}
+
+% --- Palette ------------------------------------------------------------------
+\definecolor{jBg}{HTML}{F7F7F4}      % listing background
+\definecolor{jRule}{HTML}{D8D8D0}    % frame rule
+\definecolor{jKey}{HTML}{1F4E79}     % YAML keys / keywords (deep blue)
+\definecolor{jStr}{HTML}{8A5A00}     % strings (amber)
+\definecolor{jComment}{HTML}{6E7B6E} % comments (muted green-grey)
+\definecolor{jNum}{HTML}{7A1F8B}     % numbers (purple)
+\definecolor{jMarker}{HTML}{B3261E}  % &J/ @tokens / ${...} (Jarvis red)
+\definecolor{jLineNo}{HTML}{A0A0A0}
+\definecolor{jOut}{HTML}{4A5568}      % what a program printed back: muted slate,
+                                      % one step lighter than jShell (334155) so the
+                                      % output half of a `terminal' box reads as a
+                                      % reply rather than as something you type
+\definecolor{jLineNum}{HTML}{C7CCD2}  % very light grey for YAML line numbers
+\definecolor{jGuide}{HTML}{E3E6EA}    % very light grey for YAML indentation guides
+
+% --- Semantic colours (used inline and in listings) ---------------------------
+\definecolor{jExpr}{HTML}{C2185B}     % expressions  -> pink
+\definecolor{jPath}{HTML}{1B5E20}     % file/dir paths -> dark green
+\definecolor{jCmd}{HTML}{E8730C}      % Jarvis CLI commands -> Jarvis orange
+\definecolor{jVar}{HTML}{C2185B}      % variables / arguments -> pink (same hue as jExpr)
+\definecolor{jFunc}{HTML}{1B5E20}     % function / operator names -> dark green (same hue as jPath)
+\definecolor{jYKey}{HTML}{1971C2}     % YAML keys, in listings and in prose (bright blue)
+\definecolor{jYValue}{HTML}{2F9E44}   % YAML (string) values, in listings and in prose (bright green)
+\definecolor{jYBool}{HTML}{A6462E}    % YAML true/false/null, in listings
+\definecolor{jSampler}{HTML}{7A1F8B}  % sampler method names (same purple family as jNum)
+
+% --- Inline semantic markup ---------------------------------------------------
+\newcommand{\expr}[1]{\textcolor{jExpr}{\jtt{#1}}}   % an expression, e.g. \expr{x * Pi}
+\newcommand{\cmd}[1]{\textcolor{jCmd}{\jtt{#1}}}     % a Jarvis CLI command, e.g. \cmd{Jarvis}
+% \variable{} / \mvar{}: a variable or argument name -> pink.
+% \variable{} is for monospace/code contexts (e.g. Sampling.Variables[].name);
+% \mvar{} is for math mode, e.g. $\mvar{x}$, $f(\mvar{x},\mvar{y})$.
+\newcommand{\variable}[1]{\textcolor{jVar}{\jtt{#1}}}
+\newcommand{\mvar}[1]{\textcolor{jVar}{#1}}
+% \func{} / \mfunc{}: a function or operator name -> dark green.
+% \func{} is for monospace/code contexts, e.g. \func{sin}; \mfunc{} is for math
+% mode operator names, e.g. $\mfunc{\sin}(\mvar{x})$.
+\newcommand{\func}[1]{\textcolor{jFunc}{\jtt{#1}}}
+\newcommand{\mfunc}[1]{\textcolor{jFunc}{#1}}
+% \ykey{} / \yvalue{}: a YAML key / value mentioned in prose, coloured to match
+% their appearance inside a yamlcode listing (jYKey blue, jYValue green) --
+% \yamlkey{} (jarvis-preamble.tex) is the same key colour, kept as the
+% established name; \ykey{} is a shorter alias for new prose.
+\newcommand{\ykey}[1]{\textcolor{jYKey}{\jtt{#1}}}
+\newcommand{\yvalue}[1]{\textcolor{jYValue}{\jtt{#1}}}
+
+% --- A minimal YAML dialect ---------------------------------------------------
+% Good enough to colour keys, strings, comments, booleans, and Jarvis markers
+% without a full parser.
+\lstdefinelanguage{jyaml}{
+  morekeywords={true,false,null,True,False,None,yes,no},
+  sensitive=true,
+  morecomment=[l]{\#},
+  morestring=[b]",
+  morestring=[b]',
+  alsoletter={-,_,.},
+}
+
+% --- Shared base style --------------------------------------------------------
+% `listings' processes verbatim material at the catcode level, before UTF-8
+% decoding -- a literal non-ASCII byte inside any lstlisting-based environment
+% (yamlcode/bashcode/plaincode) is a hard "Invalid UTF-8 byte sequence" error,
+% not a warning. `literate' maps the specific bytes real console/log output
+% actually contains (the Jarvis-logger bullet, plus-minus in evidence lines)
+% to their LaTeX-safe renderings, so real excerpts can be quoted verbatim.
+% Add more pairs here if a future quote needs another character; do NOT type
+% the raw byte directly into a listing without a matching entry.
+\lstdefinestyle{jbase}{
+  backgroundcolor=\color{jBg},
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  breakatwhitespace=false,
+  postbreak=\mbox{\textcolor{jLineNo}{$\hookrightarrow$}\space},
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  tabsize=2,
+  frame=leftline,
+  framerule=1.2pt,
+  rulecolor=\color{jRule},
+  xleftmargin=0.8em,
+  framexleftmargin=0.8em,
+  aboveskip=0.9\baselineskip,
+  belowskip=0.6\baselineskip,
+  literate=
+    {±}{{$\pm$}}1
+    {·}{{\textperiodcentered}}1
+    {•}{{\textbullet}}1,
+  % NOTE on box-drawing bytes (╭ │ ─ ━ ╰ …): the CLI renders its help and runtime
+  % panels with Rich, and quoting those frames verbatim was tried and REVERTED.
+  % pmboxdraw's glyphs do not advance exactly one monospace cell, so `literate'
+  % width hints cannot hold the columns and every panel line wrapped. Reproduce
+  % such output with the frame stripped instead -- the `terminal' box already
+  % supplies a border, and Rich's own frame width is a property of the reader's
+  % terminal, not of the program.
+}
+
+% --- YAML style ---------------------------------------------------------------
+% Keys (and other bare/unquoted tokens) take the default text colour, jYKey;
+% quoted string values take jYValue; true/false/null take jYBool -- the same
+% three colours \ykey{}/\yvalue{} use inline, so a key or value reads the same
+% whether it is quoted in prose or sitting inside the listing box.
+\lstdefinestyle{yaml}{
+  style=jbase,
+  language=jyaml,
+  basicstyle=\ttfamily\footnotesize\color{jYKey},
+  keywordstyle=\color{jYBool}\bfseries,  % booleans/null
+  stringstyle=\color{jYValue},
+  commentstyle=\color{jComment}\itshape,
+  % Highlight Jarvis markers and tokens.
+  moredelim=[is][\color{jMarker}\bfseries]{@@}{@@},
+  % Very light line numbers in the left margin (outside the frame rule).
+  numbers=left,
+  numberstyle=\tiny\color{jLineNum},
+  numbersep=9pt,
+  xleftmargin=2.6em,
+  framexleftmargin=2.6em,
+}
+
+% --- Bash / CLI style ---------------------------------------------------------
+\lstdefinestyle{bash}{
+  style=jbase,
+  language=bash,
+  keywordstyle=\color{jKey}\bfseries,
+  commentstyle=\color{jComment}\itshape,
+  stringstyle=\color{jStr},
+  morekeywords={Jarvis,pip,python3,cd,latexmk},
+}
+
+% --- Plain dump style (SLHA blocks, output text) ------------------------------
+\lstdefinestyle{plain}{
+  style=jbase,
+  language={},
+  keywordstyle=\color{jKey},
+  commentstyle=\color{jComment}\itshape,
+}
+
+% --- Inner style for the boxed shell environment (frame/bg come from the box) --
+\lstdefinestyle{shellinner}{
+  language=bash,
+  % Self-contained on purpose. The document-level \lstset{style=jbase} is ambient,
+  % so any decoration jbase sets and this style does not override leaks in -- which
+  % is how the `terminal' box first grew a stray grey left tick and a jBg fill that
+  % painted over the box's own (differing) upper/lower background tints.
+  frame=none, backgroundcolor={}, numbers=none,
+  xleftmargin=0pt, framexleftmargin=0pt,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{jKey}\bfseries,
+  commentstyle=\color{jComment}\itshape,
+  stringstyle=\color{jStr},
+  morekeywords={pip,python3,cd,source,pyenv,latexmk,make},
+  keywords=[2]{Jarvis,jplot,jopera},        % Jarvis-family executables
+  keywordstyle=[2]\color{jCmd}\bfseries,     % ... in Jarvis orange
+  breaklines=true,
+  postbreak=\mbox{\textcolor{jLineNo}{$\hookrightarrow$}\space},
+  columns=fullflexible, keepspaces=true, showstringspaces=false, tabsize=2,
+  aboveskip=0pt, belowskip=0pt,   % no extra listing space inside the box
+  literate=
+    {±}{{$\pm$}}1
+    {·}{{\textperiodcentered}}1
+    {•}{{\textbullet}}1,
+  % NOTE on box-drawing bytes (╭ │ ─ ━ ╰ …): the CLI renders its help and runtime
+  % panels with Rich, and quoting those frames verbatim was tried and REVERTED.
+  % pmboxdraw's glyphs do not advance exactly one monospace cell, so `literate'
+  % width hints cannot hold the columns and every panel line wrapped. Reproduce
+  % such output with the frame stripped instead -- the `terminal' box already
+  % supplies a border, and Rich's own frame width is a property of the reader's
+  % terminal, not of the program.
+}
+
+% --- Inner style for the OUTPUT half of the boxed terminal environment ---------
+% Deliberately quieter than `shellinner': what a program printed back is not
+% something you type, so nothing here is highlighted as a command. Only the
+% Jarvis-family names keep their colour (they identify the component that spoke),
+% and log levels stay legible. Same metrics as `shellinner' so the two halves of
+% one `terminal' box line up character for character across the divider.
+\lstdefinestyle{termout}{
+  language={},
+  frame=none, backgroundcolor={}, numbers=none,   % see the note in `shellinner'
+  xleftmargin=0pt, framexleftmargin=0pt,
+  basicstyle=\ttfamily\footnotesize\color{jOut},
+  keywords=[2]{Jarvis,Jarvis2,jplot,jopera},
+  keywordstyle=[2]\color{jCmd},
+  breaklines=true,
+  postbreak=\mbox{\textcolor{jLineNo}{$\hookrightarrow$}\space},
+  columns=fullflexible, keepspaces=true, showstringspaces=false, tabsize=2,
+  aboveskip=0pt, belowskip=0pt,
+  literate=
+    {±}{{$\pm$}}1
+    {·}{{\textperiodcentered}}1
+    {•}{{\textbullet}}1,
+  % NOTE on box-drawing bytes (╭ │ ─ ━ ╰ …): the CLI renders its help and runtime
+  % panels with Rich, and quoting those frames verbatim was tried and REVERTED.
+  % pmboxdraw's glyphs do not advance exactly one monospace cell, so `literate'
+  % width hints cannot hold the columns and every panel line wrapped. Reproduce
+  % such output with the frame stripped instead -- the `terminal' box already
+  % supplies a border, and Rich's own frame width is a property of the reader's
+  % terminal, not of the program.
+}
+
+% --- YAML style for the "window" box (frame/background come from the box) ------
+% Same key/value/boolean colours as the plain `yaml' style (jYKey/jYValue/jYBool);
+% additionally, expression values (after `expression: "') go pink and &J paths
+% go dark green -- the window box is the one place both distinctions show at once.
+\lstdefinestyle{yamlwindow}{
+  language=jyaml,
+  % No colour here: the enclosing `yamlwin' box supplies it via `colupper' so
+  % it survives a page-break split (see jarvis-boxes.tex for why).
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{jYBool}\bfseries,
+  commentstyle=\color{jComment}\itshape,
+  morestring=[b]", stringstyle=\color{jYValue},
+  moredelim=[s][\color{jExpr}]{expression: "}{"},
+  moredelim=[l][\color{jPath}]{"\&J},
+  numbers=left, numberstyle=\tiny\color{jLineNum}, numbersep=12pt,
+  xleftmargin=2.4em,
+  breaklines=true, columns=fullflexible, keepspaces=true, showstringspaces=false, tabsize=2,
+  aboveskip=0pt, belowskip=0pt,
+  literate=
+    {±}{{$\pm$}}1
+    {·}{{\textperiodcentered}}1
+    {•}{{\textbullet}}1,
+  % NOTE on box-drawing bytes (╭ │ ─ ━ ╰ …): the CLI renders its help and runtime
+  % panels with Rich, and quoting those frames verbatim was tried and REVERTED.
+  % pmboxdraw's glyphs do not advance exactly one monospace cell, so `literate'
+  % width hints cannot hold the columns and every panel line wrapped. Reproduce
+  % such output with the frame stripped instead -- the `terminal' box already
+  % supplies a border, and Rich's own frame width is a property of the reader's
+  % terminal, not of the program.
+}
+
+\lstset{style=jbase}
+
+% --- Convenience environments / macros ----------------------------------------
+% \begin{yamlcode} ... \end{yamlcode}
+\lstnewenvironment{yamlcode}{\lstset{style=yaml}}{}
+% \begin{bashcode} ... \end{bashcode}
+\lstnewenvironment{bashcode}{\lstset{style=bash}}{}
+% \begin{plaincode} ... \end{plaincode}
+\lstnewenvironment{plaincode}{\lstset{style=plain}}{}
+
+% File include shortcuts (keep wide ones inside {fullwidth}).
+\newcommand{\yamlfile}[1]{\lstinputlisting[style=yaml]{#1}}
+\newcommand{\bashfile}[1]{\lstinputlisting[style=bash]{#1}}
+
+% Inline monospace shortcut already provided as \code in the preamble.

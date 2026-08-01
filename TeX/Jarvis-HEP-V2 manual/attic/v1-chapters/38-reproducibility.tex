@@ -1,0 +1,84 @@
+\chapter{Reproducibility and Packaging}
+\label{ch:reproducibility}
+
+\newthought{A scan you cannot reproduce} is hard to trust and hard to share. \Jarvis\ is built so a
+run is self-contained by default, and so you can bundle it for a collaborator or an archive. This
+closing chapter of the part pulls those threads together.
+
+\section{What makes a run reproducible}
+\label{sec:repro-what}
+
+Several design choices, met throughout the book, add up to reproducibility:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Project-local everything] the task card, dependencies, and outputs all live under the
+        project root, addressed with \marker{\&J/} (Chapter~\ref{ch:core-concepts}); nothing is
+        scattered across the machine.
+  \item[Declared environment] \yamlkey{EnvReqs} records the platform and packages a run needs and
+        checks them before starting (Chapter~\ref{ch:envreqs}).
+  \item[Captured configuration] checkpoints store the exact config the run used, so a resumed run
+        stays consistent with itself (Chapter~\ref{ch:checkpoint}).
+  \item[Replayable points] the \sampler{CSV} sampler re-runs an exact list of points
+        (Chapter~\ref{ch:basic-samplers}), and many samplers store a random seed.
+\end{description}
+
+\section{Packaging a project}
+\label{sec:repro-pack}
+
+\cmd{Jarvis project pack} (Chapter~\ref{ch:project-cli}) bundles a project, with the mode flag
+choosing how much travels (Table~\ref{tab:pack-modes}).
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}llp{0.46\linewidth}@{}}
+    \toprule
+    \textbf{Mode} & \textbf{Flag} & \textbf{Use it to\ldots} \\
+    \midrule
+    Share    & \cli{-{}-share} (default) & send results to a collaborator (lighter) \\
+    Repro    & \cli{-{}-repro}           & let someone unpack and re-run the scan \\
+    Full     & \cli{-{}-full}            & archive everything for the long term \\
+    \bottomrule
+  \end{tabular}
+  \caption{Packaging modes.}
+  \label{tab:pack-modes}
+\end{table}
+
+\begin{shellbox}
+Jarvis project pack . --repro
+\end{shellbox}
+
+\noindent The \cli{-{}-repro} package is the one to choose when reproducibility is the goal: it
+carries what is needed to unpack and run the scan again, not just the finished numbers.
+
+\begin{jtip}
+Write a manifest first with \cli{-{}-man}, then edit its \yamlkey{include}/\yamlkey{exclude} lists
+to keep large build trees or raw outputs out of the bundle, and pack from that manifest. You get a
+reproducible package without shipping gigabytes of intermediate files.
+\end{jtip}
+
+\section{Good habits}
+\label{sec:repro-habits}
+
+A few practices make future-you (and your collaborators) grateful:
+
+\begin{itemize}
+  \item Keep the package payloads under \file{deps/} so the project carries its own inputs.
+  \item Pin versions in \yamlkey{EnvReqs} so a mismatch is caught early, with a clear message.
+  \item Record a seed where the sampler supports one, and keep the points of interest as a
+        \textsc{csv} you can replay.
+  \item Note which \Jarvis\ release produced a result---\cmd{Jarvis -{}-version} prints it, and it
+        is captured in the run summary and logs.
+\end{itemize}
+
+\begin{jnote}
+\Jarvis\ evolves between releases. Recording the version that produced a result---and packaging the
+project with \cli{-{}-repro}---is the surest way to reproduce it later, even as the framework moves
+on.
+\end{jnote}
+
+\section{Summary}
+\label{sec:repro-summary}
+
+Reproducibility in \Jarvis\ is mostly free: project-local layout, a declared environment, captured
+config, and replayable points. When you need to share or archive, \cmd{Jarvis project pack}
+---especially \cli{-{}-repro}---turns a project into a portable, re-runnable bundle.

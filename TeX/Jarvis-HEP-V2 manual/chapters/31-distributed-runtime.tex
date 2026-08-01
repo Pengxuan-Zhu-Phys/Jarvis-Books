@@ -1,0 +1,148 @@
+\chapter{The Distributed Runtime}
+\label{ch:distributed-runtime}
+
+\newthought{Under the hood.} Nothing in this chapter is needed to \emph{use} \Jtwo\ ---
+the defaults run themselves --- but when you operate scans at scale, tune performance,
+or debug something odd, a precise picture of the process family and its shared state
+pays for itself. This is that picture.
+
+\section{The process family}
+\label{sec:process-family}
+
+A running scan is five kinds of process:
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Process} & \textbf{Owns} \\
+    \midrule
+    \code{Jarvis2:<scan>} & the control process: the Sampler, the factory that spawns
+      and supervises everything else, checkpointing, the run summary \\
+    \code{Jarvis-Redis:<scan>} & the broker (started for you when not already running) \\
+    \code{Jarvis2-Worker-N} & one Sample at a time: mapping, calculators, operas,
+      likelihood; plus a per-Worker file-operation helper process for
+      \yamlkey{save} copies and deletions \\
+    \code{Jarvis2-Archiver} & batched database writes, bucket packing \\
+    \bottomrule
+  \end{tabular}
+  \caption{The process family, as named in \clih{ps}.}
+  \label{tab:process-family}
+\end{table}
+
+Workers are started with the \code{spawn} multiprocessing context: each is a fresh
+interpreter that rebuilds its own state from the configuration --- imports, compiled
+expressions, calculator templates, environment captures. Nothing live is inherited, so
+Workers on any platform behave identically and nothing unpicklable ever crosses a
+process boundary.
+
+\section{What lives in Redis}
+\label{sec:redis-schema}
+
+Redis is the \emph{only} shared truth, and it holds only light data --- IDs, counters,
+small dictionaries. Products live on disk.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Type} & \textbf{Role} \\
+    \midrule
+    \code{hep:task\_queue}          & list & Sampler pushes tasks; Workers block-pop \\
+    \code{calc:free:<name>}        & list & calculator concurrency pool (slot ids) \\
+    \code{hep:archive\_queue}       & list & finished-Sample handoff to the Archiver \\
+    \code{hep:worker:status:<id>}  & hash & heartbeat, current Sample, held packs, \textsc{pid}s \\
+    \code{hep:sample:stats}        & hash & running / completed / failed \\
+    \code{hep:calculator:status}   & hash & free/busy per pool \\
+    \code{hep:*:op\_count}          & str  & monotonic change counters per subsystem \\
+    \code{hep:feedback}            & list & observables feedback (\sampler{AdaptiveBridson}) \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{The Redis schema (illustrative key shapes).}
+  \label{tab:redis-schema}
+\end{table}
+
+A task on the queue is a small \textsc{json} document --- \textsc{uuid}, u-coordinates,
+the execution plan, optional carried parameters --- everything else is rebuilt in the
+Worker (Section~\ref{sec:uspace}).
+
+\paragraph{Read/write separation.} During normal operation only Workers and the Sampler
+\emph{write} to Redis. The factory's monitoring thread only \emph{reads}, gated by the
+\code{op\_count} counters: a subsystem is re-fetched only when its counter moved. That
+is why monitoring is free (Section~\ref{sec:monitor-cli}).
+
+\section{The Worker loop}
+\label{sec:worker-loop}
+
+Each Worker's life, after one-time initialization (Redis client, mapper, one calculator
+instance per type with templates preloaded, imported operators, compiled expressions,
+the subprocess scheduler, the file-operation helper):
+
+\begin{plaincode}
+loop:
+  task <- blpop(hep:task_queue)
+  sample <- rebuild from task; allocate bucket slot; open sample logger
+  for each layer in execution_plan:
+      run this layer's calculators concurrently
+        (each: acquire pool slot -> prepare runtime -> inputs ->
+         commands -> outputs -> release slot)
+  run operas in order; evaluate likelihood
+  submit result -> hep:archive_queue        (success or failure alike)
+  close sample; bump op_counts; heartbeat
+\end{plaincode}
+
+One Sample at a time per Worker --- the \emph{only} intra-Sample concurrency is between
+same-layer calculators, throttled by the global pools. Workers compete on the shared
+queue, so load balances itself: a Worker stuck on a slow point simply takes fewer
+points.
+
+\section{Layer 1 vs Layer 2: the two I/O planes}
+\label{sec:two-layers}
+
+The design draws a hard line between two kinds of file traffic:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Layer 1 --- inside the Sample.] A calculator chain's own files (write input,
+        run, read output) are synchronous and per-Sample --- they \emph{are} the
+        critical path. \yamlkey{save} copies are offloaded to the per-Worker
+        file-operation process so even they do not stall execution
+        (Section~\ref{sec:save-policy}).
+  \item[Layer 2 --- after the Sample.] Database rows, bucket packing, and any staging
+        moves belong to the Archiver, batched (\yamlkey{archiver.batch\_size}, flush
+        interval) and entirely off the Workers' path. By default the handoff is
+        \emph{direct}: products are already in their final bucket location, and only
+        records move.
+\end{description}
+
+Bucket packing is gated three ways --- sealed, no active Samples, all records written
+--- so a \file{.tar.gz} can never contain a Sample whose database row does not exist
+(Section~\ref{sec:sample-directory}).
+
+\section{Failure semantics, precisely}
+\label{sec:runtime-failures}
+
+\begin{itemize}
+  \item \textbf{Sample fails} (calculator non-zero exit, timeout, missing observable,
+        opera \code{TypeError}): the Worker records a failed result --- archived like
+        any other --- keeps the Sample's log and directory, releases slots, and
+        continues.
+  \item \textbf{Worker dies}: heartbeats lapse; the factory respawns a fresh Worker;
+        the in-flight Sample is re-queued. Held pool slots are reclaimed.
+  \item \textbf{Archiver dies}: results wait in the archive queue; the factory
+        restarts it; batched writes are idempotent per \textsc{uuid}, so replays cannot
+        duplicate rows.
+  \item \textbf{Redis dies}: the scan cannot continue --- \Jtwo\ fails fast with a
+        connection error rather than degrading. The checkpoint covers you: restart the
+        service and \cli{Jarvis2 run --resume}.
+  \item \textbf{Control process dies}: the 30-second checkpoint plus resume
+        (Chapter~\ref{ch:checkpoint}).
+\end{itemize}
+
+\begin{jnote}
+The recurring theme: \emph{Redis holds nothing precious}. Queues drain and rebuild;
+pools reseed from the card; the Sampler's checkpoint plus the Archiver's acknowledged
+records are the durable truth. That is what makes both crash recovery and resume exact.
+\end{jnote}

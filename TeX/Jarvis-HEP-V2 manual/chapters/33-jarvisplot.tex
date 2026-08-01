@@ -1,0 +1,79 @@
+\chapter{Plotting with JarvisPLOT}
+\label{ch:jarvisplot}
+
+\newthought{Figures are a plugin concern too.} \JPlot\ is the \textsc{yaml}-driven
+plotting engine of the \Jarvis\ family: you describe a figure --- data sources, layers,
+axes, styling --- in a \emph{scene} file, and the engine renders it. \Jtwo\ bridges it
+as \cli{Jarvis2 plot}, so upgrading \JPlot\ brings new figure types without a runtime
+release. This chapter covers the bridge and the scan-output hooks; the scene language
+itself is \JPlot's own manual.
+
+\section{Installing and invoking}
+\label{sec:plot-install}
+
+\begin{terminal}
+\begin{jcmd}
+python3 -m pip install -e '.[distributed,plot]'   # the plot extra
+
+Jarvis2 plot scenes/money_plot.yaml               # render a scene
+Jarvis2 plot scenes/money_plot.yaml               # re-render after edits
+\end{jcmd}
+\end{terminal}
+
+The bridge is deliberately thin: it imports the installed engine, hands over the scene
+path, and maps the result to exit codes --- \code{0} rendered, \code{1} plot failure,
+\code{2} usage or missing package (with the \code{pip install} hint). The legacy
+spelling \cli{Jarvis2 <scene>.yaml --plot} still routes here with a deprecation
+warning.
+
+\begin{jwarn}
+The argument is a \JPlot\ \emph{scene}, not a scan task card. Handing \cli{plot} your
+scan \textsc{yaml} fails cleanly --- scan-driven scene generation (``plot this run'')
+is a planned convenience, not a current one; today you write the scene and point it at
+the outputs below.
+\end{jwarn}
+
+\section{Feeding scenes from scan outputs}
+\label{sec:plot-data}
+
+Everything a scene needs is in the stable output tree (Chapter~\ref{ch:outputs}):
+
+\begin{itemize}
+  \item \file{DATABASE/samples.csv} --- the universal data source: full-column,
+        flat, immediately consumable by \JPlot's tabular readers (and every scatter,
+        histogram, and profile layer). Column selections and derived quantities are
+        scene-side expressions over these columns.
+  \item \file{DATABASE/samples.hdf5} --- the same records for readers that prefer
+        \textsc{hdf5}.
+  \item \file{levelset.json} --- \sampler{AdaptiveBridson} runs: crossing points and
+        polylines, with stock overlay scenes shipped by \JPlot\ for drawing the traced
+        contour over a sample scatter (Chapter~\ref{ch:adaptive-levelset}).
+  \item \file{images/<scan>/flowchart.json} --- the semantic workflow flowchart
+        exported by every run (Section~\ref{sec:flowchart}); \JPlot\ renders it to a
+        publishable diagram.
+\end{itemize}
+
+\section{A working pattern}
+\label{sec:plot-pattern}
+
+Keep scenes in the project (\file{scenes/}), reference outputs with relative paths,
+and treat figures as build artifacts:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 run bin/scan.yaml           # produce outputs/scan-01/...
+Jarvis2 plot scenes/overview.yaml   # scatter + LogL colormap
+Jarvis2 plot scenes/contour.yaml    # levelset overlay
+\end{jcmd}
+\end{terminal}
+
+Because \file{samples.csv} is contract-stable, scenes survive re-runs and framework
+upgrades; because scenes are \textsc{yaml} in your project, \cli{project pack --share}
+ships the figures' full provenance alongside the data
+(Chapter~\ref{ch:project-cli}).
+
+\begin{jtip}
+For exploratory work, nothing beats \code{pandas} on \file{samples.csv} in a notebook.
+Reach for \JPlot\ when a figure graduates to \emph{repeatable} --- the paper plot you
+will regenerate twelve times as the scan grows.
+\end{jtip}

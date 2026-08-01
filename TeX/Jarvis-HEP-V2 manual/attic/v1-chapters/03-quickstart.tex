@@ -1,0 +1,227 @@
+\chapter{Your First Scan}
+\label{ch:quickstart}
+
+\newthought{The fastest way to understand \Jarvis} is to run it. This chapter takes you from
+an empty directory to a finished scan with structured output, using the quick-start cards
+that ship inside every new project. You will not write any \textsc{yaml} yet---that comes in
+Part~\ref{part:task-card}---you will just run, watch, and read the results.
+
+\section{Create a project}
+\label{sec:create-project}
+
+\Jarvis\ works inside a \emph{standalone project}: a self-contained directory that holds your
+task cards and collects all outputs. Create one with:
+
+\begin{shellbox}
+Jarvis project create MyScan
+cd MyScan
+\end{shellbox}
+
+\noindent This scaffolds a ready-to-run project:
+
+\begin{jfiletree}
+\dirtree{%
+.1 \dtfold{MyScan/}.
+.2 \dtfold{bin/}.
+.3 \dtcode{quickstart\_mcmc\_operas.yaml}.
+.3 \dtcode{quickstart\_csv\_operas.yaml}.
+.2 \dtfold{data/}.
+.3 \dtcsv{points.csv}.
+.2 \dtfold{deps/}.
+.3 \dtcode{environment\_default.yaml}.
+.2 \dtdoc{README.md}.
+.2 \dtmark{.jarvis-project.json}\DTcomment{project marker}.
+.2 \dtyaml{jarvis.project.yaml}\DTcomment{project marker}.
+}
+\end{jfiletree}
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\dtfold{bin/}] Your \textsc{yaml} task cards live here; two quick-starts are provided.
+  \item[\dtfold{data/}] External data files (here, a small \file{points.csv} for the replay
+        example).
+  \item[\dtfold{deps/}] Dependency declarations, including a default environment file.
+  \item[\dtmark{.jarvis-project.json}, \dtyaml{jarvis.project.yaml}] \emph{Marker files} that tell
+        \Jarvis\ ``this directory is the project root.'' They are what the \marker{\&J/} path
+        marker resolves to (Chapter~\ref{ch:core-concepts}).
+\end{description}
+
+\begin{jnote}
+Runtime directories---\file{outputs/}, \file{logs/}, and \file{images/}---are \emph{not}
+created up front. \Jarvis\ makes them on first use, so a fresh project stays tidy.
+\end{jnote}
+
+\section{The quick-start card at a glance}
+\label{sec:quickstart-card}
+
+Open \file{bin/quickstart\_mcmc\_operas.yaml}. It is a complete, minimal task card
+(shown below). Do not worry about every key yet---just match it to the
+three-step mental model from Chapter~\ref{ch:introduction}.
+
+\begin{yamlwin}[bin/quickstart\_mcmc\_operas.yaml]
+Scan:
+  name: "quickstart_mcmc_operas"
+  save_dir: "&J/outputs"
+  sample_directory:
+    limit: 200
+    width: 6
+    archive_samples: true
+
+Sampling:
+  Method: "MCMC"
+  Variables:
+    - name: x
+      description: "Toy variable x"
+      distribution: {type: Flat, parameters: {min: 0, max: 5.0}}
+    - name: y
+      description: "Toy variable y"
+      distribution: {type: Flat, parameters: {min: 0, max: 5.0}}
+  Bounds:
+    num_chains: 8
+    num_iters: 600
+    proposal_scale: 0.06
+  LogLikelihood:
+    - {name: "LogL_Z", expression: "LogGauss(z, 100, 10)"}
+
+Operas:
+  make_paraller: 8
+  Modules:
+    - name: EggBox
+      operator: "helper.eggbox2d"
+      call_mode: call
+      required_modules: []
+      input:
+        - {name: x, expression: "x"}
+        - {name: y, expression: "y"}
+      output:
+        - {name: z, entry: z}
+\end{yamlwin}
+
+\noindent Reading it against the three steps:
+
+\begin{enumerate}
+  \item \textbf{Draw a point.} \yamlkey{Sampling} runs the \sampler{MCMC} sampler over two
+        flat variables \yamlkey{x} and \yamlkey{y} on $[0, 5]$.
+  \item \textbf{Run a workflow.} \yamlkey{Operas} evaluates the in-process operator
+        \code{helper.eggbox2d} on \yamlkey{x} and \yamlkey{y} and produces the observable
+        \yamlkey{z}.
+  \item \textbf{Score it.} \yamlkey{LogLikelihood} computes \expr{LogGauss(z, 100, 10)}---a
+        Gaussian centred on a pretend measurement $z = 100 \pm 10$.
+\end{enumerate}
+
+\noindent The \yamlkey{Scan} block names the run and points outputs at \marker{\&J/outputs}.
+(The card also declares an \yamlkey{EnvReqs} block, omitted from the listing for brevity, that
+checks the platform before starting.)
+
+\section{Run it}
+\label{sec:run-it}
+
+From the project root:
+
+\begin{shellbox}
+Jarvis bin/quickstart_mcmc_operas.yaml
+\end{shellbox}
+
+\noindent You will see, in order:
+
+\begin{enumerate}
+  \item the \Jarvis\ banner and version---the logging system is up;
+  \item \code{Validation successful}---your card passed the schema check;
+  \item the sampler initialising (here, \sampler{MCMC});
+  \item the worker factory building and the workflow flowchart being drawn;
+  \item periodic progress lines as samples are submitted and completed;
+  \item an end-of-run summary from the \textsc{hdf5} writer and the factory, followed by an
+        automatic conversion of the results to \textsc{csv}.
+\end{enumerate}
+
+\begin{jtip}
+The terminal shows only the high-level status of the sampler and the factory. You do not need
+to read it closely---everything important is captured in the project's \file{logs/} directory
+and the end-of-run summary.
+\end{jtip}
+
+\section{Replay tabulated points}
+\label{sec:replay}
+
+Sometimes you already have the parameter points and just want to push them through the
+workflow. The second quick-start does exactly that, reading rows from
+\file{data/points.csv} instead of sampling:
+
+\begin{shellbox}
+Jarvis bin/quickstart_csv_operas.yaml
+\end{shellbox}
+
+\noindent Its only difference from the quick-start card above is the \yamlkey{Sampling}
+block, which selects the \sampler{CSV} method and names the file and columns to replay:
+
+\begin{yamlwin}
+Sampling:
+  Method: "CSV"
+  CSV:
+    path: "&J/data/points.csv"
+    uuid_column: "uuid"
+    variables: ["x", "y"]
+  LogLikelihood:
+    - {name: "LogL_Z", expression: "LogGauss(z, 100, 10)"}
+\end{yamlwin}
+
+\section{Look at what you produced}
+\label{sec:first-outputs}
+
+After either run, your project has gained a predictable set of artifacts under the run name:
+
+\begin{jfiletree}
+\dirtree{%
+.1 \dtfold{MyScan/}.
+.2 \dtfold{outputs/quickstart\_mcmc\_operas/}.
+.3 \dtfold{DATABASE/}.
+.4 \dtdata{samples.0.hdf5}\DTcomment{structured samples}.
+.4 \dtcsv{samples.0.csv}\DTcomment{CSV export}.
+.4 \dtcode{samples.schema.json}\DTcomment{observable schema}.
+.3 \dtfold{SAMPLE/}\DTcomment{per-sample artifacts}.
+.3 \dtcode{run\_summary.\{json,csv,txt\}}\DTcomment{run summaries}.
+.2 \dtfold{logs/quickstart\_mcmc\_operas/}\DTcomment{run logs}.
+.2 \dtfold{images/quickstart\_mcmc\_operas/}\DTcomment{flowchart.json, plots}.
+}
+\end{jfiletree}
+
+\noindent The \file{DATABASE/} folder is what you analyse: \textsc{hdf5} for tools, \textsc{csv}
+for a quick look, and a schema describing the columns. The \file{run\_summary.*} files report
+how the run went. All of this is covered in detail in Part~\ref{part:running}.
+
+\section{Convert, plot, and monitor}
+\label{sec:quickstart-utilities}
+
+Three optional commands operate on a run; each is detailed in Chapter~\ref{ch:cli}:
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\cli{Jarvis bin/quickstart\_mcmc\_operas.yaml -{}-convert}] Snapshot the live
+        \textsc{hdf5} into \textsc{csv} while the scan is still running.
+  \item[\cli{Jarvis bin/quickstart\_mcmc\_operas.yaml -{}-plot}] Generate a \JPlot\
+        configuration from the task card (then render it with \cmd{jplot}).
+  \item[\cli{Jarvis bin/quickstart\_mcmc\_operas.yaml -{}-monitor}] Open a real-time resource
+        monitor for a running scan.
+\end{description}
+
+\section{The success checklist}
+\label{sec:success-check}
+
+Your first scan worked if all of the following are true:
+
+\begin{itemize}
+  \item the command exited without an error;
+  \item \file{outputs/<run>/DATABASE/} contains a \file{.hdf5} and a \file{.csv};
+  \item \file{run\_summary.txt} reports completed samples and zero (or few) failures.
+\end{itemize}
+
+\section{Make it your own}
+\label{sec:make-your-own}
+
+You now have the full loop working end to end. The natural next steps:
+
+\begin{itemize}
+  \item Learn the vocabulary---projects, markers, tokens, and the output
+        contract---in Chapter~\ref{ch:core-concepts}.
+  \item Understand every block of the task card in Part~\ref{part:task-card}.
+  \item Wrap your own external program as a calculator in Chapter~\ref{ch:calculators}, using
+        the same black-box pattern the quick-starts follow.
+\end{itemize}

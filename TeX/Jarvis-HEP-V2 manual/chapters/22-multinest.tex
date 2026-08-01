@@ -1,0 +1,785 @@
+\chapter{MultiNest: Nested Sampling from the Ground Up}
+\label{ch:multinest}
+
+\newthought{This chapter is for anyone who needs a Bayesian evidence}, not just a map
+of the parameter space --- model comparison, a significance from an evidence ratio, or
+a properly weighted posterior. It is also the chapter that teaches nested sampling
+itself: the algorithm's core idea, exactly how \Jtwo's code implements and distributes
+it, and how to configure it, using \sampler{MultiNest} --- the simpler, fixed-budget
+member of the family --- as the vehicle. Chapter~\ref{ch:dynesty} builds directly on
+everything here and covers only what its dynamic engine, \sampler{Dynesty}, adds.
+After this chapter you can explain what a nested-sampling run is actually computing,
+read its \textsc{yaml} block fluently, and recognise every line it prints while
+running.
+
+\section{What nested sampling computes}
+\label{sec:nested-what}
+
+A Bayesian evidence is a $d$-dimensional integral over your whole parameter space:
+$Z = \int L(\theta)\,\pi(\theta)\,d\theta$, where $\pi$ is the prior and $L$ the
+likelihood. Nested sampling's insight, due to Skilling\cite{Skilling:2006gxv}, is to
+collapse that hard $d$-dimensional integral into an easy \emph{one}-dimensional one.
+Define the \emph{enclosed prior volume} at likelihood threshold $\lambda$ as
+$X(\lambda) = \int_{L(\theta) > \lambda} \pi(\theta)\,d\theta$ --- the fraction of the
+prior with likelihood above $\lambda$. As $\lambda$ rises from $0$ to $L_{\max}$, $X$
+falls monotonically from $1$ to $0$. Inverting this relation to $L(X)$ turns the
+evidence into
+\[
+Z = \int_0^1 L(X)\,dX,
+\]
+a single integral over the unit interval that nested sampling estimates numerically ---
+by literally constructing a decreasing sequence of $X$ values with known likelihoods.
+
+\begin{marginfigure}
+\centering
+\smallcaps{$N$ live points}\\[2pt]
+$\big\downarrow$ \emph{retire the lowest $L$}\\[2pt]
+\smallcaps{record it; $X$ shrinks}\\[2pt]
+$\big\downarrow$ \emph{draw a replacement with $L$ higher}\\[2pt]
+\smallcaps{repeat until converged}\\[2pt]
+$\big\downarrow$\\[2pt]
+\smallcaps{evidence $Z$ + posterior}
+\caption{The nested-sampling loop. Every retired point is a slice of shrinking prior
+volume at a known likelihood --- exactly the data $Z=\int_0^1 L(X)\,dX$ needs.}
+\label{fig:nested-loop}
+\end{marginfigure}
+
+\subsection{The algorithm, step by step}
+\label{sec:nested-algorithm}
+
+\begin{enumerate}
+  \item \textbf{Initialise.} Draw $N$ \emph{live points} (\yamlkey{nlive}) from the
+        prior $\pi$. Their enclosed volume starts at $X_0 = 1$.
+  \item \textbf{Retire the worst.} Find the live point with the lowest likelihood
+        $L_i$; record it as a \emph{dead point} together with its enclosed volume.
+        Each retirement shrinks the enclosed volume by an expected factor of
+        $N/(N+1)$, so after $i$ retirements $X_i \approx e^{-i/N}$.
+  \item \textbf{Replace it.} Draw a fresh point from the prior, but
+        \emph{constrained to $L(\theta) > L_i$} --- it must land strictly inside the
+        shrinking high-likelihood region. This constrained draw is the one genuinely
+        hard step, and it is where \sampler{MultiNest}'s contribution lives
+        (\S\ref{sec:multinest-ellipsoids}).
+  \item \textbf{Accumulate the evidence.} Each dead point contributes
+        $L_i \cdot w_i$ to $Z$, where $w_i \approx X_{i-1} - X_i$ is the volume slice
+        it represents. The running sum is exactly a numerical quadrature of
+        $\int_0^1 L(X)\,dX$.
+  \item \textbf{Stop.} The live points still sitting above the current threshold could
+        still contribute up to $L_{\max}\cdot X_{\text{current}}$ more evidence. Stop
+        once that \emph{possible} remaining contribution is smaller than
+        \yamlkey{dlogz} relative to the evidence already banked --- and fold the
+        surviving live points into the evidence and the posterior
+        (\yamlkey{add\_live: true}).
+\end{enumerate}
+
+Every dead \emph{and} live point doubles as a posterior sample: its importance weight
+is exactly $L_i w_i / Z$. One run produces both numbers you came for.
+
+\subsection{MultiNest's contribution: bounding by ellipsoids}
+\label{sec:multinest-ellipsoids}
+
+Step 3 above --- draw a point with $L(\theta) > L_i$ --- is where a naive
+implementation dies. Rejecting from the \emph{full} prior until one lands above the
+threshold works early on, but the high-likelihood region shrinks exponentially in
+$X$, so the acceptance rate collapses to zero as the run progresses.
+
+\sampler{MultiNest}, introduced by Feroz, Hobson \& Bridges\cite{Feroz:2008xx}, solves
+this by \textbf{bounding the live points with a union of ellipsoids} instead of
+sampling from the raw prior:
+
+\begin{enumerate}
+  \item Cluster the current live points (splitting automatically around separate
+        modes when the posterior is multimodal).
+  \item Fit one ellipsoid per cluster, enlarged by a safety margin
+        (\yamlkey{enlarge}) so the true constrained region is never excluded.
+  \item Draw new candidates \emph{uniformly from the union of these ellipsoids}
+        (correcting for their overlap), and accept the first one with
+        $L(\theta) > L_i$.
+\end{enumerate}
+
+Because the ellipsoids track the shrinking high-likelihood region far more tightly
+than the full prior does, the acceptance rate stays usable for the whole run --- and
+because there can be \emph{several} ellipsoids, the same mechanism handles multimodal
+posteriors without extra bookkeeping. This is literally what \yamlkey{bound: multi}
+selects in the \textsc{yaml} block below; it is also the default in every card in this
+book.
+
+\begin{jnote}
+The \yamlkey{bound}/\yamlkey{sample} vocabulary you configure in
+\S\ref{sec:nested-sampler-block} names exactly these choices: \yamlkey{bound: multi}
+is Feroz \& Hobson's union-of-ellipsoids region; \yamlkey{sample: unif} is uniform
+rejection sampling inside it --- \sampler{MultiNest}'s original proposal mechanism.
+\yamlkey{sample: rwalk} and the \yamlkey{slice} family are newer proposal mechanisms
+(a short random walk, or slice sampling, confined to the bound) that stay efficient in
+higher dimensions, where naive rejection inside even a well-fitted ellipsoid starts to
+struggle again.
+\end{jnote}
+
+\section{How the code implements it}
+\label{sec:multinest-code}
+
+\Jtwo\ does not reimplement nested sampling --- it takes the reference
+\code{dynesty} package (whose author's own paper, \cite{Speagle:2019ivv}, is required
+reading for Chapter~\ref{ch:dynesty}'s dynamic engine) and threads it onto the
+distributed runtime. Understanding that wiring explains every YAML key and every log
+line in the rest of this chapter.
+
+\subsection{Class hierarchy: MultiNest \emph{is} a Dynesty configuration}
+\label{sec:multinest-classes}
+
+\begin{quote}
+\sffamily\footnotesize
+\code{FeedbackSampler} $\;\to\;$ \code{DynestySampler} $\;\to\;$ \code{MultiNestSampler}
+\end{quote}
+
+\code{FeedbackSampler} is the shared base every feedback-driven method in \Jtwo\
+builds on (the same one \sampler{AdaptiveBridson} uses, Chapter~\ref{ch:adaptive-levelset})
+--- it owns checkpointing and the notion of a synchronisation barrier.
+\code{DynestySampler} adds the nested-sampling engine itself, with one class
+attribute, \code{default\_dynamic}, that picks the dynamic engine by default.
+\code{MultiNestSampler} \emph{is a \code{DynestySampler} subclass that simply flips
+that one attribute to \code{False}} and otherwise changes nothing.
+
+\begin{jnote}
+\textbf{\sampler{MultiNest} here is not Fortran MultiNest or \code{pymultinest}.}
+V1 already used the name \sampler{MultiNest} for a thin, static-only wrapper around
+the same engine \sampler{Dynesty} uses --- V2 keeps that exact contract rather than
+introduce a second, incompatible meaning for a name your existing cards already use.
+If you are starting fresh with no V1 history to preserve, either name is the same
+engine; \sampler{MultiNest} simply cannot enable the dynamic engine, ever, even by
+accident (\S\ref{sec:nested-validation}).
+\end{jnote}
+
+\subsection{The vendored engine and its one patch}
+\label{sec:multinest-vendored}
+
+The \code{dynesty} package lives \emph{in-tree}, not as a normal dependency, under
+\file{Sampling/Source/Dynesty/}. The only local change is a small patch that threads
+a \textsc{uuid} alongside every proposed point through \code{dynesty}'s internal
+state (\code{live\_v} / \code{live\_uid}). \code{dynesty} itself has no notion of
+``this point was evaluated by Worker~7'' --- vendoring plus this one patch is what
+lets \Jtwo\ recover \emph{which} proposed point a returned likelihood value belongs
+to, without forking the algorithm itself.
+
+\subsection{The bridge to the Workers: \code{RedisEvaluationPool}}
+\label{sec:multinest-pool}
+
+\code{dynesty} is written to be parallel-friendly through one extension point: give
+its constructor any object with a \code{.map(func, iterable)} method, and it uses that
+for every batch of likelihood evaluations --- ordinarily a
+\code{multiprocessing.Pool}. \Jtwo\ hands it \code{RedisEvaluationPool} instead, an
+object that \emph{looks} like a local pool to \code{dynesty} but actually round-trips
+every evaluation through Redis to the real Worker fleet:
+
+\begin{enumerate}
+  \item \textbf{Propose.} \code{dynesty} calls the prior transform on a unit-cube
+        vector; \Jtwo's transform mints a fresh \textsc{uuid} and appends it
+        (\S\ref{sec:multinest-vendored}) --- this step runs locally, since it is pure
+        geometry, not physics.
+  \item \textbf{Evaluate.} \code{dynesty} calls \code{pool.map()} with a batch of
+        proposed points. \code{RedisEvaluationPool} recognises this as a physics
+        batch, builds a real \code{Sample} for each \textsc{uuid}-tagged point, and
+        pushes it onto the \emph{same} task queue every other sampler uses
+        (Section~\ref{sec:redis-schema}) --- full calculator/opera/likelihood
+        pipeline, full \file{SAMPLE} / \file{DATABASE} archiving, full per-Sample
+        log, exactly as if a fixed-set sampler had proposed the point.
+  \item \textbf{Return.} Once every point in the batch has a result, the pool hands
+        \code{dynesty} back a list of floats in the order it expects. \code{dynesty}
+        never knows a Worker, a Redis queue, or a calculator was involved.
+\end{enumerate}
+
+\begin{jwarn}
+\code{dynesty} reuses \code{.map()} for more than likelihood batches --- prior
+transforms and some internal proposal bookkeeping go through the same interface
+without tagging which is which. An earlier version of the dispatch guess could fail
+silently and evaluate your \emph{real} physics function inside the control process,
+bypassing every Worker and every calculator. That path now fails loudly instead ---
+if the pool cannot prove a batch is a genuine likelihood evaluation, it raises rather
+than guesses, so a nested-sampling run either uses your full declared pipeline or
+stops immediately, never a plausible-looking wrong answer.
+\end{jwarn}
+
+\subsection{From YAML to the engine: pass-through, not reinvention}
+\label{sec:multinest-yaml-bridge}
+
+\Jtwo\ does not define its own configuration schema for the engine --- it takes
+almost the entire official \code{dynesty} constructor and \code{run\_nested} keyword
+surface \emph{as-is} and passes it straight through. Two small filtering functions do
+this: one collects constructor keywords (\yamlkey{bound}, \yamlkey{sample},
+\yamlkey{walks}, \ldots) from \yamlkey{Bounds} and its nested \yamlkey{sampler} block;
+the other collects \yamlkey{run\_nested} keywords, resolving the static/dynamic
+evidence-key difference along the way (\S\ref{sec:nested-run-nested}). An unrecognised
+key is dropped with a logged warning, never a crash --- and a handful of runtime
+handles (\code{loglikelihood}, \code{prior\_transform}, \code{pool}, \code{rstate},
+\code{ndim}) are always injected by \Jtwo\ itself and stripped if you paste them into
+your card by mistake. This is why the \textsc{yaml} keys in
+\S\ref{sec:multinest-yaml} read exactly like the official \code{dynesty}
+documentation --- they \emph{are} the official surface.
+
+\subsection{There is no dynamic switch --- Method \emph{is} the switch}
+\label{sec:multinest-no-switch}
+
+Earlier builds let you write \yamlkey{Bounds.dynamic: true/false} to pick the engine
+under either method name. That flag is gone. \sampler{MultiNest} and
+\sampler{Dynesty} share one implementation class (\S\ref{sec:multinest-classes}), and
+each subclass now hard-codes which engine it runs; \yamlkey{Sampling.Method} is the
+\emph{only} place the choice is made. If a card copied from a \sampler{Dynesty}
+example still carries \yamlkey{Bounds.dynamic} after you switch
+\yamlkey{Method: MultiNest}, the card is rejected before anything runs
+(\S\ref{sec:nested-validation}) rather than silently doing the wrong thing.
+
+\subsection{Running it}
+\label{sec:multinest-run-loop}
+
+Put together, one call --- \code{run\_adaptive()} --- does the whole run: build the
+\code{RedisEvaluationPool}, seed a \code{numpy} random generator from
+\yamlkey{rseed}, construct the (always static, for \sampler{MultiNest})
+\code{NestedSampler}, call its \code{run\_nested(**kwargs)}, then export the results
+\textsc{csv} and diagnostics \textsc{json}, log the closing summary, and checkpoint
+once at that final barrier. That last point matters operationally ---
+Section~\ref{sec:nested-distributed} explains why there is no checkpoint
+\emph{during} the run.
+
+\section{Configuring MultiNest}
+\label{sec:multinest-yaml}
+
+\subsection{Run one, step by step}
+\label{sec:nested-run}
+
+\begin{enumerate}
+  \item \textbf{Copy the starter template.} \Jtwo\ ships ready-to-edit
+        \yamlkey{Sampling} blocks under \code{project\_template/bin/sampling/} in the
+        \code{jarvishep2} source tree. For a first run, copy
+        \file{Sampling\_MultiNest\_Simple.yaml} into your task card.
+  \item \textbf{Replace \yamlkey{Variables} with your parameters}, following the
+        distribution catalog of Chapter~\ref{ch:variables}.
+  \item \textbf{Replace \yamlkey{LogLikelihood}} with your real expressions
+        (Chapter~\ref{ch:loglikelihood}), or wire in calculators/operas
+        (Part~\ref{part:backends}) that produce the observables your likelihood needs.
+  \item \textbf{Set \yamlkey{Bounds.nlive}} --- the live-point count. Start at
+        100--500 for a first look; production evidence estimates typically want
+        500--2000.
+  \item \textbf{Run it:}
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 run scan.yaml
+\end{jcmd}
+\end{terminal}
+\end{enumerate}
+
+The minimal working card:
+
+\begin{yamlwin}
+Sampling:
+  Method: MultiNest
+  Seed: 21
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
+  Bounds:
+    nlive: 100
+    dlogz: 0.5
+    run_nested:
+      print_progress: true
+  LogLikelihood:
+    - {name: LogL, expression: "..."}   # your physics
+\end{yamlwin}
+
+\subsection{The keys you set on every run}
+\label{sec:nested-bounds-meta}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Default} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{nlive} & \code{100} & live-point count $N$ (\S\ref{sec:nested-algorithm});
+      the main knob on run cost and posterior resolution (minimum 2) \\
+    \yamlkey{Sampling.Seed} (alias \yamlkey{Bounds.rseed}) & \code{0} & \textsc{rng}
+      seed; fix it for a reproducible run --- \yamlkey{Seed} alone is enough, you
+      rarely need \yamlkey{Bounds.rseed} too \\
+    \yamlkey{dlogz} & \code{0.5} & evidence-change stopping threshold
+      (\S\ref{sec:nested-dlogz}) \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\yamlkey{Bounds} meta keys, shared by both engines. There is no
+  \yamlkey{dynamic} key --- the engine is fixed by \yamlkey{Sampling.Method}
+  (\S\ref{sec:multinest-no-switch}); Chapter~\ref{ch:dynesty} covers
+  \sampler{Dynesty}'s extra keys.}
+  \label{tab:nested-meta}
+\end{table}
+
+\begin{jtip}
+Tune \yamlkey{nlive} and \yamlkey{dlogz} first, and only those two, until you have a
+result. Everything below is for shaping proposals once you know the run is otherwise
+healthy.
+\end{jtip}
+
+\subsection{Shaping the ellipsoidal bound: \yamlkey{Bounds.sampler}}
+\label{sec:nested-sampler-block}
+
+\begin{yamlwin}
+Bounds:
+  sampler:
+    bound: multi      # none | single | multi | balls | cubes
+    sample: auto       # auto | unif | rwalk | slice | rslice | hslice
+    walks: 25           # rwalk step count
+    facc: 0.5             # rwalk target acceptance
+    slices: 5               # slice-family step count
+    enlarge: 1.25             # bounding-region safety margin
+    bootstrap: 0                # bootstrap rounds for the enlargement factor
+\end{yamlwin}
+
+\begin{keylist}
+  \item[bound] The region proposals are drawn from
+        (\S\ref{sec:multinest-ellipsoids}). \code{multi} (the default) is Feroz \&
+        Hobson's union of ellipsoids and the right first choice, multimodal or not;
+        \code{single} is faster for a simple unimodal posterior; \code{none} samples
+        directly from the whole prior (only sensible in very low dimensions).
+  \item[sample] How a point is drawn inside that region. \code{auto} (the default)
+        picks a sensible method from your dimensionality; \code{unif} is the
+        original \sampler{MultiNest} rejection sampler; \code{rwalk} and the
+        \code{slice} family scale better to higher dimensions.
+\end{keylist}
+
+These are official \code{dynesty} constructor options passed straight through
+(\S\ref{sec:multinest-yaml-bridge}); the flat spelling
+(\yamlkey{Bounds.bound: multi}) and the nested \yamlkey{Bounds.sampler} block are
+both accepted --- the nested block is preferred for readability. The full constructor
+surface (periodic/reflective dimensions, custom update intervals, \ldots) is
+documented key-by-key in \file{Sampling\_MultiNest\_Full.yaml} beside the simple
+template.
+
+\subsection{Controlling the run itself: \yamlkey{Bounds.run\_nested}}
+\label{sec:nested-run-nested}
+
+\begin{yamlwin}
+Bounds:
+  run_nested:
+    dlogz: 0.5               # evidence-change stop (static engine)
+    add_live: true             # fold surviving live points into Z + posterior
+    print_progress: true         # progress lines to the console/log
+    maxcall: 100000                 # hard cap on likelihood evaluations
+    maxiter: 50000                    # hard cap on nested iterations
+\end{yamlwin}
+
+\begin{keylist}
+  \item[dlogz] The stopping threshold (\S\ref{sec:nested-algorithm},
+        \S\ref{sec:nested-dlogz}). \sampler{MultiNest}'s static engine reads this key
+        under the name \yamlkey{dlogz}; \sampler{Dynesty}'s dynamic engine reads the
+        \emph{same} \yamlkey{Bounds.dlogz} but internally as
+        \yamlkey{dlogz\_init} --- Chapter~\ref{ch:dynesty} explains why.
+  \item[add\_live] \opt, default \code{true}. Whether the live points still standing
+        at the stop are folded into the evidence and posterior --- almost always what
+        you want; the algorithm's own accounting (\S\ref{sec:nested-algorithm}) is
+        incomplete without it.
+  \item[print\_progress] \opt, default \code{true}. Prints the progress line
+        described in \S\ref{sec:nested-log-progress} as the run advances.
+  \item[maxcall / maxiter] \opt, no default (unlimited). Hard stops in addition to the
+        evidence-based stop --- useful as a safety net on a compute budget.
+\end{keylist}
+
+\subsection{Choosing \yamlkey{dlogz}}
+\label{sec:nested-dlogz}
+
+\yamlkey{dlogz} sets how precisely the evidence must be pinned down before the run
+stops --- smaller values mean a longer run and a tighter uncertainty on $\log Z$.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{\yamlkey{dlogz}} & \textbf{Use for} \\
+    \midrule
+    \code{1.0}   & a quick look --- posterior shape, rough evidence \\
+    \code{0.5}   & the default; fine for most exploratory work \\
+    \code{0.1}   & a publication-grade evidence estimate \\
+    \code{0.01}  & a tight evidence comparison between close models --- expect a much
+      longer run \\
+    \bottomrule
+  \end{tabular}
+  \caption{Choosing \yamlkey{dlogz}. Halving it roughly doubles the run's likelihood
+  evaluations for a typical posterior.}
+  \label{tab:dlogz-guide}
+\end{table}
+
+\section{Validating your card}
+\label{sec:nested-validation}
+
+Before \cli{Jarvis2 run} or \cli{Jarvis2 check} ever touches Redis, the loaded card
+passes through a validation gate that rejects a malformed \yamlkey{Bounds} block
+immediately, with a precise, machine-readable diagnosis --- not a stack trace three
+minutes into a scan. A clean card prints one line and moves on:
+
+\begin{terminal}
+\begin{jout}
+Config validation successful. The task YAML meets the V2 contract.
+\end{jout}
+\end{terminal}
+
+A rejected one lists every problem found, each with a stable code, the exact
+\textsc{yaml} path, and (usually) a hint:
+
+\begin{terminal}
+\begin{jout}
+Config validation failed (1 error(s), 0 warning(s)):
+  [error] JV2-BND-012  Sampling.Bounds.dynamic
+          Bounds.dynamic is not a V2 setting; the engine is fixed by
+          Sampling.Method (Dynesty -> always DynamicNestedSampler,
+          MultiNest -> always static NestedSampler). Remove Bounds.dynamic.
+          hint: Use Method: Dynesty for dynamic nested sampling, or
+          Method: MultiNest for static NestedSampler -- not a dynamic flag.
+\end{jout}
+\end{terminal}
+
+Check a card without starting anything --- no Redis, no Workers, exit code \code{0}
+on success and \code{2} on any error:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 validate scan.yaml
+Jarvis2 validate scan.yaml --strict   # also fail on warnings
+Jarvis2 validate scan.yaml --json     # machine-readable report for tooling
+\end{jcmd}
+\end{terminal}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{Code} & \textbf{Fires on} & \textbf{Fix} \\
+    \midrule
+    \code{JV2-BND-000} & \yamlkey{Bounds} is not a mapping & fix the \textsc{yaml}
+      structure \\
+    \code{JV2-BND-001} & unknown key directly under \yamlkey{Bounds} & typo, or move
+      the key under \yamlkey{sampler}/\yamlkey{run\_nested} \\
+    \code{JV2-BND-010} & \yamlkey{nlive} missing or $< 2$ & set an integer $\geq 2$ \\
+    \code{JV2-BND-012} & \yamlkey{Bounds.dynamic} / \yamlkey{Dynamic} present at all
+      & delete it; switch \yamlkey{Method} instead
+      (\S\ref{sec:multinest-no-switch}) \\
+    \code{JV2-BND-013} & \yamlkey{dlogz} / \yamlkey{dlogz\_init} not a number &
+      fix the value \\
+    \code{JV2-BND-021} & unknown key under \yamlkey{run\_nested} & check the static
+      vs.\ dynamic key tables (\S\ref{sec:nested-run-nested},
+      Chapter~\ref{ch:dynesty}) \\
+    \code{JV2-BND-031} & a HEP-injected key (\code{pool}, \code{rstate}, \ldots)
+      pasted into \yamlkey{sampler} & remove it --- \Jtwo\ supplies these
+      (\S\ref{sec:multinest-yaml-bridge}) \\
+    \code{JV2-BND-032} & unknown key under \yamlkey{sampler} / \yamlkey{constructor} &
+      check the official \code{dynesty} constructor surface \\
+    \code{JV2-VAR-002} & \yamlkey{distribution.type} misspelled or wrong case & names
+      are case-sensitive --- \code{Flat}, not \code{flat}
+      (Chapter~\ref{ch:variables}) \\
+    \code{JV2-MTH-002} & \yamlkey{Sampling.Method} missing on a scan run & set it \\
+    \code{JV2-MTH-003} & \yamlkey{Sampling.Method} set to something \Jtwo\ does not
+      implement & check spelling against the method list in Section~\ref{sec:method} \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Validation codes a nested-sampling card is most likely to hit. The other
+  methods' codes, for reference, are in Appendix~\ref{app:troubleshooting}.}
+  \label{tab:nested-validation-codes}
+\end{table}
+
+\begin{jnote}
+Every error is a hard stop --- there is no partial validation pass for
+\yamlkey{Bounds}. Warnings (dead keys such as \yamlkey{Runtime.Subprocess}, an
+unrecognised \yamlkey{Operas} \yamlkey{call\_mode}) still let the card run; pass
+\cli{--strict} to \cli{Jarvis2 validate} to treat those as errors too before you
+commit a card to a long production run.
+\end{jnote}
+
+\section{How it runs on the distributed Workers}
+\label{sec:nested-distributed}
+
+Nested sampling behaves differently from every other method in this book, and it is
+worth knowing why before you tune \yamlkey{workers}.
+
+\begin{jnote}
+The nested-sampling \emph{algorithm} --- which point to retire, where to propose the
+next one --- runs entirely in the \textbf{control process}
+(\S\ref{sec:multinest-pool}). Only the \textbf{likelihood evaluation} for each
+proposed point is sent out to the Workers. The control process waits for that answer
+before it can decide its next move.
+\end{jnote}
+
+Practically: \yamlkey{EnvReqs.V2.workers} still controls how many likelihood
+evaluations run in parallel, and \yamlkey{EnvReqs.V2.batch\_size} still governs how
+many are pipelined at once (it becomes the engine's internal \yamlkey{queue\_size}
+unless you override it under \yamlkey{Bounds.sampler.queue\_size}). But because the
+algorithm itself is single-threaded control logic, adding Workers speeds up the
+\emph{evaluation} of each batch of candidates, not the number of \emph{sequential
+decisions} nested sampling has to make --- so returns on extra Workers taper off
+sooner than for a fixed-set scan of the same size.
+
+\begin{jwarn}
+\textbf{Interrupting a nested run does not resume it the way other methods do.} \Jtwo's
+own checkpoint/resume system (Chapter~\ref{ch:checkpoint}) records the sampler's state
+only \emph{after} the run finishes, for bookkeeping --- there is no mid-run checkpoint
+of the live-point population today (\S\ref{sec:multinest-run-loop}). If you need to
+survive an interruption on a long run, opt into \code{dynesty}'s own native checkpoint
+file:
+\begin{yamlwin}
+Bounds:
+  run_nested:
+    checkpoint_file: "&J/outputs/checkpoints/multinest.save"
+    checkpoint_every: 60      # seconds
+    # resume: true            # set this on the *next* launch to continue
+\end{yamlwin}
+Leave \yamlkey{resume} unset (or \code{false}) on the first launch; set it to
+\code{true} on a later launch pointing at the same \yamlkey{checkpoint\_file} to pick
+up where the previous run left off.
+\end{jwarn}
+
+\section{Reading the log}
+\label{sec:nested-log}
+
+Nested sampling talks more than any other sampler --- deliberately, since a run can
+take hours and you want to know it is healthy without waiting for it to finish. Every
+excerpt below uses the real Jarvis-logger visual format
+(Section~\ref{sec:log-visual-format}); if that format looks unfamiliar, read
+Chapter~\ref{ch:logging} first. Everything here lands in \file{sampler.log}
+(\emph{not} \file{core.log}).
+
+\subsection{At startup}
+\label{sec:nested-log-startup}
+
+Two entries confirm what actually launched, before anything else happens:
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.MultiNest
+	-> 07-21 15:47:05.001 - [INFO] >>>
+Starting NestedSampler nlive=100 ndim=2 dynamic=False bound=multi sample=auto
+
+·•· Jarvis-HEP.Sampler.MultiNest
+	-> 07-21 15:47:05.004 - [INFO] >>>
+run_nested kwargs -> {'dlogz': 0.5, 'add_live': True, 'print_progress': True,
+                       'save_bounds': True}
+\end{jout}
+\end{terminal}
+
+\begin{jtip}
+Check this line before you do anything else. \yamlkey{nlive} and \yamlkey{ndim}
+should match what you wrote in the card; \yamlkey{dynamic} is not something you set
+--- it is \Jtwo\ reporting back which engine \yamlkey{Method} selected, and should
+read \code{False} here (\code{True} would mean this is actually a
+\sampler{Dynesty} run). The \code{run\_nested kwargs} line is the \emph{final},
+resolved configuration --- including any silent defaults
+(\S\ref{sec:multinest-yaml-bridge}). If a key you set is missing from this line, it
+was not recognised --- look one line up for a matching \code{WARNING} naming it.
+\end{jtip}
+
+\subsection{While it runs: the progress block}
+\label{sec:nested-log-progress}
+
+With \yamlkey{print\_progress: true} (the default), the \emph{inner} engine logger
+--- one dotted segment deeper, \code{...MultiNest.Inner} --- prints a block on every
+iteration:
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.MultiNest.Inner
+	-> 07-21 15:47:12.884 - [INFO] >>>
+MultiNest Progress ->
+	iter       -> 4213
+	bound      -> 12
+	nc         -> 1
+	ncall      -> 5917
+	eff(%)     -> 71.204
+	loglstar   -> -inf < -3.812 <  inf
+	logz       ->  -5.204 +/- 0.183
+	dlogz      ->   0.812 >   0.500
+\end{jout}
+\end{terminal}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{Meaning} \\
+    \midrule
+    \code{iter}      & the current nested iteration --- one retired point per
+      iteration (\S\ref{sec:nested-algorithm}) \\
+    \code{bound}     & how many times the ellipsoid bound has been rebuilt so far \\
+    \code{nc}        & likelihood calls used for the \emph{current} step \\
+    \code{ncall}     & total likelihood calls so far --- your actual compute spent \\
+    \code{eff(\%)}   & efficiency: \code{iter}/\code{ncall}; healthy runs stay in the
+      tens of percent (very low efficiency means the bound is struggling --- see
+      below) \\
+    \code{loglstar}  & the current worst live point's log-likelihood, between the
+      declared bounds \\
+    \code{logz}      & the running evidence estimate and its uncertainty --- watch
+      this settle over the run \\
+    \code{dlogz}     & remaining estimated evidence change, compared against your
+      threshold; the run stops once this drops below it \\
+    \bottomrule
+  \end{tabular}
+  \caption{Progress-block fields, in the order they print.}
+  \label{tab:nested-progress-fields}
+\end{table}
+
+\begin{jnote}
+Every $100^{\text{th}}$ iteration, this exact block is logged at \code{[WARNING]}
+instead of \code{[INFO]} --- purely so long-running progress stays visible in a busy
+\code{sampler.log} without you having to scroll; it is not an error
+(Section~\ref{sec:log-visual-format}).
+\end{jnote}
+
+\begin{jtip}
+Three numbers tell you almost everything about a run in progress: \code{ncall} rising
+steadily means Workers are being fed; \code{logz} settling to a stable value (rather
+than still drifting) means the evidence estimate is converging; \code{dlogz}
+shrinking toward its threshold tells you how much longer to expect.
+\end{jtip}
+
+\begin{jwarn}
+\textbf{A stuck \code{ncall} with a moving \code{bound} counter and low \code{eff(\%)}}
+usually means the ellipsoid bound is a poor fit for this likelihood surface --- a very
+thin or curved high-likelihood ridge, for instance. Try \yamlkey{sample: rslice} or
+\yamlkey{sample: hslice} before assuming something is broken; these cost more per
+proposal but handle awkward geometries far better than uniform rejection.
+\end{jwarn}
+
+\subsection{At the end: the summary}
+\label{sec:nested-log-summary}
+
+When the run finishes, one multi-line record and one closing line appear:
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.MultiNest
+	-> 07-21 15:52:40.881 - [INFO] >>>
+MultiNest run summary
+Summary
+=======
+nlive: 100
+niter: 4213
+ncall: 5917
+eff(%): 71.204
+logz: -5.204 +/- 0.183
+
+·•· Jarvis-HEP.Sampler.MultiNest
+	-> 07-21 15:52:40.884 - [INFO] >>>
+MultiNest finished logZ=-5.2040 ± 0.1830 niter=4213 ncall=5917
+\end{jout}
+\end{terminal}
+
+This is your run's headline result --- \code{logz} \textbf{is} the Bayesian evidence
+you came for, with its uncertainty. \code{niter} is the number of retired (dead)
+points; \code{ncall} is the total likelihood evaluations spent to get there --- larger
+than \code{niter} whenever efficiency is below 100\%, since some proposals are
+rejected before one lands inside the bound.
+
+\section{What the run leaves behind}
+\label{sec:nested-outputs}
+
+Alongside the normal output tree (Chapter~\ref{ch:outputs}), a nested run writes two
+extra files under \file{DATABASE/}:
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{File} & \textbf{Rows} & \textbf{Contains} \\
+    \midrule
+    \code{multinest\_result.csv} (\code{dynesty\_result.csv} for
+      \sampler{Dynesty}, Chapter~\ref{ch:dynesty}) & one per \textbf{retired point}
+      (\code{niter}) & the weighted posterior: \code{uuid}, \code{log\_weight},
+      \code{log\_Like}, \code{log\_PriorVolume}, the running \code{log\_Evidence}
+      $\pm$ error, and each parameter's physical value \\
+    \code{sampler\_summary.json} & one record & the same headline numbers as the
+      closing log line --- \code{logz}, \code{logzerr}, \code{ncall}, \code{niter},
+      \code{nlive} --- in a form your scripts can parse \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Nested-sampling-specific outputs, in addition to
+  \code{DATABASE/samples.hdf5} / \code{samples.csv}.}
+  \label{tab:nested-outputs}
+\end{table}
+
+\begin{jnote}
+\textbf{Two different row counts, on purpose.} \file{samples.hdf5} /
+\file{samples.csv} record \emph{every} likelihood evaluation the Workers ever ran
+(\code{ncall} rows --- the full archive, Chapter~\ref{ch:outputs}).
+\code{multinest\_result.csv} records only the \emph{retired, weighted} points
+(\code{niter} rows) --- the actual posterior. For the evidence and the posterior, read
+\code{multinest\_result.csv}; for a raw audit of every point ever computed, read
+\file{samples.csv}.
+\end{jnote}
+
+A stock \JPlot\ scene (\code{dynesty\_runplot}) reads either result \textsc{csv}
+directly and draws the standard nested-sampling diagnostic panels --- evidence
+trajectory, live-point count, and posterior weight --- with no configuration
+(Chapter~\ref{ch:jarvisplot}).
+
+\section{Feedback payload: \yamlkey{FeedbackReturn}}
+\label{sec:nested-feedback-return}
+
+Every Worker result for a nested run is boiled down to the one number the algorithm
+actually needs before it can decide its next move: the log-likelihood.
+
+\begin{yamlwin}
+Sampling:
+  FeedbackReturn:
+    mode: minimal        # default; correct for MultiNest/Dynesty
+    include_logl: true
+\end{yamlwin}
+
+The default (\yamlkey{mode: minimal}, \yamlkey{include\_logl: true}) is already what
+nested sampling needs, which is why the shipped templates and example projects omit
+this block entirely --- write it only if you need a non-default
+\yamlkey{FeedbackReturn} for some other reason. A point whose likelihood could not be
+computed is fed back as $\log L = -\infty$, which the algorithm treats as an ordinary
+rejected proposal rather than a scan failure.
+
+\begin{jtip}
+If \code{logz} refuses to settle no matter how long the run goes, and the progress
+block's \code{eff(\%)} is healthy, check the likelihood itself first --- a likelihood
+that is occasionally $-\infty$ from a failing calculator, rather than from genuinely
+being outside your model's support, slows convergence far more than any
+\yamlkey{Bounds} tuning can fix.
+\end{jtip}
+
+\begin{jtip}
+Ready for the dynamic engine? Chapter~\ref{ch:dynesty} assumes everything in this
+chapter and covers only what changes.
+\end{jtip}
+
+\section{Summary}
+\label{sec:multinest-summary}
+
+\sampler{MultiNest} is nested sampling's static engine: a fixed live-point population
+that shrinks through the likelihood until its own evidence estimate has converged ---
+the only method here that hands you $\log Z$ alongside the posterior, at the cost of no
+mid-run checkpoint and \textsc{uuid}s that are not seed-deterministic.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{\sampler{MultiNest}} \\
+    \midrule
+    Kind & feedback (evidence-stop) \\
+    Engine & always static --- not Fortran MultiNest \\
+    Point count & until \yamlkey{dlogz} converges, or \yamlkey{maxcall}/\yamlkey{maxiter} \\
+    Dimensions & any \\
+    Required keys & none strictly; set \yamlkey{Bounds.nlive} \\
+    u$\to$x mapping & yes \\
+    \yamlkey{Seed} role & \code{numpy} generator seed (proposal sequence only) \\
+    \textsc{uuid}s & fresh per proposal, \textbf{not} seed-deterministic \\
+    Mid-run resume & no --- use \code{dynesty}'s own \yamlkey{checkpoint\_file} \\
+    Extra output & \file{multinest\_result.csv}, \file{sampler\_summary.json} \\
+    \bottomrule
+  \end{tabular}
+  \caption{\sampler{MultiNest} at a glance.}
+  \label{tab:multinest-summary}
+\end{table}

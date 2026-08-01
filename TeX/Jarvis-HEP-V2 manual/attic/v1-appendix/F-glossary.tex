@@ -1,0 +1,45 @@
+\chapter{Glossary}
+\label{app:glossary}
+
+\newthought{Terms used throughout the manual}, briefly defined. Cross-references point to the
+chapter with the full story.
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[Task card] the single \textsc{yaml} file describing a whole scan
+        (Chapter~\ref{ch:task-yaml}).
+  \item[Standalone project] a self-contained directory holding a card and its outputs, identified
+        by marker files (Chapter~\ref{ch:core-concepts}).
+  \item[Sampler] the method that chooses parameter points (Part~\ref{part:samplers}).
+  \item[Workflow backend] what turns a point into observables: \yamlkey{Calculators} (external
+        programs) or \yamlkey{Operas} (in-process operators) (Chapter~\ref{ch:workflow-model}).
+  \item[Calculator] a module wrapping an external program through files and commands
+        (Chapter~\ref{ch:calculators}).
+  \item[Opera] an in-process operator from the \Operas\ registry
+        (Chapters~\ref{ch:operas},~\ref{ch:jarvis-operas}).
+  \item[Module] one node in the workflow graph; ordering set by \yamlkey{required\_modules}.
+  \item[Observable] a named value produced by the workflow and fed to the likelihood.
+  \item[LogLikelihood] the named expression(s) that score a point; the total is \yamlkey{LogL}
+        (Chapter~\ref{ch:loglikelihood}).
+  \item[Expression] a symbolic formula over variables, observables, and functions
+        (Chapter~\ref{ch:symbols}).
+  \item[Nuisance parameter] a parameter optimised/profiled at each point rather than sampled
+        jointly; see \sampler{Profile1D} (Chapter~\ref{ch:nuisance}).
+  \item[Posterior] the probability distribution \textsc{mcmc} and nested samplers draw from.
+  \item[Evidence] the marginal likelihood, computed by nested sampling, used for model comparison
+        (Chapter~\ref{ch:nested}).
+  \item[Checkpoint / safe barrier] the saved sampler state (\file{state.pkl}), written only at
+        consistent points (Chapter~\ref{ch:checkpoint}).
+  \item[clone\_shadow / \token{@PackID}] per-sample isolated working copies for calculators
+        (Chapter~\ref{ch:calculators}).
+  \item[Materialize] create a sample's on-disk folder; skipped for lazy opera-only scans
+        (Chapter~\ref{ch:runtime-block}).
+  \item[Batch] the group of points proposed/persisted together (\yamlkey{Runtime.batch\_size}).
+  \item[Path marker (\marker{\&J/})] the project root, resolved at load time
+        (Chapter~\ref{ch:core-concepts}).
+  \item[Runtime token] a per-sample substitution: \token{@SampleID}, \token{@Sdir},
+        \token{@PackID}.
+  \item[Flowchart] the semantic \file{flowchart.json} describing the workflow, optionally rendered
+        by \JPlot\ (Chapter~\ref{ch:workflow-model}).
+  \item[Run summary] the end-of-run \file{run\_summary.\{json,csv,txt\}} diagnostics
+        (Chapter~\ref{ch:run-summary}).
+\end{description}

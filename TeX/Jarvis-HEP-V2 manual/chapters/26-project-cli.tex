@@ -1,0 +1,129 @@
+\chapter{Project Tools \& the Example Catalog}
+\label{ch:project-cli}
+
+\newthought{Projects are the unit of sharing.} \cli{Jarvis2 project} scaffolds new
+projects, packs existing ones into tarballs, browses the official example catalog, and
+--- for restricted material --- encrypts and decrypts packs so that no user ever touches
+\cli{openssl} by hand.
+
+\section{\clih{project create}: scaffolding}
+\label{sec:project-create}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 project create MyScan
+cd MyScan
+Jarvis2 run bin/quickstart_bridson_operas.yaml
+\end{jcmd}
+\end{terminal}
+
+\begin{jfiletree}
+\dirtree{%
+.1 \dtfoldopen{MyScan/}.
+.2 \dtyaml{jarvis.project.yaml}\DTcomment{descriptor (root marker)}.
+.2 \dtmark{.jarvis-project.json}\DTcomment{machine marker}.
+.2 \dtfold{bin/}\DTcomment{task cards, incl.\ a runnable quick start}.
+.2 \dtfold{data/}\DTcomment{input data, check points, CSVs}.
+.2 \dtfold{deps/}\DTcomment{environment\_default.yaml (EnvReqs.V2 defaults)}.
+}
+\end{jfiletree}
+
+The markers pin the project root (Section~\ref{sec:projects}); the scaffolded defaults
+file wires \yamlkey{EnvReqs.Check\_default\_dependencies} so every card in \file{bin/}
+shares one runtime profile (Section~\ref{sec:check-default-deps}).
+
+\section{\clih{project pack}: tarballs}
+\label{sec:project-pack}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 project pack . --share    # curated: bin/ data/ outputs/ images/ + markers
+Jarvis2 project pack . --repro    # default: all non-hidden top-level content
+Jarvis2 project pack . --full     # everything
+Jarvis2 project pack . --man      # write an editable pack manifest only
+\end{jcmd}
+\end{terminal}
+
+\begin{keylist}
+  \item[--share] The publishable subset: task cards, data, outputs, images, the
+        project markers, and \file{README.md} --- no local tool installs, no scratch.
+  \item[--repro] The default: every non-hidden top-level entry, i.e.\ enough to re-run
+        the project elsewhere.
+  \item[--full] Everything under the root.
+  \item[--man] Write only a manifest \textsc{yaml} listing what \emph{would} be packed
+        --- edit it, then pack from it; also your audit trail of what left the machine.
+\end{keylist}
+
+All profiles silently exclude the usual junk (\file{.git/}, \code{\_\_pycache\_\_},
+caches, \code{.pyc}/\code{.tmp}/swap files, \code{.DS\_Store}).
+
+\section{The official catalog}
+\label{sec:catalog}
+
+Curated example projects are indexed by a single \textsc{json} document in the
+\code{Jarvis-Examples} repository; no separate package to install.
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 project list          # table: Name, Access, Key, Category, Summary
+Jarvis2 project info Eggbox   # details, incl. entry-point card and key hint
+Jarvis2 project fetch Eggbox  # download + unpack a public project
+\end{jcmd}
+\end{terminal}
+
+The index is resolved in order: the remote \textsc{url} (or the
+\code{JARVIS\_OFFICIAL\_LIBRARY\_INDEX\_URL} override) $\rightarrow$ the last
+successfully pulled copy in \file{\textasciitilde/.jarvis/cache/} $\rightarrow$ a
+snapshot packaged with the runtime. Offline machines therefore still \cli{list}, with a
+possibly stale view.
+
+\section{Restricted projects}
+\label{sec:restricted}
+
+Catalog entries marked \code{Access: restricted}, \code{Key: required} ship as
+encrypted archives (\file{*.tar.gz.jenc}). The key travels out-of-band; the CLI does
+the rest.
+
+\paragraph{Fetching.}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis2 project fetch SecretName --key 'YOUR_KEY'
+# or set it once per shell:
+export JARVIS_PROJECT_FETCH_KEY='YOUR_KEY'
+Jarvis2 project fetch SecretName
+\end{jcmd}
+\end{terminal}
+
+Fetch downloads, decrypts, and unpacks in one step. A wrong or missing key fails with
+the catalog's key \emph{hint} for that entry.
+
+\paragraph{Publishing (maintainers).}
+
+\begin{terminal}
+\begin{jcmd}
+# one-shot: pack then encrypt -> MyPrivate_repro_....tar.gz.jenc
+Jarvis2 project pack MyPrivate --repro --encrypt --key 'YOUR_KEY'
+
+# or encrypt an existing tarball
+Jarvis2 project encrypt MyPrivate_repro_....tar.gz --key 'YOUR_KEY'
+\end{jcmd}
+\end{terminal}
+
+Upload the \file{.jenc}, register the entry in the catalog \textsc{json} with
+\code{access: restricted} and \code{requires\_key: true}, and share the key privately.
+Never publish the plaintext tree.
+
+\begin{jnote}
+Under the hood the format is OpenSSL-compatible \textsc{aes}-256-\textsc{cbc} with
+\textsc{pbkdf2} key derivation, using the system \cli{openssl} when present (the
+\code{cryptography} package otherwise). What encryption does \emph{not} hide: the
+catalog metadata (names, summaries, \textsc{url}s) is public, and it protects archive
+\emph{content} only --- the security model is a shared passphrase, not per-user grants.
+\end{jnote}
+
+\begin{jwarn}
+Treat keys like passwords: pass them via the environment variable in shared shell
+histories, never commit them, and rotate by re-encrypting and updating the catalog
+entry.
+\end{jwarn}

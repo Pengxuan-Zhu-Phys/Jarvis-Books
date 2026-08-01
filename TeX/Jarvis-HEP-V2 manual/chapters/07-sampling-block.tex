@@ -1,0 +1,147 @@
+\chapter{The Sampling Block}
+\label{ch:sampling-block}
+
+\newthought{\yamlkey{Sampling} chooses the brain of the scan.} It names the sampling
+method, declares the variables that define u-space, and carries a few keys every method
+shares: the seed, an optional \yamlkey{selection} cut, and an alias spot for the
+likelihood. This chapter covers the shared surface; each method's own keys are detailed in
+Part~\ref{part:samplers}.
+
+\section{Choosing a method}
+\label{sec:method}
+
+\begin{yamlwin}
+Sampling:
+  Method: Bridson        # Bridson | Random | Grid | CSV | AdaptiveBridson
+                          # | Dynesty | MultiNest
+\end{yamlwin}
+
+Seven methods have a dedicated chapter and are the focus of this book (list below); an
+unrecognised value raises a clear \code{NotImplementedError} naming the offending
+string. Ten more --- the \textsc{mcmc} family --- are also implemented and registered,
+just without a closed \textsc{yaml} contract or chapter of their own yet;
+Chapter~\ref{ch:choosing-sampler} covers what is confirmed about them. Alternatively,
+\yamlkey{Sampling.mode: check\_modules} replaces \yamlkey{Method} resolution and runs
+the workflow smoke path of Chapter~\ref{ch:check-modules}.
+
+\begin{description}[leftmargin=1.6em]
+  \item[\sampler{Random}] fixed set --- uniform i.i.d.\ draws in u-space
+        (Chapter~\ref{ch:random}).
+  \item[\sampler{Grid}] fixed set --- exhaustive Cartesian product
+        (Chapter~\ref{ch:grid}).
+  \item[\sampler{CSV}] fixed set --- replay physical points from a file
+        (Chapter~\ref{ch:csv-sampler}).
+  \item[\sampler{Bridson}] fixed set --- blue-noise (Poisson-disk) space filling
+        (Chapter~\ref{ch:bridson}).
+  \item[\sampler{AdaptiveBridson}] feedback --- iterative refinement around a level set
+        (Chapter~\ref{ch:adaptive-levelset}).
+  \item[\sampler{MultiNest}] nested (static) --- evidence + posterior, fixed
+        live-point budget (Chapter~\ref{ch:multinest}).
+  \item[\sampler{Dynesty}] nested (dynamic) --- evidence + posterior, adaptive
+        live-point batches (Chapter~\ref{ch:dynesty}).
+\end{description}
+
+``Fixed set'' methods generate their whole point set up front;
+\sampler{AdaptiveBridson} reacts to results (Chapter~\ref{ch:adaptive-levelset}); the
+nested methods react to results toward an evidence estimate
+(Chapter~\ref{ch:choosing-sampler}). New methods land in this list as they ship ---
+check here first for the current, authoritative set.
+
+\section{Keys common to every method}
+\label{sec:common-keys}
+
+\begin{keylist}
+  \item[Variables] \req\ for \sampler{Bridson}, \sampler{Random}, \sampler{Grid}, and
+        \sampler{AdaptiveBridson} (an empty list is an error); ignored by \sampler{CSV},
+        which carries its own column list. Schema and distribution catalog in
+        Chapter~\ref{ch:variables}.
+  \item[Seed] \opt, integer, default \code{0}; alias \yamlkey{seed}. Seeds the method's
+        random stream; \code{0} means \emph{unseeded} for \sampler{Random} and
+        \sampler{Bridson}. Sample \textsc{uuid}s are derived deterministically from the
+        seed and the point index, which is what makes resume and replay stable
+        (Chapter~\ref{ch:reproducibility}).
+  \item[selection] \opt. A boolean expression over the \emph{physical} parameters; a
+        point failing the cut is dropped before submission. See below for the budget
+        semantics.
+  \item[LogLikelihood] \opt. A list of likelihood terms --- the same schema as
+        \yamlkey{Likelihood.\allowbreak{}expressions}, at lower precedence
+        (Chapter~\ref{ch:loglikelihood}).
+\end{keylist}
+
+\section{\yamlkey{selection} semantics}
+\label{sec:selection}
+
+\begin{yamlwin}
+Sampling:
+  Method: Random
+  "Point number": 500
+  selection: "x + y < 1.5"
+\end{yamlwin}
+
+The expression uses the shared language of Chapter~\ref{ch:expressions}, evaluated per
+candidate over the physical parameter values. Its interaction with the sampling budget is
+the same for all fixed-set methods, and is worth stating plainly:
+
+\begin{jwarn}
+Fixed-set methods generate their point set \emph{once} --- \yamlkey{"Point number"}
+draws, the full grid, or the Bridson disk set. A candidate rejected by
+\yamlkey{selection} \textbf{consumes its slot}: there is no redraw, no retry, no top-up.
+A restrictive cut therefore yields \emph{fewer accepted samples than the nominal budget}.
+If you need $N$ accepted points inside a cut of acceptance $\varepsilon$, budget
+$N/\varepsilon$.
+\end{jwarn}
+
+For \sampler{AdaptiveBridson}, the cut filters proposals before submission in the same
+way; dropped points are simply never scheduled, and never counted as failures.
+
+Each distinct selection expression is compiled once per process and cached; per-candidate
+evaluation is a single numerical call, so even million-point sets filter quickly.
+
+\section{Per-method keys at a glance}
+\label{sec:per-method-glance}
+
+The keys that live directly in \yamlkey{Sampling} but belong to one method:
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.20\linewidth}p{0.09\linewidth}p{0.20\linewidth}p{0.45\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Req.} & \textbf{Method} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{Radius}      & \req & \sampler{Bridson} & minimum u-space distance \\
+    \yamlkey{MaxAttempt}  & \req & \sampler{Bridson} & candidates per active point \\
+    \yamlkey{MaxWorker}   &      & \sampler{Bridson} & max in-flight proposals \\
+    \yamlkey{"Point number"} & \req & \sampler{Random} & sample count \\
+    \yamlkey{CSV}         & \req & \sampler{CSV}     & file spec sub-block \\
+    \yamlkey{AdaptiveBridson} & \req & \sampler{AdaptiveBridson} & method sub-block \\
+    \yamlkey{Variables[].\allowbreak{}parameters.\allowbreak{}num} & \req & \sampler{Grid} & points per dimension \\
+    \yamlkey{Variables[].\allowbreak{}parameters.\allowbreak{}length} & \req & \sampler{Bridson} & u-space box edge \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Method-specific \yamlkey{Sampling} keys; full detail in
+  Part~\ref{part:samplers}.}
+  \label{tab:per-method-keys}
+\end{table}
+
+Missing required keys raise at sampler startup --- mostly as raw \code{KeyError}s or
+\code{ValueError}s naming the key, before any Worker starts.
+
+\section{How samples reach the Workers}
+\label{sec:submission}
+
+Whatever the method, submission is uniform: the sampler walks its accepted points, mints
+each a deterministic \textsc{uuid}, and pushes light task dictionaries to Redis in groups
+of \yamlkey{EnvReqs.V2.batch\_size}. Fixed-set methods submit everything and wait;
+\sampler{AdaptiveBridson} submits a generation, waits at a barrier for results, and
+decides the next one. Workers do not know or care which method proposed the task ---
+everything method-specific stays in the control process.
+
+\begin{jtip}
+Start every new card as \sampler{Random} with a small \yamlkey{"Point number"} and your
+real workflow. It exercises the same execution path as any other method, so you can debug
+calculators and likelihood cheaply, then switch \yamlkey{Method} when the physics is
+right. Chapter~\ref{ch:choosing-sampler} gives the decision guide.
+\end{jtip}

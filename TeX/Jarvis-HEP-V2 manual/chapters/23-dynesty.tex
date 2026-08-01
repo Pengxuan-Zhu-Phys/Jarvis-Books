@@ -1,0 +1,268 @@
+\chapter{Dynesty: Dynamic Nested Sampling}
+\label{ch:dynesty}
+
+\newthought{This chapter assumes Chapter~\ref{ch:multinest}.} If you have not read
+it, do that first --- the algorithm, the code architecture
+(\code{RedisEvaluationPool}, the vendored engine, the YAML-to-\code{dynesty}
+pass-through), the distributed-runtime caveats, and the log's visual format are all
+identical here. This chapter covers exactly one thing: what changes when
+\yamlkey{Sampling.Method: Dynesty} runs its \emph{dynamic} engine instead of the
+static one, and how to configure and read it. The primary reference for the dynamic
+engine is Speagle's \code{dynesty} paper\cite{Speagle:2019ivv}, which this section
+follows closely.
+
+\section{What dynamic nested sampling adds}
+\label{sec:dynesty-what}
+
+Static nested sampling (Chapter~\ref{ch:multinest}) fixes the live-point count
+$N$ for the whole run and apportions effort uniformly along it. But evidence
+precision and posterior resolution do not actually need the same thing:
+
+\begin{itemize}
+  \item \textbf{Evidence precision} benefits from more live points \emph{broadly},
+        across the whole run --- a wider ``fan'' of nested shells gives a
+        lower-variance estimate of $Z=\int_0^1 L(X)\,dX$.
+  \item \textbf{Posterior resolution} benefits from more live points concentrated
+        \emph{where the posterior mass actually is} --- typically a narrower range of
+        $X$ near the peak, which a uniform-$N$ static run under-resolves unless $N$
+        is large everywhere, including where it barely matters for the evidence.
+\end{itemize}
+
+Dynesty's dynamic engine\cite{Speagle:2019ivv} resolves this by \textbf{running in
+two phases}:
+
+\begin{enumerate}
+  \item \textbf{Initial phase.} A static-like pass at a baseline live-point count
+        (\yamlkey{nlive\_init}), stopped by an evidence-precision criterion
+        (\yamlkey{dlogz\_init}) --- exactly Chapter~\ref{ch:multinest}'s algorithm,
+        run once to map the space.
+  \item \textbf{Batch phase.} Using the initial pass's own dead points, an
+        \emph{importance function} identifies which range of $X$ would most improve
+        the run if it had more live points there --- weighted by how much you care
+        about the evidence versus the posterior (\yamlkey{wt\_kwargs}'s
+        \code{pfrac}). A new batch of live points is added \emph{just in that
+        range}, refining it. Batches repeat until a global stopping criterion is
+        met.
+\end{enumerate}
+
+The result is the same two outputs as the static engine --- evidence and weighted
+posterior --- typically reaching a given posterior quality with fewer total
+likelihood evaluations, because effort is not wasted refining $X$-ranges the
+posterior barely visits.
+
+\begin{jnote}
+Nothing about \emph{what} is being computed changes --- Section~\ref{sec:nested-what}'s
+integral, the ellipsoid bounding of Section~\ref{sec:multinest-ellipsoids}, and every
+Worker/Redis mechanic of Section~\ref{sec:multinest-code} are exactly the same. Only
+\emph{how many live points run when, and where} changes.
+\end{jnote}
+
+\section{The code delta}
+\label{sec:dynesty-code}
+
+Recall the class hierarchy from Section~\ref{sec:multinest-classes}: the
+\sampler{Dynesty} sampler class \emph{is} the base, and the \sampler{MultiNest} class
+specialises it --- not the other way round. One class attribute picks the engine:
+\code{default\_dynamic = True} selects the dynamic engine over the static one for
+every \yamlkey{Method: Dynesty} card, fixed by the class and never by a
+\textsc{yaml} flag (\S\ref{sec:multinest-no-switch}). Everything else --- the Redis
+evaluation bridge, the \textsc{uuid}-tagged prior transform, the YAML-to-kwargs
+pass-through, the single end-of-run checkpoint --- is the identical code path
+(Section~\ref{sec:multinest-code}).
+
+The one genuine wrinkle is the evidence-threshold key. The \emph{static} engine reads
+\yamlkey{dlogz}; the \emph{dynamic} engine's initial phase reads a differently-named
+key, \yamlkey{dlogz\_init}, because the stopping rule for the batch phase is a
+separate thing entirely (\S\ref{sec:dynesty-yaml}). Rather than make you spell the
+right one for the engine your card's \yamlkey{Method} selects, \Jtwo's YAML bridge
+remaps a bare \yamlkey{Bounds.dlogz} to \yamlkey{dlogz\_init} automatically under
+\yamlkey{Method: Dynesty}, and logs an \code{INFO} line recording that it did so
+(Section~\ref{sec:dynesty-log}) --- so the same \yamlkey{Bounds.dlogz: 0.5} in a card
+behaves sensibly under either \yamlkey{Method}.
+
+\section{Configuring Dynesty}
+\label{sec:dynesty-yaml}
+
+Everything in Chapter~\ref{ch:multinest}'s \yamlkey{Bounds.sampler} block
+(\S\ref{sec:nested-sampler-block}: \yamlkey{bound}, \yamlkey{sample}, \yamlkey{walks},
+\ldots) applies unchanged --- the ellipsoid bounding and proposal mechanism are shared
+code. Under \yamlkey{Method: Dynesty} the dynamic engine runs automatically; configure
+its two phases through \yamlkey{run\_nested}:
+
+\begin{yamlwin}
+Sampling:
+  Method: Dynesty
+  Bounds:
+    nlive: 100              # used for nlive_init unless set separately below
+    dlogz: 0.5                # remapped to dlogz_init automatically
+    run_nested:
+      nlive_batch: 100           # live points added per batch
+      maxbatch: 100                 # cap on the number of batches
+      n_effective: 10000              # target effective sample size (default stop)
+      use_stop: true                    # ESS-based stopping (default)
+      print_progress: true
+\end{yamlwin}
+
+\begin{fullwidth}
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.22\linewidth}p{0.18\linewidth}p{0.56\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Default} & \textbf{Meaning} \\
+    \midrule
+    \multicolumn{3}{@{}l}{\emph{Initial phase}} \\
+    \yamlkey{nlive\_init} & \yamlkey{Bounds.nlive} & baseline live-point count \\
+    \yamlkey{dlogz\_init} & \yamlkey{Bounds.dlogz} (remapped) & evidence-precision
+      stop for the initial pass \\
+    \yamlkey{maxiter\_init} / \yamlkey{maxcall\_init} & unlimited & hard caps on the
+      initial phase only \\
+    \multicolumn{3}{@{}l}{\emph{Batch phase}} \\
+    \yamlkey{nlive\_batch} & \code{100} & live points added per batch \\
+    \yamlkey{wt\_kwargs} & \code{\{pfrac: 1.0\}} & importance-function weighting;
+      \code{pfrac} trades evidence precision (\code{0}) against posterior resolution
+      (\code{1}) \\
+    \yamlkey{maxbatch} & unlimited & cap on the number of batches \\
+    \multicolumn{3}{@{}l}{\emph{Global stopping}} \\
+    \yamlkey{n\_effective} & $\sim\!10000$ & target effective sample size \\
+    \yamlkey{use\_stop} & \code{true} & use the effective-sample-size stopping rule
+      once batches begin \\
+    \yamlkey{stop\_kwargs} & --- & advanced: tune the stopping function directly \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Dynamic-only \yamlkey{run\_nested} keys, on top of everything shared with
+  Chapter~\ref{ch:multinest}. Full surface: \code{Sampling\_Dynesty\_Full.yaml}.}
+  \label{tab:dynesty-run-nested}
+\end{table}
+\end{fullwidth}
+
+\begin{jwarn}
+Do not write \yamlkey{Bounds.dynamic} here ``for clarity'' --- there is no such key
+under either \yamlkey{Method} (\S\ref{sec:multinest-no-switch}); the card is rejected
+at validation (\code{JV2-BND-012}, Section~\ref{sec:nested-validation}) whether the
+value would have been \code{true} or \code{false}.
+\end{jwarn}
+
+\begin{jtip}
+\yamlkey{wt\_kwargs: \{pfrac: 1.0\}} (the default) optimises purely for posterior
+resolution --- the common case if you mainly want samples. Lower \code{pfrac} toward
+\code{0.0} if the evidence comparison itself is what you are publishing.
+\end{jtip}
+
+\section{Reading the log: what's different}
+\label{sec:dynesty-log}
+
+The startup and closing entries look exactly like
+Section~\ref{sec:nested-log-startup}/\S\ref{sec:nested-log-summary}, with \code{Dynesty}
+in place of \code{MultiNest} in the module label and the summary text. The one
+substantive change is the remap notice, printed once, before the run starts:
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.Dynesty
+	-> 07-21 16:03:11.002 - [INFO] >>>
+nested sampler: mapped run_nested.dlogz -> dlogz_init (Dynamic)
+\end{jout}
+\end{terminal}
+
+The progress block also changes shape once batches begin. During the initial phase it
+is identical to the static block; once a batch phase starts, a \code{batch} field
+appears and \code{dlogz} is replaced by \code{stop} --- the same effective-sample-size
+target from \yamlkey{n\_effective}, converging toward \code{1.0} rather than falling
+below a threshold:
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.Dynesty.Inner
+	-> 07-21 16:04:47.552 - [INFO] >>>
+Dynesty Progress ->
+	iter       -> 6304
+	batch      -> 3
+	bound      -> 18
+	nc         -> 1
+	ncall      -> 8811
+	eff(%)     -> 71.550
+	loglstar   -> -inf < -3.104 <  inf
+	logz       ->  -5.198 +/- 0.121
+	stop       ->   1.043
+\end{jout}
+\end{terminal}
+
+\begin{jnote}
+\code{stop} is a ratio, not a probability or a percentage --- the run stops once it
+drops to (approximately) \code{1.0}. Watch it fall the way you'd watch \code{dlogz}
+fall in the static engine (Section~\ref{sec:nested-log-progress}).
+\end{jnote}
+
+\section{Outputs}
+\label{sec:dynesty-outputs}
+
+Everything in Chapter~\ref{ch:multinest}'s \S\ref{sec:nested-outputs} applies, with
+one filename swap: results land in \file{DATABASE/dynesty\_result.csv} instead of
+\file{multinest\_result.csv}. Expect \code{niter} to run somewhat higher than an
+equivalent static run at the same \yamlkey{nlive\_init} --- every batch adds more
+dead points on top of the initial pass --- and \code{ncall} to grow across both
+phases accordingly.
+
+\section{Dynamic or static?}
+\label{sec:dynesty-vs-static}
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.44\linewidth}p{0.50\linewidth}@{}}
+    \toprule
+    \textbf{You want\ldots} & \textbf{Use} \\
+    \midrule
+    a fixed, predictable compute budget for a batch job & \sampler{MultiNest}
+      (Chapter~\ref{ch:multinest}) \\
+    the best posterior/evidence quality per likelihood evaluation spent &
+      \sampler{Dynesty} with its defaults --- the dynamic engine always runs under
+      this \yamlkey{Method} \\
+    a card that must stay byte-compatible with a V1 \yamlkey{Method: MultiNest} card &
+      \sampler{MultiNest} \\
+    to publish an evidence comparison and want the sharpest \code{logz} for the
+      compute you can afford & \sampler{Dynesty} with \yamlkey{wt\_kwargs:
+      \{pfrac: 0.0\}} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Choosing between the two engines.}
+  \label{tab:dynesty-vs-static}
+\end{table}
+
+\begin{jtip}
+When in doubt, start with \sampler{Dynesty}'s defaults --- they are tuned for the
+common case (posterior resolution), and \yamlkey{Method: Dynesty} on its own already
+runs the dynamic engine; there is nothing extra to turn on.
+\end{jtip}
+
+\section{Summary}
+\label{sec:dynesty-summary}
+
+\sampler{Dynesty} is nested sampling's dynamic engine: everything in
+Chapter~\ref{ch:multinest} applies, plus a batch phase that reallocates live points
+toward posterior resolution once the initial pass finishes --- the default choice
+between the two engines unless you need static, byte-compatible V1 behavior.
+
+\begin{table}[ht]
+  \footnotesize
+  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{\sampler{Dynesty}} \\
+    \midrule
+    Kind & feedback (evidence-stop) \\
+    Engine & always dynamic --- no static option under this \yamlkey{Method} \\
+    Point count & until \yamlkey{dlogz} converges, or \yamlkey{maxcall}/\yamlkey{maxiter} \\
+    Dimensions & any \\
+    Required keys & none strictly; set \yamlkey{Bounds.nlive} \\
+    u$\to$x mapping & yes \\
+    \yamlkey{Seed} role & \code{numpy} generator seed (proposal sequence only) \\
+    \textsc{uuid}s & fresh per proposal, \textbf{not} seed-deterministic \\
+    Mid-run resume & no --- use \code{dynesty}'s own \yamlkey{checkpoint\_file} \\
+    Extra output & \file{dynesty\_result.csv}, \file{sampler\_summary.json} \\
+    \bottomrule
+  \end{tabular}
+  \caption{\sampler{Dynesty} at a glance.}
+  \label{tab:dynesty-summary}
+\end{table}
