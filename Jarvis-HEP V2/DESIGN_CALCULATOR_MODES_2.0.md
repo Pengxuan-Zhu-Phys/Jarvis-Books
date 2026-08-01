@@ -1,6 +1,7 @@
 # DESIGN — Multi-mode Calculators (`Calculators.Modules[].modes`, V2, D20)
 
-**Status**: design proposal 2026-08-01 — **awaiting maintainer decision on §6**; implementation `todo`
+**Status**: design proposal 2026-08-01 — **awaiting maintainer decision on §10**; implementation `todo`
+**更新 2026-08-01**: 依维护者提问补充 §5.1–5.3（installation/initialization 触发语义）
 **Date**: 2026-08-01
 **Requirement (maintainer)**: *"一个软件包原则上有多种用法，即在一次扫描任务中需要调用两次，
 但这两次的初始化和执行命令不一样，也许还需要重新构建。所以我没想清楚 YAML 怎么设计。"*
@@ -128,6 +129,53 @@ Calculators:
 5. **池与 pack 按模式独立**——见 §6.1，这不是可选项。
 6. **`required_modules` 中的裸模块名**（如 `["MadGraph"]`）展开为"该模块的全部模式"，
    便于"等这个包的所有用途都算完"。
+
+### 5.1 installation / initialization 的触发语义（维护者提问，2026-08-01）
+
+两个 block **都是可选的**。它们的触发时机完全不同，这是本设计最容易误解的一点，因此单列一节。
+
+| block | 触发频率 | 由谁把关 |
+|---|---|---|
+| `installation` | **每个 pack 目录一生一次** | 安装 stamp 的指纹 + epoch（D13.11） |
+| `initialization` | **每个样本一次**，无条件 | 无（V1 契约就是每次都跑） |
+
+`installation` **既不是"每次都触发"，也不是"按需把 pack 改造成目标模式"**。精确行为如下
+（沿用 `RuntimePreparer.prepare()` 现有路径，模式不引入新分支）：
+
+```
+Worker 拿到 pack
+  └─ ensure_shadow_installed()      ← 每个样本都会"检查"
+       ├─ 进程内已装过该 pack？      → 直接返回（同一 Worker 内只查一次）
+       ├─ stamp 指纹 + epoch 匹配？  → 直接返回（跨 Worker、跨 run 复用）
+       └─ 否则                       → 真正执行 installation 命令，然后写 stamp
+  └─ run_initialization()           ← 每个样本无条件执行
+```
+
+即：**检查每次都做（读一个 stamp 文件，开销可忽略），命令执行是每个 pack 目录一生一次**，
+除非操作者在 `jarvis_install.json` 里置 `reinstall: true`。
+
+### 5.2 为什么不会出现"按需切换模式"——每模式独立 pack 的第二个理由
+
+维护者提出的另一种可能：每次拿到 calculator 时判断它当前属于哪个模式，若不是目标模式，
+就用 `installation` 把它改造过去。
+
+**本设计里这种情况不会发生**，因为 `MadGraph.ProcA` 的 `001` 和 `MadGraph.ProcB` 的 `001`
+是**两个不同目录**，永远不需要互相转换。
+
+而这恰是**共享 pack 方案的致命伤**，也是 §6.1 结论的第二条独立论据（§6.1 只给了并发那条）：
+若模式共用 pack，就**只能**采用按需改造，于是扫描在 ProcA / ProcB 之间交替时，
+**每交替一次就要重新生成一次 MadGraph 进程**，最坏每个样本重建一次。stamp 机制救不了这个场景，
+因为两个模式的指纹本来就应该不同，"指纹不匹配"在这里是常态而非异常。
+
+一句话：**每模式独立 pack，把"模式切换"这件事从运行时彻底消掉了。**
+
+### 5.3 代价：模块级 installation 会跑「模式数 × pack 数」次
+
+因为每个模式有自己的 `001…N`，模块级（公共）`installation` 会在**每个模式的每个 pack**
+里各跑一次。2 个模式 × `make_paraller: 4` = **8 次**。
+
+所以 §8 那条边界要当硬性建议读：**真正昂贵且公共的构建放 LibDeps**（全局装一次），
+模块级 `installation` 只留轻量准备（解包、拷贝、软链）。
 
 ## 6. 三个曾经想不清楚的问题，及答案
 
