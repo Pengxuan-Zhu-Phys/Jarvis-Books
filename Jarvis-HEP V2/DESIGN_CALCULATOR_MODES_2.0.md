@@ -1,7 +1,7 @@
 # DESIGN — Multi-mode Calculators (`Calculators.Modules[].modes`, V2, D20)
 
 **Status**: design proposal 2026-08-01 — **awaiting maintainer decision on §10**; implementation `todo`
-**更新 2026-08-01**: 依维护者提问补充 §5.1–5.3（installation/initialization 触发语义）
+**更新 2026-08-01**: 补 §5.1-5.3（触发语义）与 §5.4（主场景为原地重建，新增可选 build 阶段）
 **Date**: 2026-08-01
 **Requirement (maintainer)**: *"一个软件包原则上有多种用法，即在一次扫描任务中需要调用两次，
 但这两次的初始化和执行命令不一样，也许还需要重新构建。所以我没想清楚 YAML 怎么设计。"*
@@ -176,6 +176,101 @@ Worker 拿到 pack
 
 所以 §8 那条边界要当硬性建议读：**真正昂贵且公共的构建放 LibDeps**（全局装一次），
 模块级 `installation` 只留轻量准备（解包、拷贝、软链）。
+
+## 5.4 主场景修正：「改 config 再 make」的原地构建（维护者澄清，2026-08-01）
+
+> *"有一些软件的模式切换是改一下 config 配置之后重新 make。这在早期用 Fortran 构建的软件中很常见。"*
+
+这是 `modes` 的**主场景**，比 §2 里举的 MadGraph 更普遍，而且**证据就在你们自己的卡片里**：
+
+```yaml
+# iDM_Vector_Bridson.yaml
+- name: MicroOMEGAs_Vector
+  path: "&J/calculators/microOMEGAs_vector/@PackID"
+  installation:
+    - "cp -R ${source}/. ${path}"
+    - "cd ${path}/vector-iDM && make clean && make main=main.cpp"
+
+# iDM_Axial_Bridson.yaml
+- name: MicroOMEGAs_Axial
+  path: "&J/calculators/microOMEGAs/@PackID"
+  # 卡片原注释: "Same micrOMEGAs 7 base package as the vector scan;
+  #             axial-iDM differs only in its axial DM-current model files."
+```
+
+**同一个包、只差模型文件，现在要把整个模块声明复制一份、还分散在两张卡片里。**
+`modes` 要消灭的正是这个。
+
+### 5.4.1 这不改变 §6.1 的结论——每模式独立 pack 依然正确
+
+原地构建意味着**一个目录在同一时刻只能是一个模式**，这反而让"共享 pack"更不可行。三种方案的编译次数：
+
+| 方案 | micrOMEGAs 编译次数（2 模式 × `make_paraller: 4`） |
+|---|---|
+| 共享 pack + 按需改造 | **每次模式交替一次**——最坏每样本一次，成千上万次 |
+| 每模式独立 pack（§3 原设计） | **8 次**（首次），之后 stamp 复用 |
+| 每模式独立 pack + 全局构建（§5.4.2） | **2 次**（每模式一次），之后 pack 只拷贝 |
+
+### 5.4.2 补充 `build` 阶段：昂贵的模式构建做一次，pack 只拷贝
+
+对"config + make"这类软件，**昂贵的部分恰恰是模式专属的**（公共部分只是 `cp -R`）。
+若照 §5 原样把 `make` 放进模式的 `installation`，就会 **模式数 × pack 数** 次编译。
+
+因此为模式增加一个**可选的 `build` 阶段**：**全局每模式一次**，产物再被各 pack 拷贝。
+
+```yaml
+- name: micrOMEGAs
+  clone_shadow: true
+  path: "&J/calculators/micrOMEGAs/@Mode/@PackID"
+  source: "&J/src/micromegas"
+  modes:
+    - name: Vector
+      build:                                   # ← 全局一次，每模式一份构建产物
+        path: "&J/builds/micrOMEGAs.Vector"
+        commands:
+          - "cp -R ${source}/. ${build_dir}"
+          - "cd ${build_dir}/vector-iDM && make clean && make main=main.cpp"
+      installation:                            # ← 每 pack 一次，只拷贝产物（廉价）
+        - "cp -R ${build_dir}/. ${path}"
+      execution:
+        commands: ["./vector-iDM/main"]
+        output: [{name: omega_vec, path: "@Sdir/out.json", type: JSON}]
+    - name: Axial
+      build:
+        path: "&J/builds/micrOMEGAs.Axial"
+        commands:
+          - "cp -R ${source}/. ${build_dir}"
+          - "cd ${build_dir}/axial-iDM && make clean && make main=main.cpp"
+      installation:
+        - "cp -R ${build_dir}/. ${path}"
+      execution:
+        commands: ["./axial-iDM/main"]
+        output: [{name: omega_ax, path: "@Sdir/out.json", type: JSON}]
+```
+
+**三段式生命周期**（与现有两段式向下兼容，`build` 不写就退化成今天的行为）：
+
+| 阶段 | 频率 | 放什么 | 由谁执行 |
+|---|---|---|---|
+| `build` | **全局每模式一次** | 改 config + `make`（重） | 控制进程 preflight |
+| `installation` | 每 pack 一次 | 拷贝构建产物（轻） | Worker 首次拿到该 pack |
+| `initialization` | 每样本一次 | 清理输出、写输入卡 | Worker 每个样本 |
+
+**实现上零新机器**：`build` 阶段的执行器、stamp/指纹、`reinstall` 控制、per-module 日志
+与 **LibDeps（D18）完全同构**——同样是"控制进程 preflight 里全局装一次"。直接复用其安装引擎，
+`build.path` 下同样写 `.jarvis_install_stamp.json`，同样受 `jarvis_install.json` 的
+`reinstall` 开关管辖。
+
+**新 token `${build_dir}`**：展开为该模式的 `build.path`，供 `installation` 引用产物。
+
+### 5.4.3 备选：不加 `build`，直接用 LibDeps
+
+同样的效果今天就能表达——把每个模式的构建声明成一个 LibDeps 模块，
+`installation` 里 `cp -R ${LibDeps:micrOMEGAs_Vector}/. ${path}`。**零新增代码**。
+
+代价是模式定义被拆到两个顶层块、名字要人工保持同步。`modes` 存在的意义本就是
+"把一个包的多种用法收拢在一处"，所以**推荐 `build`**；若维护者倾向零新键，
+则本节降级为一条文档约定（在 skill 里写清这个配方即可）。
 
 ## 6. 三个曾经想不清楚的问题，及答案
 
