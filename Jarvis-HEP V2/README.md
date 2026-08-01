@@ -28,6 +28,7 @@ Docs/
 ├── DESIGN_ADAPTIVE_BRIDSON_LIVE_BAND.md ← AdaptiveBridson **final** algorithm flow (outer/core + endpoints)
 ├── DESIGN_CLUSTER_EXECUTION_2.0.md ← D14: remote worker pools, SLURM, broker auth/AOF
 ├── DESIGN_RESULTS_ANALYSIS_2.0.md  ← D15 (todo): warm-start cache, Jarvis2 analyze, Portal formats
+├── DESIGN_CALCULATOR_MODES_2.0.md  ← D20: 多模式 Calculator（modes 展开为兄弟模块）
 ├── DESIGN_LIBDEPS_2.0.md           ← D18: LibDeps 装一次的共享依赖（V1 对齐）
 ├── V1_MIGRATION_STATUS_2026-07-31.md ← 迁移状态 + 未迁移功能清单（实测，非文档转抄）
 ├── CODE_REVIEW_2026-07-23.md       ← latest code review: 1 high + 3 medium findings → D13.11–13
