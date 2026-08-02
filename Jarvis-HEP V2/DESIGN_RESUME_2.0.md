@@ -1,6 +1,6 @@
 # DESIGN — 断点续跑（Checkpoint / Resume 重做，V2，D21）
 
-**Status**: design proposal 2026-08-02 — 维护者已定调核心语义（§1），待实现
+**Status**: implemented and acceptance-verified 2026-08-02 (D21.1–D21.10)
 **Scope**: V2-only
 **Requirement (maintainer, 2026-08-02)**:
 
@@ -221,3 +221,240 @@ I2 需要"该批是否已落盘"这个信号，而进程模式 archiver 现在�
 | **D21.8** | 生命周期：control lease + Worker 自杀、`kill` 判断反转、stale runtime 接管、`h5clear` | — | **高**（不修则 resume 起不来） |
 
 **回滚**：不带 `--resume` 的运行路径完全不受影响；D21.1/D21.3 之前的行为即今天的行为。
+
+## 12. 实现与验收记录（2026-08-02）
+
+D21.1–D21.8 已按本文三条不变量实现：DATABASE 的 HDF5 UUID 列是完成事实的
+唯一来源；checkpoint 保存滚动安全恢复点；Archiver 在写入端按 UUID 去重。落盘确认顺序为
+HDF5 commit/flush → fsync → Redis `SADD hep:archived:<scan>`。失败样本同样写入带
+`status` 的最小记录，避免恢复时无限重算。
+
+生命周期通路也已闭合：控制进程使用 Redis TTL lease，Worker/Archiver 在租约失配时退出；
+FileOperation 被 init 收养后会自行退出；控制 PID 已死时 `ps`/`kill` 接受该 runtime 为 stale；
+`--resume` 会清理同名孤儿进程并接管租约；若 SIGKILL 留下 HDF5 writer consistency flag，
+恢复前会以 `h5clear` 清理后再读 UUID。
+
+行为验收：
+
+- **A1/A3/A4**：真实 4000 点扫描，SIGINT 后续跑；最终 4000 行 / 4000 unique UUID，
+  与未中断同 seed 基线逐 UUID 数值一致，重投量保持在 in-flight 上界内。
+- **A2/A5**：SIGKILL 控制进程并删除 checkpoint；仅靠 DATABASE 对账可恢复，最终
+  200 行 / 200 unique UUID；stale Worker/Archiver/FileOperation 与 HDF5 标志均被处理。
+- **A6**：AdaptiveBridson 在世代内 SIGINT 后恢复，最终 `levelset.json` 与未中断基线
+  完全一致，DATABASE 行数等于 unique submitted 数；最终独立复跑 `1 passed in 42.63s`。
+- **A7**：删除测试中的人工 `mark_completed()` 接线，改为真实控制进程、Worker、
+  Archiver、Redis、HDF5 的端到端断言。
+- D21 相关焦点回归：89 passed；恢复/Redis/中断补充回归：39 passed；Ruff 与
+  `git diff --check` 通过。
+- 全量回归：**749 passed, 58 subtests passed, 5 known failures**。失败均属于 D13.15
+  已登记基线（1 个 Redis collision fixture、4 个 legacy `--plot` parser tests）；
+  开工前另一个临界 scaling 失败本次通过，因此没有 D21 新增失败。
+
+---
+
+# 第二版：把 checkpoint 挪出热路径（D21.9–D21.12，2026-08-02）
+
+## 13. 新增的硬约束（维护者定调）
+
+> *"checkpoint 一定不能影响运行时的性能。sample 的吞吐量和并发量不能受到影响。
+> 断点续跑时可以多跑一些点，因为有心跳的原因，其实也不会浪费多少算力。"*
+
+**C1 — checkpoint 在热路径上的开销必须是 O(1) 且可忽略。** 吞吐与并发不受影响。
+**C2 — 允许 resume 重算一部分点。** 上界是"一个心跳周期的墙钟工作量"，可接受。
+
+C2 是 C1 的**授权**：一旦接受重算，恢复点就不必紧贴在途窗口，第一版为了"最小重算"而付出的
+每批代价就没有必要了。
+
+## 14. 为什么第一版违反了 C1（实测）
+
+| | 实测 |
+|---|---|
+| 改动前基线（20000 点、同卡同机） | **145 samples/s**，wall 137 s |
+| 第一版（N≈25k 处） | **12 samples/s**，且随 N 继续劣化 |
+| 控制进程 RSS | **1.6–4.2 GB 锯齿**（2 变量玩具扫描） |
+| checkpoint 文件 | 20k 样本时 **2.26 MB**，线性增长，每 30 s 重写 |
+
+病灶在 `fixed_set_sampler.py:80`：
+
+```python
+self._pending_restore_batches.append(
+    ({sample.uuid for sample in batch}, deepcopy(self.export_runtime_state()))
+)
+```
+
+`export_runtime_state()` 每次物化三个 **O(N)** 容器（`u_by_uuid` 全量 `tolist()`、
+`uuid_by_accepted_index`、`submitted_uuids`），`batch_size: 2` ⇒ 每 2 个样本一次 O(N) 拷贝
+⇒ **总体 O(N²)**；`_pending_restore_batches` 只在心跳排空，峰值同时驻留约一千份 O(N) 快照。
+
+另有一处同类问题：控制进程每次心跳用 `SMEMBERS` 读整个 `hep:archived:<scan>`——**每 30 s 一次 O(N)**。
+
+**这条路径对所有运行生效，不只是 resume。** 而 resume 唯一有价值的场景就是长扫描，
+恰恰是 O(N²) 崩溃的地方。
+
+## 15. 第二版机制：心跳快照 + 索引水位
+
+### 15.1 三个部件
+
+1. **快照只含 generator 本身**（~3 KB 定长）：
+   `(rng_state | Generator, index, accepted_index, ready_queue)`。
+   `u_by_uuid` / `uuid_by_accepted_index` / `submitted_uuids` **全部移除**——见 §16。
+
+2. **快照由心跳触发、由 sampler 在批边界执行。**
+   心跳线程只置一个布尔标志；sampler 在下一个 `flush_batch` 边界看到标志后自己做 O(1) 捕获。
+   **热路径的固定开销 = 每批一次布尔判断**，没有锁竞争、没有拷贝。
+
+3. **索引水位（contiguous persisted prefix）`P`**：满足"索引 `[0, P)` 全部已落盘"的最大 `P`。
+   增量维护：每收到一批新的落盘确认就尝试推进 `P`，乱序到达的索引暂存在一个
+   **以在途窗口为界**（而非以 N 为界）的小集合里。
+
+### 15.2 恢复点的选取规则
+
+```
+保存的恢复点 = 最新的那个满足 index_j ≤ P 的心跳快照 S_j
+```
+
+保留最近 K 个心跳快照（K 取个位数，每个 3 KB）即可，选最新的合格者。
+
+**正确性论证**：`S_j` 的条件保证索引 `[0, index_j)` 全部在盘上。resume 时从 `index_j`
+前向重放，`≥ index_j` 的索引全部被重新产出——已落盘的由写入端去重跳过，未落盘的重算。
+于是**没有任何索引会被遗漏**：小于 `index_j` 的在盘上，大于等于的被重放覆盖。∎
+
+这正是"心跳快照"必须配水位的原因：**裸的心跳快照是不安全的**——心跳时刻的 generator
+已经越过在途点，直接用它恢复会让那些点永远不被重新提出（S2 被打破，点会静默丢失）。
+水位条件把这个洞堵死，且代价是 O(1)。
+
+### 15.3 重算量
+
+上界 = 从 `S_j` 到崩溃之间提交的点，即**一个心跳周期的墙钟工作量**（外加落盘滞后）。
+
+- 每样本 0.007 s 的玩具扫描：30 s ≈ 4000 点，但它们很便宜
+- 每样本 60 s 的真实计算：30 s ≈ 每 Worker 一个点
+
+两种情形下"浪费"都约等于**半个到一个心跳周期的墙钟时间**，与 N 无关——正是 C2 接受的那个量级。
+因此 `CHECKPOINT_HEARTBEAT_SEC` 应当**可配置**（贵样本的用户可以调小），不再是写死的 30。
+
+## 16. 连带删除
+
+`u_by_uuid`、`uuid_by_accepted_index`、`submitted_uuids`、`repropose_unfinished()`
+存在的唯一理由是"按 uuid 把在途点重新投一遍"。改为"恢复 + 重放"后它们全部多余：
+
+| 结构 | 为什么可以删 |
+|---|---|
+| `uuid_by_accepted_index` | `uuid = sha256(prefix:seed:index)` 是**纯函数**，重算即可（§3） |
+| `u_by_uuid` | 重放会用同一个 RNG 状态重新产出同样的 u_coords |
+| `submitted_uuids` | 完成事实在 DATABASE；提交事实由 `index` 表达 |
+| `repropose_unfinished()` | 重放本身就覆盖了在途点 |
+
+跟 `mark_completed()` 一样——**少一套机制，不是多一套**。
+
+### 16.1 pickle 而非 dill；不要 pickle sampler 对象
+
+payload 全是 dict / int / ndarray / RNG 元组，**原生可 pickle**；`np.random.Generator` 本身
+也可 pickle。dill 的价值在 lambda/闭包/动态类，这里一个都没有——**不引入 dill**。
+现有的 `atomic_pickle_dump`（`.tmp` + `os.replace`）保留。
+
+**不要直接 pickle 活着的 sampler 对象**：它挂着 `self._logger`（loguru handle）、
+`self.redis`（socket）、`self.config`，拖不动；要 pickle 就得写 `__getstate__` 剔除它们，
+那本质上就是现在的显式 export，只是换个拼法。
+
+保留显式 export，但补一条防漏测试：**断言 sampler 的每个属性都被显式归类为"保存"或"排除"**，
+新增字段未归类即测试失败。这样既不会"保险起见全存"退回 O(N²)，也不会静默漏状态。
+
+## 17. 是否拆成两个文件
+
+可以，但分界是**可变 / 不可变**，不是 sampler / factory：
+
+| 文件 | 内容 | 写入时机 |
+|---|---|---|
+| `run.json` | seed、config hash、variable signature、scan 名、格式版本 | 运行开始写一次 |
+| `state.pkl` | generator 状态（~3 KB） | 每次恢复点推进 |
+
+payload 缩到 3 KB 之后这只是整洁性问题，**不是修复**，可选。
+
+**明确不做：用 factory 的 pickle 记录"哪些点落盘了"。** 那会重新引入第二个真相来源，
+而崩溃点必然落在"写了盘"和"更新簿记"之间，两者**一定会不一致**——`completed_uuids` /
+`acked_uuids` 之前就是这么错的。核对过：factory 本身没有需要 pickle 的状态——
+SAMPLE 的 bucket 编号由 `init_sample_buckets()` **扫目录**得出，calculator 池由配置重建，
+记录里本来就带 `bucket_dir` / `bucket_id`。
+
+最终形态仍然是两份信息的综合，只是第二份是 HDF5 本身而不是 pickle：
+
+```
+恢复节点 = generator 恢复点（state.pkl，~3 KB）⊕ 已落盘 UUID（DATABASE，唯一真相）
+```
+
+## 18. 落盘确认的增量获取
+
+控制进程必须能以 **O(新增)** 而非 O(N) 获知新落盘的样本，否则心跳自己就成了 O(N)。
+两条可选路径，实现者择一：
+
+- **(a) 流式**：Archiver 在 `SADD` 之外再 `RPUSH` 一条增量记录，控制进程每心跳只 drain 增量；
+- **(b) 记录里加 `sample_index`**：Archiver 可直接发布**单调的连续索引水位**，
+  控制进程连映射表都不用维护，`P` 直接读。
+
+**(b) 更彻底**——它让水位、去重、resume 的索引对账三件事共用同一个字段，代价是记录里多一个整数。
+
+写入端去重集当前是"全部已落盘 UUID"的内存集合（10⁶ 样本约百 MB 量级）。若采用 (b)，
+去重可退化为**索引区间判断**，内存降到常数。
+
+## 19. 第二版验收（性能是门禁，不是附注）
+
+| # | 验收 |
+|---|---|
+| **P1** | 同一张 20000 点卡片，吞吐**回到 ≥ 基线 145 samples/s 的 90%**；与关闭 checkpoint 的对照跑差异 < 5% |
+| **P2** | 控制进程 RSS **平坦**（不随 N 增长），全程 < 500 MB |
+| **P3** | checkpoint 文件大小**不随 N 增长**（20k 与 200k 样本处相差 < 2×） |
+| **P4** | 每批热路径新增开销 = 一次布尔判断；无锁竞争（用 profile 或计数断言） |
+| **P5** | 心跳自身为 O(新增)：单次心跳耗时不随 N 增长 |
+| A1′ | 中断 + resume 后 DB `rows == unique`（沿用第一版 A1） |
+| A3′ | 重算量 ≤ **一个心跳周期**的提交量（不再是 in-flight 上界），并记录实测值 |
+| A5′ | 删除 checkpoint 后仍能靠 DATABASE 续跑（沿用第一版 A5） |
+| A8 | **不丢点**：`S_j ≤ P` 水位条件的负面测试——人为让某个索引晚落盘，确认恢复点不会跨过它 |
+
+## 20. 第二版工作包
+
+| WP | 内容 | 依赖 | 优先级 |
+|---|---|---|---|
+| **D21.9** | 移除每批 `deepcopy(export_runtime_state())`；改为**心跳置标志 + 批边界 O(1) 捕获**；引入索引水位 `P` 与"最新合格快照"选取 | — | **高**（吞吐塌陷的直接原因） |
+| **D21.10** | payload 瘦身：只存 generator 状态；删除 `u_by_uuid` / `uuid_by_accepted_index` / `submitted_uuids` / `repropose_unfinished()`；补属性归类测试 | D21.9 | 高 |
+| **D21.11** | 落盘确认增量化（§18，建议走 (b) 加 `sample_index`）；`CHECKPOINT_HEARTBEAT_SEC` 改为可配置 | D21.9 | 中 |
+| **D21.12** | 性能门禁 P1–P5 进回归；A8 负面测试 | D21.9–D21.11 | 高 |
+
+**回滚**：这一版只改 checkpoint 的**取样时机与载荷**，不改三条不变量（I1 落盘为真相、
+I2 恢复点不越过在途、I3 写入端去重），A1/A5 的行为断言全部沿用。
+
+## 13. FileOperation 孤儿复核与加固（D21.9）
+
+复核机器上 11 个 `ppid=1` 的历史 `Jarvis2-FileOperation` 后，确认来源是 D21 之前的
+永久阻塞循环：Worker 被 SIGKILL 后，子进程仍阻塞于无 timeout 的
+`request_queue.get()`。这些进程没有 scan 后缀，也不会进入按 scan 分组的 `ps`/`kill`。
+
+D21 最初加入的空闲 PPID 检查仍有漏洞：主线程忙于 NAS copy/delete、阻塞于 response
+queue，或等待 `rm` 子进程时，不会回到空闲检查点。最终实现改为：
+
+1. FileOperation 启动独立 owner-watch 线程，Worker PPID 一旦变化立即退出；
+2. FileOperation 成为独立 session/process-group leader，退出/强杀覆盖嵌套的 `rm`；
+3. Worker heartbeat 公布 FileOperation PID，Factory watchdog 可按 session leader 安全兜底；
+4. client 等待 response 时轮询 child liveness，子进程崩溃不再让 Worker 永久挂住；
+5. Worker 初始化包含在 cleanup 边界内，scheduler/file-operation/Redis 分别清理，互不跳过；
+6. Factory 优雅退出超时后使用真正 SIGKILL，不再重复发送被 Worker handler 吞掉的 SIGTERM；
+7. 无对应 live Control 的已知 Jarvis 进程统一进入固定 `ZP`（Zambie Process）分组，
+   可通过 `Jarvis2 ps ZP` 检查、`Jarvis2 kill ZP -y` 一键清理；不再伪装成 `R#` 扫描。
+
+真实验收将 FileOperation 阻塞在 FIFO copy 中后 SIGKILL Worker，忙碌子进程按 owner-watch
+退出；最终焦点测试 33 passed，扩展 Worker/FileOperation/resume 回归 62 passed，Ruff 与
+`git diff --check` 通过，测试结束后的完整进程表中 FileOperation 数为 0。
+
+## 14. ZP 无归属进程分类（D21.10）
+
+`Jarvis2 ps` 会同时展示两类引用：有 scan id 的运行时继续按名称稳定分配 `R1/R2/...`；
+没有对应 live Control 的裸进程或残留 Worker/Archiver/FileOperation/Redis 统一显示为固定
+`ZP`；即使残留标题仍带旧 `:<scan>` 后缀，也不能再占用 `R#`。
+`Jarvis2 ps ZP` 不依赖 Redis/runtime metadata，适用于控制进程身份已经丢失的历史孤儿；
+`Jarvis2 kill ZP -y` 对 ZP 中全部进程执行 TERM→KILL 清理。
+
+发现阶段保持与 `ps ... | grep -E 'Jarvis2|Jarvis-Redis'` 相同的宽匹配思路，真正进入
+ZP 和允许 kill 时则只接受 Jarvis 自己会生成的裸标题，避免误杀 `Jarvis2Helper` 一类
+仅共享前缀的第三方程序。真实 OS 验收中，裸 FileOperation 进入 ZP，正常 `scan` 保持 R1；
+执行 `kill ZP -y` 后只有孤儿进程退出，R1 未受影响。补充验收确认孤立的
+`Jarvis2-Archiver:scan` 即使残留 scan 后缀，也进入 ZP 而不是虚假的 R1。
