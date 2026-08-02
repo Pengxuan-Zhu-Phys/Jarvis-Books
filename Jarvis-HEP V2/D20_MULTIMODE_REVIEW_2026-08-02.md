@@ -176,9 +176,49 @@ _run_calculator_step
 
 ---
 
-## 8. 一句话总结
+## 8. 复审：D20.5–D20.8 修复验收（2026-08-02，同日）
+
+维护者交付了全部四个 WP 的修复。**逐条重测**（复用本文首轮的同一套测量脚本，只按新签名改了 stub）：
+
+| WP | 首轮实测 | 复审实测 | 判定 |
+|---|---|---|---|
+| **D20.5** `JV2-MOD-005` 误杀 | 65 张卡片里 **9 个** `JV2-MOD-*` 错误（7 张卡片 exit 2） | **0 个**（只剩既有的 15 张 `Utils` 与 1 张 RLTPMCMC，均为有意为之） | ✅ |
+| D20.5 未误伤严格性 | — | `Prospino.nq` 仍报 `JV2-MOD-005` 并给 did-you-mean；裸名 `LoopTools`/`Parameters`/`Prospino` 全部放行；点号但父级未知者放行 | ✅ |
+| **D20.6** 亲和退化 | 3 模式/3 pack/3 Worker **63–67% 重建** | **0% 重建、99% 命中** | ✅ |
+| D20.6 结构性边界 | 8 模式/4 pack/4 Worker 86% | **80%**——基本不变，**这是对的**：`target_busy > 0` 门控刻意不在"目标模式根本没人在跑"时空等，避免给 pack < 模式数的池平白加延迟 | ✅ 符合预期 |
+| **D20.7** selection | 跳过的模式仍 acquire + 重建 | 实测只发出 `('P','ng')` 一次 acquire；`ns` 的 `acquire_pack_id` 陷阱未触发；`calc:packmode` 只记 `001: ng`，`002` 保持 unassigned | ✅ |
+| **D20.8** 自引用 | `P.ns` → `['P.ng','P.ns']` | → `['P.ng']` | ✅ |
+| D20.8 `Utils` 措辞 | 回退成"not supported by V2" | 已还原为 `cbb629f` 的指路措辞 | ✅ |
+| 单模式不回归 | — | `expand_calculator_modes(single) == single`，**逐键相同、零新增键** | ✅ |
+
+另外**独立复核**（非维护者报告的项）：
+
+- **文档 4 个 multimode YAML 示例**：全部解析 + 通过校验 + 展开正确（`Prospino.ng`/`Prospino.ns`）
+- **流程图**：重新用 Jarvis-PLOT 出图通过，两个 mode 各自独立节点，`groups` 仅作元数据、渲染器不画外框
+- **池大小建议**：`JV2-MOD-009` 是 **warning 不是 error**（`level="warning"` 一路透传到 `task_validation`），
+  推荐值 `模式数 + Worker 数` 与本文 §4 实测曲线一致，且 `Runtime.workers` 在真实卡片里解析成具体数字（实测 8）而非 0
+- **回归测试已落地**：`test_example_cards_have_no_multimode_dependency_regressions` 直接把"65 张卡片零 `JV2-MOD-*`"钉成断言
+
+### 8.1 复审新发现（都不阻塞）
+
+1. **`shared_mode_affinity_wait_sec` 无法从卡片配置。** `worker.py:320` 从 `worker_config` 读它、
+   默认 3.0 s，但 `normalize_worker_block` 是**严格白名单**（只认 `force_serial_layers` /
+   `sample_artifacts`），`SUPPORTED_ENVREQS_V2_KEYS` 里也没有它。
+   即这个旋钮**在代码里存在、任何用户都拧不动**。而它恰恰是亲和与延迟之间唯一的调节量。
+   处理：要么接进 `EnvReqs.V2.worker`，要么在文档里写明"固定 3 s、不可调"。（倾向前者。）
+2. **文档里的范例卡片会触发自己的告警。** `docs/task-card-schema.md` 的 Prospino 范例没写 `Pools`，
+   实测触发 `JV2-MOD-009`。范例加一行 `Pools: {Prospino: 6}` 即可，免得用户照抄后第一次运行就看到告警。
+
+首轮报告里我怀疑的一处**已实测排除**：`_blpop_many` 从 `int(timeout)` 改成 `float(timeout)` 后，
+我担心亚毫秒超时会被 Redis 截断成 0（= 永久阻塞）。用真实 redis-server 8.8 实测
+`blpop(timeout=1e-7)` **0.03 s 返回 None**，不成立，不作为问题记录。
+
+## 9. 一句话总结
 
 **主体实现是扎实的**——展开边界、写前清 stamp、共享 epoch、亲和恢复、真实端到端测试都到位，
-这些恰恰是最容易做错的地方。**发布前必须修的只有一个**：新校验把 `required_modules`
-的跨块引用（LibDeps / Operas / `Parameters`）当成了非法，7 张出厂卡片因此起不来。
-另外两个 MEDIUM 不影响正确性，只影响 multimode 的性能承诺能不能兑现——而那正是这个功能的全部意义。
+这些恰恰是最容易做错的地方。首轮唯一的阻塞项（新校验误杀 `required_modules` 的跨块引用，
+7 张出厂卡片起不来）与两个性能项均已修复并**经复审实测确认**：卡片零 `JV2-MOD-*`、
+3/3/3 争用下重建率 67%→**0%**、被 selection 跳过的模式不再占 pack 也不再污染亲和。
+剩下两条都只是打磨：亲和等待时长不可配置，以及文档范例会触发自己的池大小告警。
+
+**D20 可以收尾。**
