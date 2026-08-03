@@ -33,13 +33,13 @@ project_template/bin/sampling/Sampling_Dynesty_Simple.yaml
 ```yaml
 Sampling:
   Method: "Dynesty"        # 要静态就写 MultiNest
-  Seed: 21
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 5.0}}
     - name: y
       distribution: {type: Flat, parameters: {min: 0.0, max: 5.0}}
   Bounds:
+    Seed: 21
     nlive: 200             # live points：精度和耗时的主旋钮
     dlogz: 0.5             # 停止阈值：要发表级精度用 0.1
     run_nested:

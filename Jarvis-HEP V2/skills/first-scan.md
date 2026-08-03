@@ -44,8 +44,9 @@ Sampling:
       distribution: {type: Flat, parameters: {min: 0.0, max: 5.0, length: 40}}
     - name: y
       distribution: {type: Flat, parameters: {min: 0.0, max: 5.0, length: 40}}
-  Radius: 2.0
-  MaxAttempt: 20
+  Bounds:
+    Radius: 2.0
+    MaxAttempt: 20
   LogLikelihood:
     - {name: "LogL_Z", expression: "LogGauss(z, 100, 10)"}
 

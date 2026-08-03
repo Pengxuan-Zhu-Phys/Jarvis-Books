@@ -138,7 +138,6 @@ Sampling:
   Method: Bridson                # Bridson | Random | Grid | CSV | AdaptiveBridson
   # mode: check_modules          # special task type; replaces Method (needs `data`)
   # data: "&J/points.csv"        # check_modules input CSV (alias: points_csv)
-  Seed: 42                       # int (alias: seed); default 0
   selection: "x + y < 1.5"       # optional sympy bool expr over physical params
   Variables:                     # required by Bridson/Random/Grid/ALS (not CSV)
     - name: x
@@ -152,25 +151,25 @@ Sampling:
           # num: 20              #   Grid only: REQUIRED points per dimension
           # length: 1.0          #   Bridson only: u-space box edge — REQUIRED here
                                  #   (KeyError if absent; inconsistent elsewhere, see A.11)
-  # -- per-method keys --
-  Radius: 0.35                   # Bridson: REQUIRED minimum point distance (u-space)
-  MaxAttempt: 30                 # Bridson: REQUIRED k candidates per active point
-  # MaxWorker: 4                 # Bridson: max in-flight proposals (default EnvReqs.V2.workers)
-  # "Point number": 500          # Random: REQUIRED sample count (alias: point_number)
-  # CSV:                         # CSV method: REQUIRED block
-  #   path: "&J/points.csv"      #   REQUIRED; &J/, absolute, or task-YAML-relative
-  #   variables: [x, y]          #   column subset (default: all non-uuid columns)
-  #   uuid_column: uuid          #   default "uuid"; missing column -> fresh uuid4 per row
-  #   delimiter: ","             #   default ","
-  #   encoding: utf-8            #   default utf-8
-  # AdaptiveBridson:            # AdaptiveBridson method: REQUIRED sub-block (§6.9)
-  #   target_expression: "LogL"  #   REQUIRED sympy over returned observables
-  #   target_value: -2.9957      #   REQUIRED level-set constant
-  #   initial_radius: 0.08       #   gen-0 Bridson r0 + first live windows
-  #   refinement_factor: 0.5     #   spacing r' = r_g * factor; next r_g *= factor
-  #   threshold: 0.05            #   stop when (t_max - t_min) < threshold
-  #   max_generations: 25        #   optional gen cap (with/instead of threshold)
-  #   max_points: 5000           #   hard sample budget
+  # -- per-method knobs: ALL of them live under Bounds (see §6.1) --
+  Bounds:                        # REQUIRED for Bridson / Random / CSV / AdaptiveBridson
+    Radius: 0.35                 #   Bridson: REQUIRED minimum point distance (u-space)
+    MaxAttempt: 30               #   Bridson: REQUIRED k candidates per active point
+    # MaxWorker: 4               #   Bridson: max in-flight proposals (default EnvReqs.V2.workers)
+    # Seed: 0                    #   Bridson / Random / Grid (alias: seed)
+    # "Point number": 500        #   Random: REQUIRED sample count (alias: point_number)
+    # path: "&J/points.csv"      #   CSV: REQUIRED; &J/, absolute, or task-YAML-relative
+    # variables: [x, y]          #   CSV: column subset (default: all non-uuid columns)
+    # uuid_column: uuid          #   CSV: default "uuid"; missing column -> fresh uuid4 per row
+    # delimiter: ","             #   CSV: default ","
+    # encoding: utf-8            #   CSV: default utf-8
+    # target_expression: "LogL"  #   AdaptiveBridson: REQUIRED sympy over returned observables
+    # target_value: -2.9957      #   AdaptiveBridson: REQUIRED level-set constant
+    # initial_radius: 0.08       #   AdaptiveBridson: gen-0 Bridson r0 + first live windows
+    # refinement_factor: 0.5     #   AdaptiveBridson: spacing r' = r_g * factor; next r_g *= factor
+    # threshold: 0.05            #   AdaptiveBridson: stop when (t_max - t_min) < threshold
+    # max_generations: 25        #   AdaptiveBridson: optional gen cap (with/instead of threshold)
+    # max_points: 5000           #   AdaptiveBridson: hard sample budget
   # LogLikelihood:               # alias of Likelihood.expressions (lower precedence)
   #   - name: LogL_Z
   #     expression: z
@@ -318,42 +317,47 @@ detail (error types, aliases, code citations).
 | `Sampling.Method` | [6](#6-sampling) | for a live scan | — |
 | `Sampling.mode` | [6.7](#67-check_modules-samplingmode-check_modules) | no | — |
 | `Sampling.data` / `Sampling.points_csv` | [6.7](#67-check_modules-samplingmode-check_modules) | yes (check_modules) | — |
-| `Sampling.Seed` / `Sampling.seed` | [6.1](#61-keys-common-to-bridson--random--grid) | no | `0` |
+| `Sampling.Bounds.Seed` / `Sampling.Bounds.seed` | [6.1](#61-keys-common-to-bridson--random--grid) | no | `0` |
 | `Sampling.selection` | [6.1](#61-keys-common-to-bridson--random--grid) | no | — |
 | `Sampling.Variables[].name` | [6.2](#62-variables-entry--distribution-types) | yes | — |
 | `Sampling.Variables[].description` | [6.2](#62-variables-entry--distribution-types) | no | — |
-| `Sampling.Variables[].distribution.type` | [6.2](#62-variables-entry--distribution-types) | no | `Flat` |
+| `Sampling.Variables[].distribution.type` | [6.2](#62-variables-entry--distribution-types) | yes | — |
 | `Sampling.Variables[].distribution.parameters.{min,max}` | [6.2](#62-variables-entry--distribution-types) | yes (Flat/Log) | — |
 | `Sampling.Variables[].distribution.parameters.{mean,stddev}` | [6.2](#62-variables-entry--distribution-types) | yes (Normal/Log-Normal) | — |
-| `Sampling.Variables[].distribution.parameters.{location,scale}` | [6.2](#62-variables-entry--distribution-types) | no (Logit) | `0`, `1` |
+| `Sampling.Variables[].distribution.parameters.{location,scale}` | [6.2](#62-variables-entry--distribution-types) | yes (Logit) | — |
+| `Sampling.Variables[].distribution.parameters.{n,p}` | [6.2](#62-variables-entry--distribution-types) | yes (Binomial) | — |
+| `Sampling.Variables[].distribution.parameters.lambda` | [6.2](#62-variables-entry--distribution-types) | yes (Poisson) | — |
+| `Sampling.Variables[].distribution.parameters.{alpha,beta}` | [6.2](#62-variables-entry--distribution-types) | yes (Beta) | — |
+| `Sampling.Variables[].distribution.parameters.rate` | [6.2](#62-variables-entry--distribution-types) | yes (Exponential) | — |
+| `Sampling.Variables[].distribution.parameters.{shape,scale}` | [6.2](#62-variables-entry--distribution-types) | yes (Gamma) | — |
 | `Sampling.Variables[].distribution.parameters.num` | [6.5](#65-grid) | **yes (Grid)** | — |
 | `Sampling.Variables[].distribution.parameters.length` | [6.3](#63-bridson) | **yes (Bridson)** | — |
 | `Sampling.LogLikelihood` | [6.8](#68-likelihood-expression-semantics) | no | — |
-| `Sampling.Radius` | [6.3](#63-bridson) | **yes** | — |
-| `Sampling.MaxAttempt` | [6.3](#63-bridson) | **yes** | — |
-| `Sampling.MaxWorker` | [6.3](#63-bridson) | no | `EnvReqs.V2.workers` |
-| `Sampling."Point number"` / `point_number` | [6.4](#64-random) | **yes** | — |
-| `Sampling.CSV.path` | [6.6](#66-csv) | **yes** | — |
-| `Sampling.CSV.variables` | [6.6](#66-csv) | no | all non-uuid columns |
-| `Sampling.CSV.uuid_column` | [6.6](#66-csv) | no | `uuid` |
-| `Sampling.CSV.delimiter` | [6.6](#66-csv) | no | `,` |
-| `Sampling.CSV.encoding` | [6.6](#66-csv) | no | `utf-8` |
-| `Sampling.AdaptiveBridson` / `adaptive_bridson` | [6.9](#69-adaptivebridson) | **yes** (ALS) | — |
-| `Sampling.AdaptiveBridson.target_expression` | [6.9](#69-adaptivebridson) | **yes** | — |
-| `Sampling.AdaptiveBridson.target_value` | [6.9](#69-adaptivebridson) | **yes** | — |
-| `Sampling.AdaptiveBridson.outer_half_width` | [6.9](#69-adaptivebridson) | no | `0.02` (public) |
-| `Sampling.AdaptiveBridson.min_radius` | [6.9](#69-adaptivebridson) | no | `1/200` (public) |
-| `Sampling.AdaptiveBridson.initial_radius` | [6.9](#69-adaptivebridson) | no | `0.10` |
-| `Sampling.AdaptiveBridson.refinement_factor` | [6.9](#69-adaptivebridson) | no | `0.5` |
-| `Sampling.AdaptiveBridson.threshold` | [6.9](#69-adaptivebridson) | no | default `outer/8` (legacy) |
-| `Sampling.AdaptiveBridson.core_half_width` | [6.9](#69-adaptivebridson) | no | default `outer/8` (legacy) |
-| `Sampling.AdaptiveBridson.max_generations` | [6.9](#69-adaptivebridson) | no | `16` (max \(r_g\) shrinks) |
-| `Sampling.AdaptiveBridson.max_points` | [6.9](#69-adaptivebridson) | no | `50000` |
-| `Sampling.AdaptiveBridson.max_new_per_generation` | [6.9](#69-adaptivebridson) | no | `4000` |
-| `Sampling.AdaptiveBridson.k_ref` | [6.9](#69-adaptivebridson) | no | `30` |
-| `Sampling.AdaptiveBridson.neighbor_graph` | [6.9](#69-adaptivebridson) | no | `auto` |
-| `Sampling.AdaptiveBridson.knn_k` | [6.9](#69-adaptivebridson) | no | `4 * d` |
-| `Sampling.AdaptiveBridson.function_tolerance` | [6.9](#69-adaptivebridson) | no | alias of `threshold` (compat) |
+| `Sampling.Bounds.Radius` | [6.3](#63-bridson) | **yes** | — |
+| `Sampling.Bounds.MaxAttempt` | [6.3](#63-bridson) | **yes** | — |
+| `Sampling.Bounds.MaxWorker` | [6.3](#63-bridson) | no | `EnvReqs.V2.workers` |
+| `Sampling.Bounds."Point number"` / `point_number` | [6.4](#64-random) | **yes** | — |
+| `Sampling.Bounds.path` | [6.6](#66-csv) | **yes** | — |
+| `Sampling.Bounds.variables` | [6.6](#66-csv) | no | all non-uuid columns |
+| `Sampling.Bounds.uuid_column` | [6.6](#66-csv) | no | `uuid` |
+| `Sampling.Bounds.delimiter` | [6.6](#66-csv) | no | `,` |
+| `Sampling.Bounds.encoding` | [6.6](#66-csv) | no | `utf-8` |
+| `Sampling.Bounds` (AdaptiveBridson knobs) | [6.9](#69-adaptivebridson) | **yes** (ALS) | — |
+| `Sampling.Bounds.target_expression` | [6.9](#69-adaptivebridson) | **yes** | — |
+| `Sampling.Bounds.target_value` | [6.9](#69-adaptivebridson) | **yes** | — |
+| `Sampling.Bounds.outer_half_width` | [6.9](#69-adaptivebridson) | no | `0.02` (public) |
+| `Sampling.Bounds.min_radius` | [6.9](#69-adaptivebridson) | no | `1/200` (public) |
+| `Sampling.Bounds.initial_radius` | [6.9](#69-adaptivebridson) | no | `0.10` |
+| `Sampling.Bounds.refinement_factor` | [6.9](#69-adaptivebridson) | no | `0.5` |
+| `Sampling.Bounds.threshold` | [6.9](#69-adaptivebridson) | no | default `outer/8` (legacy) |
+| `Sampling.Bounds.core_half_width` | [6.9](#69-adaptivebridson) | no | default `outer/8` (legacy) |
+| `Sampling.Bounds.max_generations` | [6.9](#69-adaptivebridson) | no | `16` (max \(r_g\) shrinks) |
+| `Sampling.Bounds.max_points` | [6.9](#69-adaptivebridson) | no | `50000` |
+| `Sampling.Bounds.max_new_per_generation` | [6.9](#69-adaptivebridson) | no | `4000` |
+| `Sampling.Bounds.k_ref` | [6.9](#69-adaptivebridson) | no | `30` |
+| `Sampling.Bounds.neighbor_graph` | [6.9](#69-adaptivebridson) | no | `auto` |
+| `Sampling.Bounds.knn_k` | [6.9](#69-adaptivebridson) | no | `4 * d` |
+| `Sampling.Bounds.function_tolerance` | [6.9](#69-adaptivebridson) | no | alias of `threshold` (compat) |
 
 ### 3.3 `Mapper` / `LibDeps` / `Calculators` / `Operas` / `Likelihood`
 
@@ -375,6 +379,7 @@ detail (error types, aliases, code citations).
 | `Calculators.Modules[].name` | [9.4](#94-calculatorsmodules--one-external-calculator) | yes | — |
 | `Calculators.Modules[].{required_modules,clone_shadow,path,source,symlink_name,timeout,make_paraller,env_setup,installation,initialization}` | [9.4](#94-calculatorsmodules--one-external-calculator) | no | see table |
 | `Calculators.Modules[].execution.*` | [9.5](#95-execution-block) | yes in practice | see table |
+| `Calculators.Modules[].modes[]` | [9.6](#96-multi-mode-calculator-shared-packid) | no | shared-only logical modes |
 | `Operas.Modules[].name` | [10](#10-operas) | effectively yes | `Operas<i>` |
 | `Operas.Modules[].operator` | [10](#10-operas) | **yes** | — |
 | `Operas.Modules[].{call_mode,timeout_sec,timeout,kwargs,input,output}` | [10](#10-operas) | no | see table |
@@ -455,6 +460,7 @@ Public V2 scheduling + SAMPLE/archive policy knobs (also mergeable from
 | `archiver` | mapping | process + pack | Layer-2 policy; see §9.2 |
 | `redis` | mapping | internal `127.0.0.1:6379/0` | optional broker override `{host, port, db}` overlaid on the internal zero-config default (multi-host / non-default-port deployments); other keys ignored |
 | `factory` | mapping | `monitor_hz: 120`, watchdog defaults | control-process knobs: `monitor_hz` (or `monitor: {hz}`), `watchdog: {enabled, stale_sec, poll_interval_sec, max_sample_retries}` |
+| `checkpoint_heartbeat_sec` | number ≥ 1 | `30.0` | **the only** checkpoint-cadence knob (all methods, nested included). It also bounds how much work a `--resume` may redo: worst case one heartbeat of wall-clock. Lower it for expensive samples. |
 
 Unknown `EnvReqs.V2` keys are a hard error listing the supported set. Keys outside
 `EnvReqs.V2` (V1's `Python`, `CERN_ROOT`, …) are tolerated and ignored; legacy
@@ -511,12 +517,33 @@ see Appendix A.12).
 
 ### 6.1 Keys Common to Bridson / Random / Grid
 
-| Key | Required | Default | Notes |
-|---|---|---|---|
-| `Variables` | yes | — | empty list raises `ValueError`; schema in §6.2 |
-| `Seed` (alias `seed`) | no | `0` | `0` = unseeded for Random/Bridson |
-| `selection` | no | — | sympy boolean over **physical** params; see box below |
-| `LogLikelihood` | no | — | alias of `Likelihood.expressions`, lower precedence (§6.8, §11) |
+> **Bounds-only layout (breaking change, 2026-08-03).** Every **method knob** —
+> `Radius`, `MaxAttempt`, `MaxWorker`, `Point number`, `Seed`, the CSV path, and the whole
+> AdaptiveBridson knob set — now lives **exclusively under `Sampling.Bounds`**.
+> The old layout (these keys directly under `Sampling`) is **rejected**, not silently
+> accepted, with a diagnostic that names the destination:
+>
+> ```
+> JV2-SCH-001  $.Sampling      'Bounds' is a required property
+> JV2-SCH-001  $.Sampling      Additional properties are not allowed ('Point number', 'Seed' …)
+> JV2-MTH-020  Sampling.Bounds Random requires Sampling.Bounds with 'Point number' (or point_number)
+> JV2-MTH-001  Sampling.Point number  is not a V2 setting; place it under Sampling.Bounds
+> ```
+>
+> **What did *not* move**: `Method`, `Variables`, `LogLikelihood`, `selection`,
+> `FeedbackReturn`, `mode` / `data` / `points_csv` (check-modules) all stay directly
+> under `Sampling`. The rule is simply: *if it tunes the method, it goes in `Bounds`.*
+
+| Key | Where | Required | Default | Notes |
+|---|---|---|---|---|
+| `Variables` | `Sampling` | yes | — | empty list raises `ValueError`; schema in §6.2 |
+| `Seed` (alias `seed`) | **`Sampling.Bounds`** | no | `0` | `0` = unseeded for Random/Bridson |
+| `selection` | `Sampling` | no | — | sympy boolean over **physical** params; see box below |
+| `LogLikelihood` | `Sampling` | no | — | alias of `Likelihood.expressions`, lower precedence (§6.8, §11) |
+
+`Bounds` is a **closed** block per method: an unknown key inside it is an error, so a typo
+cannot be silently ignored. `Grid` is the one method for which `Bounds` is optional (its
+only knob is `Seed`; the point count comes from each variable's `num`).
 
 **`selection` semantics (identical across all three samplers).** Bridson/Random/Grid each
 pre-generate a fixed candidate/draw set once (`Point number` draws, the full grid, or the
@@ -535,10 +562,10 @@ semantics.
 ### 6.2 `Variables[]` Entry & Distribution Types
 
 ```yaml
-- name: x                  # required; empty/missing name -> entry silently dropped
+- name: x                  # required; empty/missing name is an error
   description: "..."       # informational only
   distribution:
-    type: Flat             # default Flat
+    type: Flat             # required; names are case-sensitive
     parameters: {...}
 ```
 
@@ -549,24 +576,32 @@ semantics.
 | `Normal` | `mean`, `stddev` | `mean + stddev·Φ⁻¹(u)` |
 | `Log-Normal` | `mean`, `stddev` | `exp(mean + stddev·Φ⁻¹(u))` |
 | `Logit` | `location` (0), `scale` (1) | `logit(u)·scale + location` |
+| `Binomial` | integer `n` ≥ 0, `p` ∈ [0,1] | `Binomial(n,p)` inverse CDF; yields an integer |
+| `Poisson` | `lambda` ≥ 0 | `Poisson(lambda)` inverse CDF; yields an integer |
+| `Beta` | `alpha`, `beta` > 0 | `Beta(alpha,beta)` inverse CDF |
+| `Exponential` | `rate` > 0 | `-log(1-u) / rate` |
+| `Gamma` | `shape`, `scale` > 0 | `scale·P⁻¹(shape,u)` |
 
 Extra per-method parameters on the same `parameters` map: `num` (Grid, **required**, points
 per dimension — §6.5), `length` (Bridson, **required** — §6.3, and see the code
 inconsistency in Appendix A.11).
 
-Missing required distribution parameters raise raw `KeyError` at sampler startup (not a
-schema message).
+All required parameters and their numerical domains are checked by `Jarvis2 validate` before
+Redis, Workers, or output directories are created.
 
 ### 6.3 Bridson
 
 Poisson-disk / blue-noise sampling — good spatial coverage without a regular grid's
 axis-aligned artifacts.
 
-| Key | Required | Default | Notes |
+All knobs live under `Sampling.Bounds` (§6.1).
+
+| Key (under `Bounds`) | Required | Default | Notes |
 |---|---|---|---|
-| `Radius` | **yes** (`KeyError`) | — | minimum u-space distance between accepted points |
-| `MaxAttempt` | **yes** (`KeyError`) | — | candidates per active point during placement (`k`) |
+| `Radius` | **yes** | — | minimum u-space distance between accepted points |
+| `MaxAttempt` | **yes** | — | candidates per active point during placement (`k`) |
 | `MaxWorker` | no | `EnvReqs.V2.workers` | max in-flight proposals |
+| `Seed` (alias `seed`) | no | `0` | |
 | `Variables[].distribution.parameters.length` | **yes** (`KeyError`) | — | u-space box edge for that dimension; see Appendix A.11 for the code inconsistency with the resume/replay coordinate helpers |
 
 Minimal recipe (adapted from `tests/parity_project/bridson_opera.yaml`):
@@ -574,9 +609,10 @@ Minimal recipe (adapted from `tests/parity_project/bridson_opera.yaml`):
 ```yaml
 Sampling:
   Method: Bridson
-  Radius: 0.35
-  MaxAttempt: 30
-  Seed: 42
+  Bounds:
+    Radius: 0.35
+    MaxAttempt: 30
+    Seed: 42
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0, length: 1.0}}
@@ -588,17 +624,21 @@ Sampling:
 
 Uniform i.i.d. sampling in u-space.
 
-| Key | Required | Default | Notes |
+All knobs live under `Sampling.Bounds` (§6.1).
+
+| Key (under `Bounds`) | Required | Default | Notes |
 |---|---|---|---|
-| `Point number` (alias `point_number`) | **yes** (`ValueError`) | — | note the space in the primary key name |
+| `Point number` (alias `point_number`) | **yes** | — | note the space in the primary key name |
+| `Seed` (alias `seed`) | no | `0` | |
 
 Minimal recipe (adapted from `tests/parity_project/random_opera.yaml`):
 
 ```yaml
 Sampling:
   Method: Random
-  "Point number": 6
-  Seed: 11
+  Bounds:
+    "Point number": 6
+    Seed: 11
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
@@ -619,7 +659,8 @@ Minimal recipe (adapted from `tests/parity_project/grid_opera.yaml`):
 ```yaml
 Sampling:
   Method: Grid
-  Seed: 0
+  Bounds:            # optional for Grid — Seed is its only knob
+    Seed: 0
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0, num: 3}}
@@ -632,7 +673,7 @@ Sampling:
 Replay physical points from a file — no u→x mapping is performed (`Mapper` defaults to
 `none`; §7).
 
-| Key under `Sampling.CSV` | Required | Default | Notes |
+| Key under `Sampling.Bounds` | Required | Default | Notes |
 |---|---|---|---|
 | `path` | **yes** | — | `&J/`, absolute, or task-YAML-relative |
 | `variables` | no | all non-uuid columns | must be a list |
@@ -645,7 +686,7 @@ Minimal recipe (adapted from `tests/parity_project/csv_opera.yaml`):
 ```yaml
 Sampling:
   Method: CSV
-  CSV:
+  Bounds:
     path: "&J/data/check_modules_points.csv"
     variables: [x, y]
 ```
@@ -752,12 +793,12 @@ The legacy `timeout` keyword remains accepted as an alias for compatibility.
 | Constraint | Rule |
 |---|---|
 | Dimension | `2 ≤ len(Variables) ≤ 5` else `ValueError` at `set_config` |
-| Sub-block | `Sampling.AdaptiveBridson` (alias `adaptive_bridson`) **required** mapping |
+| Sub-block | `Sampling.Bounds` **required** mapping (§6.1) |
 | Gen-0 | d ≤ 4 Bridson; d = 5 Sobol |
 | Neighbor graph | Delaunay (d≤3) / kNN (d≥4) for brackets; densify is local Bridson |
 | Output | `<task_result_dir>/levelset.json` + SAMPLE/DATABASE archive |
 
-**Keys under `Sampling.AdaptiveBridson`**
+**Keys under `Sampling.Bounds`**
 
 Public (new cards):
 
@@ -801,17 +842,17 @@ EnvReqs:
     batch_size: 8
 Sampling:
   Method: AdaptiveBridson
-  Seed: 7
+  Bounds:
+    Seed: 7
+    target_expression: "r2"
+    target_value: 0.04
+    outer_half_width: 0.05
+    min_radius: 0.005
   Variables:
     - name: x
       distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
     - name: y
       distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
-  AdaptiveBridson:
-    target_expression: "r2"
-    target_value: 0.04
-    outer_half_width: 0.05
-    min_radius: 0.005
 Operas:
   Modules:
     - name: Circle
@@ -882,8 +923,16 @@ Sampling:
       # Dynesty (dynamic) only:
       # dlogz_init: 0.01
       # nlive_init / nlive_batch / maxbatch / n_effective / use_stop / …
-      # checkpoint_file / checkpoint_every / resume (both)
 ```
+
+**Checkpoint/resume knobs are HEP-owned, not yours.** `checkpoint_file`,
+`checkpoint_every` and `resume` are **rejected** inside `Bounds` (`JV2-BND-001`) — the
+engine's native save/restore is driven by HEP:
+
+- cadence comes from `EnvReqs.V2.checkpoint_heartbeat_sec` (§5) — one knob for every method;
+- the checkpoint path is derived from the scan, and `--resume` picks it up automatically;
+- the Redis evaluation pool is stripped when the engine state is pickled and re-attached
+  on restore, so a nested run resumes with its live points intact.
 
 **Pass-through rules**
 
@@ -901,9 +950,9 @@ Sampling:
 ```yaml
 Sampling:
   Method: Dynesty          # or MultiNest (static NestedSampler)
-  Seed: 21
   Variables: [...]
   Bounds:
+    Seed: 21
     nlive: 100
     dlogz: 0.5             # Dynesty → dlogz_init; MultiNest → static dlogz
     run_nested:
@@ -975,7 +1024,7 @@ Sampling:
     mode: minimal
 
   Method: AdaptiveBridson
-  AdaptiveBridson:
+  Bounds:
     target_expression: "delta_chi2"
   # default auto: mode=fields, fields from target symbols
   FeedbackReturn:
@@ -1118,6 +1167,10 @@ per-module install/init/execute lifecycle. See §9.5 for the `execution` sub-blo
 coerced with floor 1. When absent, per-module `make_paraller` (default 1) is used
 (`calculator_pools.resolve_calculator_pools`). A Worker blocks up to `calc_acquire_timeout`
 (30 s, internal — Appendix B) waiting for a slot, then the Sample fails with `TimeoutError`.
+For a multi-mode parent, the pool key is the parent name (`Prospino`, not
+`Prospino.ng`). Prefer at least `mode count + Worker count` slots when resources
+allow; fewer slots are legal but can increase mode rebuilds. A pool smaller
+than the mode count cannot keep every mode resident and must thrash.
 
 ### 9.2 `Calculators.Archiver`
 
@@ -1182,6 +1235,58 @@ entry maps `name:` from `entry:` (dotted path, default = name; missing → `None
 
 A `save:` key appears in V1-style specs and the parity YAML; **V2 never reads it**
 (Appendix A.3).
+
+### 9.6 Multi-mode calculator (shared PackID)
+
+Use `modes` only when a package's build states are mutually exclusive: switching
+to mode B replaces mode A in the same physical installation. If both programs
+or build directories can coexist, declare two ordinary modules instead.
+
+```yaml
+Calculators:
+  Pools: {Prospino: 8}
+  Modules:
+    - name: Prospino
+      path: "&J/calculators/Prospino/@PackID"
+      source: "&J/src/Prospino"
+      clone_shadow: true
+      installation: ["cp -R ${source}/. ${path}"]
+      modes:
+        - name: ng
+          installation: ["python configure.py ng", "make"]
+          initialization: ["rm -f ng.out"]
+          execution:
+            commands: ["./prospino"]
+            output: [{name: xsec_ng, path: "@Sdir/ng.json", type: JSON}]
+        - name: ns
+          installation: ["python configure.py ns", "make"]
+          execution:
+            commands: ["./prospino"]
+            output: [{name: xsec_ns, path: "@Sdir/ns.json", type: JSON}]
+```
+
+The parent owns one physical `@PackID` pool and one `jarvis_install.json`.
+Parent `installation` runs only for a new/invalidated base. A mode switch runs
+only that mode's optional `installation`; it does not replay parent installation.
+Parent initialization and mode initialization are optional and run on every
+selected call, in that order. `selection: false` is evaluated before Redis
+acquisition, so a skipped mode neither rebuilds nor relabels a pack.
+
+A mode may set `path` and `execution.path` for its command working directory:
+
+```text
+mode.execution.path > mode.path > parent.path
+```
+
+The parent path remains the physical installation anchor. There is no `@Mode`,
+`${mode_dir}`, `mode_packs`, or per-mode physical directory.
+
+Logical names use a dot: `Prospino.ng`. A bare dependency `Prospino` means all
+sibling modes; a dotted dependency selects one or more explicit modes. Bare
+dependencies may also refer to LibDeps, Operas, or `Parameters`. Modes of one
+parent run serially within a sample; different calculator parents can run in
+parallel. Redis prefers a warm target pack, waits briefly when that exact mode
+is in flight, then borrows and rebuilds only when necessary.
 
 ---
 
@@ -1287,6 +1392,10 @@ and `LogL` is absent from the output.
 | `@SampleID` | 2 (Worker) | Sample uuid |
 | `@Sdir` | 2 (Worker) | Sample save dir (forces materialization) |
 | `@PackID` | 2 (Worker) | calculator slot id (traceability / clone_shadow) |
+
+`@Mode` and `${mode_dir}` are deliberately unsupported. Multi-mode calculators
+share the parent physical `@PackID` directory; mode is a logical execution name,
+not a path component.
 
 Phase-1 leftovers (`&…`, `${LibDeps:…}`, `${Scan:…}`) surviving into Phase 2 raise
 `ValueError`. Sample tokens in a string are preserved through Phase 1 and the static parts

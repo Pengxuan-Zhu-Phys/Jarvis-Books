@@ -26,13 +26,13 @@ verified: 2026-07-21 @ jarvis2/2daf417
 ```yaml
 Sampling:
   Method: "DRAM"
-  Seed: 21
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 5.0}}
     - name: y
       distribution: {type: Flat, parameters: {min: 0.0, max: 5.0}}
   Bounds:
+    Seed: 21
     chains: 8            # 链数；≥ workers，否则 Worker 闲置
     steps: 2000          # 每链迭代数
     proposal_scale: 0.1  # 初始高斯提议尺度（单位立方体坐标）

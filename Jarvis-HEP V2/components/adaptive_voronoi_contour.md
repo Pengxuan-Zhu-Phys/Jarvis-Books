@@ -272,14 +272,14 @@ The only piece V2 lacks today. **Spec:**
 ```yaml
 Sampling:
   Method: AdaptiveBridson
-  Seed: 42                            # int (alias seed); drives ALL generations (§7)
   Variables:                          # 2–5 entries (ValueError otherwise)
     - name: m0
       distribution: {type: Flat, parameters: {min: 0.0, max: 5000.0}}
     - name: m12
       distribution: {type: Log,  parameters: {min: 100.0, max: 3000.0}}
     # - name: tanb   …                # add up to 5; d ≥ 4 switches to proximity mode (§1.1)
-  AdaptiveBridson:
+  Bounds:                             # all method knobs live here (YAML_REFERENCE §6.1)
+    Seed: 42                          # int (alias seed); drives ALL generations (§7)
     target_expression: "LogL"         # REQUIRED; sympy over returned observables (A.6 caveat)
     target_value: -2.9957             # REQUIRED; e.g. 95% CL in ΔLogL
     contour_precision: 0.008          # u-space; default 0.01

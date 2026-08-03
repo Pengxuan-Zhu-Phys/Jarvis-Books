@@ -1,6 +1,6 @@
 # DESIGN — 断点续跑（Checkpoint / Resume 重做，V2，D21）
 
-**Status**: implemented and acceptance-verified 2026-08-02 (D21.1–D21.10)
+**Status**: D21.1–D21.8 implemented and acceptance-verified; D21.9–D21.12 in progress (2026-08-02)
 **Scope**: V2-only
 **Requirement (maintainer, 2026-08-02)**:
 
@@ -166,8 +166,10 @@ I2 需要"该批是否已落盘"这个信号，而进程模式 archiver 现在�
    看起来会走归档，但本次实测 `failed=0`，未取得实证）。这是 D21.6。
 2. **checkpoint 与崩溃之间的窗口**。由 §7 第 6 步吸收，无需额外机制。
 3. **HDF5 陈旧写标志**。实测：SIGKILL 之后该文件**连只读都打不开**
-   （`file is already open for write ... may use h5clear`）。resume 前必须检测并 `h5clear`，
-   否则第 2 步就失败。
+   （`file is already open for write …`）。resume 前必须检测并修复，否则第 2 步就失败。
+   **实现（2026-08-03 定稿）：纯 h5py**——以 SWMR 只读打开原文件，把内容复制进一个
+   superblock 干净的新文件，再原子替换。**刻意不依赖 `h5clear` CLI**（它不在 pip 的
+   `h5py` wheel 里），所以标准 `pip install h5py` 环境即可恢复。
 4. **`safe_barrier_confirmed` 写死为真**。改为真调 `safe_barrier_ready(...)`；
    心跳 checkpoint 如实记 `False`。resume 对未确认的 checkpoint 一律走对账（反正总是对账）。
 5. **`mark_completed()` 可以删除**。它是这套设计里不再需要的中间概念——完成与否由盘上说了算。
@@ -218,7 +220,7 @@ I2 需要"该批是否已落盘"这个信号，而进程模式 archiver 现在�
 | **D21.5** | `safe_barrier_confirmed` 改为实算；删除 `mark_completed` 死接口 | D21.2 | 中 |
 | **D21.6** | 失败样本的落盘语义（避免 resume 死循环） | D21.1 | 中 |
 | **D21.7** | 端到端回归测试 A1–A7 | D21.1–D21.4 | 高 |
-| **D21.8** | 生命周期：control lease + Worker 自杀、`kill` 判断反转、stale runtime 接管、`h5clear` | — | **高**（不修则 resume 起不来） |
+| **D21.8** | 生命周期：control lease + Worker 自杀、`kill` 判断反转、stale runtime 接管、HDF5 陈旧标志修复 | — | **高**（不修则 resume 起不来） |
 
 **回滚**：不带 `--resume` 的运行路径完全不受影响；D21.1/D21.3 之前的行为即今天的行为。
 
@@ -232,7 +234,7 @@ HDF5 commit/flush → fsync → Redis `SADD hep:archived:<scan>`。失败样本�
 生命周期通路也已闭合：控制进程使用 Redis TTL lease，Worker/Archiver 在租约失配时退出；
 FileOperation 被 init 收养后会自行退出；控制 PID 已死时 `ps`/`kill` 接受该 runtime 为 stale；
 `--resume` 会清理同名孤儿进程并接管租约；若 SIGKILL 留下 HDF5 writer consistency flag，
-恢复前会以 `h5clear` 清理后再读 UUID。
+恢复前会以纯 h5py 重写清理该标志后再读 UUID（不需要 `h5clear` CLI）。
 
 行为验收：
 
@@ -420,10 +422,29 @@ SAMPLE 的 bucket 编号由 `init_sample_buckets()` **扫目录**得出，calcul
 | **D21.11** | 落盘确认增量化（§18，建议走 (b) 加 `sample_index`）；`CHECKPOINT_HEARTBEAT_SEC` 改为可配置 | D21.9 | 中 |
 | **D21.12** | 性能门禁 P1–P5 进回归；A8 负面测试 | D21.9–D21.11 | 高 |
 
+### 当前实现记录（尚待完整性能验收）
+
+- `CheckpointHeartbeat` 只写一个请求标志；`FixedSetSampler` / `CSVSampler` 在下一个
+  完整提交批次检查它并捕获快照。正常批次不复制 UUID/坐标历史，也不争用 checkpoint 锁。
+- `Sample.sample_index` 已贯穿 Redis task、Worker result 与 HDF5 record。Archiver 仅在
+  HDF5 batch commit 后发布 Redis 的连续前缀；控制进程读取该标量而非 `SMEMBERS`。
+  A8 已覆盖乱序 `0, 2` 时前缀停在 `1`，直到 `1` 落盘才推进到 `3`。
+- Random / Grid / Bridson / CSV 的 export 已移除坐标和 UUID 映射，并以属性分类测试防止
+  新字段悄然进入或遗漏 checkpoint。`EnvReqs.V2.checkpoint_heartbeat_sec` 已可配置
+  （默认 30、最小 1 秒）。
+- 当前焦点回归包括 20k payload 定长、Random generator round-trip、HDF5 水位、task-card
+  duration validation、Sample wire compatibility、Archiver/Redis 单元套件（`76 passed,
+  8 subtests passed`）及 TCP fakeredis 的 Random 与 SIGKILL DATABASE-only 恢复。
+  **仍待 D21.12 完成 P1/P2/P5 的受控基准测量及完整 pytest 的稳定收尾，故工作包保持
+  in-progress。**
+
 **回滚**：这一版只改 checkpoint 的**取样时机与载荷**，不改三条不变量（I1 落盘为真相、
 I2 恢复点不越过在途、I3 写入端去重），A1/A5 的行为断言全部沿用。
 
-## 13. FileOperation 孤儿复核与加固（D21.9）
+## Appendix A. 已完成的 FileOperation 孤儿复核与加固（历史记录）
+
+> 这部分是早先完成的 FileOperation / ZP 工作记录，**不占用**本版 resume
+> 设计的 D21.9–D21.12 编号。当前 D21.9–D21.12 的定义以 §20 为准。
 
 复核机器上 11 个 `ppid=1` 的历史 `Jarvis2-FileOperation` 后，确认来源是 D21 之前的
 永久阻塞循环：Worker 被 SIGKILL 后，子进程仍阻塞于无 timeout 的
@@ -445,7 +466,7 @@ queue，或等待 `rm` 子进程时，不会回到空闲检查点。最终实现
 退出；最终焦点测试 33 passed，扩展 Worker/FileOperation/resume 回归 62 passed，Ruff 与
 `git diff --check` 通过，测试结束后的完整进程表中 FileOperation 数为 0。
 
-## 14. ZP 无归属进程分类（D21.10）
+## Appendix B. 已完成的 ZP 无归属进程分类（历史记录）
 
 `Jarvis2 ps` 会同时展示两类引用：有 scan id 的运行时继续按名称稳定分配 `R1/R2/...`；
 没有对应 live Control 的裸进程或残留 Worker/Archiver/FileOperation/Redis 统一显示为固定
@@ -458,3 +479,7 @@ ZP 和允许 kill 时则只接受 Jarvis 自己会生成的裸标题，避免误
 仅共享前缀的第三方程序。真实 OS 验收中，裸 FileOperation 进入 ZP，正常 `scan` 保持 R1；
 执行 `kill ZP -y` 后只有孤儿进程退出，R1 未受影响。补充验收确认孤立的
 `Jarvis2-Archiver:scan` 即使残留 scan 后缀，也进入 ZP 而不是虚假的 R1。
+
+Jarvis-Lit 是独立应用，不属于 Jarvis-HEP 的进程边界。其裸标题、`Jarvis-Lit` 工作目录
+以及 `JarvisLit.app` 路径均在发现阶段显式排除，因此不会出现在 `Jarvis2 ps`、`ZP`，
+也不会被 `Jarvis2 kill` 选中。
