@@ -40,11 +40,11 @@ behavior documented in §13).
 4. [Top-Level Keys](#4-top-level-keys)
 5. [`EnvReqs.V2` runtime settings](#5-envreqsv2-runtime-settings)
 6. [`Sampling`](#6-sampling)
-7. [`Mapper`](#7-mapper-top-level-optional)
+7. [The u→x mapper (`Sampling.Mapper` + auto-derived)](#7-the-ux-mapper-samplingmapper--auto-derived)
 8. [`LibDeps`](#8-libdeps)
 9. [`Calculators`](#9-calculators)
 10. [`Operas`](#10-operas)
-11. [`Likelihood`](#11-likelihood)
+11. [`Likelihood` → `Sampling.LogLikelihood`](#11-likelihood--samplingloglikelihood)
 12. [Token Reference](#12-token-reference)
 13. [Validation & Failure Behavior](#13-validation--failure-behavior)
 - [Appendix A — Known Gaps & Design Warts](#appendix-a--known-gaps--design-warts-input-for-the-yaml-design-review)
@@ -96,12 +96,12 @@ optional.
 
 ```yaml
 # ---- identity -------------------------------------------------------------
-project_name: my-scan            # str; only used in run_summary
+# The ONLY accepted top-level keys are:
+#   Scan, EnvReqs, Sampling, LibDeps, Calculators, Operas
+# project_name / scan_name / task_result_dir / run_id / Mapper / Likelihood are
+# REJECTED by the schema (JV2-SCH-001) — see §4.
 Scan:
   name: scan-01                  # str; drives outputs/<name> and ${Scan:name}
-# scan_name: scan-01             # fallback alias when Scan.name is absent
-# task_result_dir: /abs/path     # override the outputs/<scan> root
-# run_id: my-run-id              # override the auto uuid4 run id
 
 # ---- V1-compatible default-settings entry point -------------------------
 EnvReqs:
@@ -174,11 +174,14 @@ Sampling:
   #   - name: LogL_Z
   #     expression: z
 
-# ---- u -> x mapper (optional; auto-derived when absent) ---------------------
-Mapper:
-  type: distribution             # distribution | identity | none | flat(default fallthrough)
-  # keys: [x, y]                 # identity: observable names for u components
-  # variables: [...]             # distribution/flat: same schema as Sampling.Variables
+# ---- u -> x mapper (§7) ----------------------------------------------------
+# Default: auto-derived from Sampling.Variables (distribution → params).
+# Optional explicit reparameterization (flat name → expression):
+#   Sampling:
+#     Mapper:
+#       x: "cos(t)"
+#       y: "sin(t)"
+# Top-level `Mapper:` (outside Sampling) is still rejected.
 
 # ---- external tool registry -------------------------------------------------
 LibDeps:
@@ -284,12 +287,14 @@ Operas:
         - name: z
           entry: z               # dotted path into the returned dict
 
-# ---- likelihood ---------------------------------------------------------------
-Likelihood:
-  expressions:                   # precedence over Sampling.LogLikelihood
-    - name: LogL_Z
-      expression: LogGauss(z, 1.0, 0.1)   # shared 38-function Expression Core
-    # semantics: a term literally named LogL is THE total; otherwise LogL = sum of terms
+# ---- likelihood -----------------------------------------------------------
+# Top-level `Likelihood:` is REJECTED. Likelihood terms live under Sampling:
+#
+#   Sampling:
+#     LogLikelihood:
+#       - name: LogL_Z
+#         expression: LogGauss(z, 1.0, 0.1)   # shared 38-function Expression Core
+#     # a term literally named LogL is THE total; otherwise LogL = sum of terms
 ```
 
 ---
@@ -315,10 +320,11 @@ detail (error types, aliases, code citations).
 | Path | §  | Required | Default |
 |---|---|---|---|
 | `Sampling.Method` | [6](#6-sampling) | for a live scan | — |
-| `Sampling.mode` | [6.7](#67-check_modules-samplingmode-check_modules) | no | — |
-| `Sampling.data` / `Sampling.points_csv` | [6.7](#67-check_modules-samplingmode-check_modules) | yes (check_modules) | — |
+| `Sampling.mode` | [6.7](#67-check_modules-jarvis2-check--samplingmode-check_modules) | no | — |
+| `Sampling.data` / `Sampling.points_csv` | [6.7](#67-check_modules-jarvis2-check--samplingmode-check_modules) | yes (check_modules) | — |
 | `Sampling.Bounds.Seed` / `Sampling.Bounds.seed` | [6.1](#61-keys-common-to-bridson--random--grid) | no | `0` |
 | `Sampling.selection` | [6.1](#61-keys-common-to-bridson--random--grid) | no | — |
+| `Sampling.Mapper.<name>` | [7](#7-the-ux-mapper-samplingmapper--auto-derived) | no | — |
 | `Sampling.Variables[].name` | [6.2](#62-variables-entry--distribution-types) | yes | — |
 | `Sampling.Variables[].description` | [6.2](#62-variables-entry--distribution-types) | no | — |
 | `Sampling.Variables[].distribution.type` | [6.2](#62-variables-entry--distribution-types) | yes | — |
@@ -359,13 +365,14 @@ detail (error types, aliases, code citations).
 | `Sampling.Bounds.knn_k` | [6.9](#69-adaptivebridson) | no | `4 * d` |
 | `Sampling.Bounds.function_tolerance` | [6.9](#69-adaptivebridson) | no | alias of `threshold` (compat) |
 
-### 3.3 `Mapper` / `LibDeps` / `Calculators` / `Operas` / `Likelihood`
+### 3.3 `LibDeps` / `Calculators` / `Operas` / `Likelihood`
+
+> **Top-level** `Mapper` is rejected. Optional **`Sampling.Mapper`** is a flat
+> name → expression map (D22) — see [§7](#7-the-ux-mapper-samplingmapper--auto-derived).
+> Omitted → distribution-only auto mapper (backward compatible).
 
 | Path | §  | Required | Default |
 |---|---|---|---|
-| `Mapper.type` | [7](#7-mapper-top-level-optional) | no | auto-derived |
-| `Mapper.keys` | [7](#7-mapper-top-level-optional) | for `identity` | — |
-| `Mapper.variables` | [7](#7-mapper-top-level-optional) | for `distribution`/fallthrough | — |
 | `LibDeps.path` | [8.1](#81-libdepsmodules--shared-install-once-libraries) | no | project root |
 | `LibDeps.make_paraller` | [8.1](#81-libdepsmodules--shared-install-once-libraries) | no | `1` |
 | `LibDeps.Modules[].name` | [8.1](#81-libdepsmodules--shared-install-once-libraries) | yes | — |
@@ -383,30 +390,43 @@ detail (error types, aliases, code citations).
 | `Operas.Modules[].name` | [10](#10-operas) | effectively yes | `Operas<i>` |
 | `Operas.Modules[].operator` | [10](#10-operas) | **yes** | — |
 | `Operas.Modules[].{call_mode,timeout_sec,timeout,kwargs,input,output}` | [10](#10-operas) | no | see table |
-| `Likelihood.expressions[].name` | [11](#11-likelihood) | no | `"LogL"` |
-| `Likelihood.expressions[].expression` | [11](#11-likelihood) | **yes** | — |
+| `Sampling.LogLikelihood[].name` | [11](#11-likelihood--samplingloglikelihood) | no | `"LogL"` |
+| `Sampling.LogLikelihood[].expression` | [11](#11-likelihood--samplingloglikelihood) | **yes** | — |
 
 ---
 
 ## 4. Top-Level Keys
 
+**Exactly six top-level keys are accepted.** Anything else is a hard `JV2-SCH-001`:
+
+```
+Allowed keys: Calculators, EnvReqs, LibDeps, Operas, Sampling, Scan
+```
+
 | Key | Type | Default | Consumed by |
 |---|---|---|---|
-| `project_name` | str | `Scan.name` | run_summary only (`core.py:646`) |
 | `Scan` | map | — | `name` is the only key read |
-| `scan_name` | str | `"default"` | fallback when `Scan.name` absent |
-| `task_result_dir` | str | `<root>/outputs/<scan>` | output root override |
-| `run_id` | str | uuid4 | run identity in info/run_summary |
 | `EnvReqs` | map | — | V1 requirements plus V2 scheduling/defaults (§4.1, §5) |
 | `Sampling` | map | — | sampler selection + config (§6) |
-| `Mapper` | map | auto-derived | Worker u→x mapper (§7) |
 | `LibDeps` | map | — | token paths + registered executables (§8) |
 | `Calculators` | map | — | modules, pools, archiver, cleanup (§9) |
 | `Operas` | map | — | `Modules` list (§10) |
-| `Likelihood` | map | — | `expressions` list (§11) |
 
-Reserved (stamped by the loader, will be overwritten): `task_yaml`, `task_root`,
-`project_root`, `task_result_dir`, `scan_name`.
+**Rejected at the top level** (measured with `Jarvis2 validate` on `da33371`; earlier
+revisions of this section wrongly documented all six as supported):
+
+| Key | Diagnostic suggestion | Where it went |
+|---|---|---|
+| `Likelihood` | "Move its expressions to `Sampling.LogLikelihood`; top-level `Likelihood` is not a V2 interface." | [§11](#11-likelihood--samplingloglikelihood) |
+| `Mapper` (top-level) | "Remove top-level `Mapper`: it is not a V2 task-card interface." | Optional **`Sampling.Mapper`** only — [§7](#7-the-ux-mapper-samplingmapper--auto-derived) |
+| `project_name` | "Remove top-level `project_name`: it is not a V2 task-card interface." | `Scan.name` is the scan identity |
+| `scan_name` | generic unexpected-key error | `Scan.name` |
+| `task_result_dir` | generic unexpected-key error | derived by the loader (`task_config.py:483`) from the project root + scan name |
+| `run_id` | generic unexpected-key error | uuid4 per run (`core.py:420`); not authorable |
+| `Utils` | "…`Utils.interpolations_1D` moved to Jarvis-Operas: use `interp1.*` …" | `Operas` |
+
+Reserved (stamped by the loader onto the in-memory config, never authored in the card):
+`task_yaml`, `task_root`, `project_root`, `task_result_dir`, `scan_name`, `run_id`.
 
 ---
 
@@ -670,8 +690,8 @@ Sampling:
 
 ### 6.6 CSV
 
-Replay physical points from a file — no u→x mapping is performed (`Mapper` defaults to
-`none`; §7).
+Replay physical points from a file — no u→x mapping is performed (the derived mapper is
+`type: none` and params travel as CSV columns; [§7](#7-the-ux-mapper-samplingmapper--auto-derived)).
 
 | Key under `Sampling.Bounds` | Required | Default | Notes |
 |---|---|---|---|
@@ -1076,24 +1096,69 @@ Sampling:
 
 ---
 
-## 7. `Mapper` (top-level, optional)
+## 7. The u→x mapper (`Sampling.Mapper` + auto-derived)
 
-Explicit control of the Worker-held u→x mapper. When absent, derived automatically
-(`worker_config._default_mapper`):
+The mapper turns a sampler's normalized draw (`u_coords ∈ [0,1]^d`) into physical parameters
+that seed `Sample.params` / observables and feed `Sampling.selection`.
 
-- `Sampling.Method: CSV` → `type: none` (params travel in `opera_params`)
-- `Sampling.Variables` present → `type: distribution` with those variables
-- otherwise → `type: identity, keys: [x, y]` (test fallback)
+### 7.1 Default (no `Sampling.Mapper`)
 
-| `type` | Extra keys | Behavior |
-|---|---|---|
-| `distribution` | `variables` | V1-compatible distribution mapping (§6.2 formulas) |
-| `identity` | `keys` | `u[i]` passed through as `keys[i]` |
-| `none` | — | no mapping; Sample must carry `opera_params` |
-| *anything else* (`flat`, or omitted `type`) | `variables` | falls through to `FlatUMapper` (linear `min + u·(max-min)`, reading `distribution.parameters.min/max` directly, no `Φ⁻¹` support); **no variables → mapper silently `None`** |
+When `Sampling.Mapper` is omitted, behavior is unchanged: a distribution-only pipeline is
+auto-built from `Sampling.Variables` (D22 / `MapperPipeline`).
 
-`flat` is only reachable by explicitly writing `Mapper: {type: flat, ...}` (or any
-unrecognized `type` string) — auto-derivation never produces it.
+| Card shape | Behavior |
+|---|---|
+| `Sampling.Method: CSV` | no u→x mapping; params travel in `opera_params` (CSV columns). **`Sampling.Mapper` is rejected** (`JV2-MAP-010`) |
+| `Sampling.Variables` present | V1-compatible distribution mapping (§6.2), one parameter per variable, declaration order |
+| neither | identity fallback `keys: [x, y]` — legacy Eggbox / test only |
+
+### 7.2 Optional `Sampling.Mapper` — flat name → expression
+
+`Sampling.Mapper` is an **ordered map** of physical parameter names to pure expression
+strings. **There is no nested `derive` key** — the map *is* Mapper:
+
+```yaml
+Sampling:
+  Method: Bridson
+  Variables:
+    - name: t
+      distribution:
+        type: Flat
+        parameters: {min: 0.0, max: 6.283185307, length: 1.0}
+  Mapper:
+    x: "cos(t)"
+    y: "sin(t)"
+  selection: "y > 0"
+```
+
+Rules (enforced at `Jarvis2 validate` / load — prefix `JV2-MAP`):
+
+- **Stacking, not replacement.** `Variables[].distribution` still defines the prior /
+  sampling transform; Mapper expressions run **after** that (reparameterization only).
+- **Closed namespace.** Free symbols ⊆ `Variables` names ∪ other Mapper names ∪ constants
+  (`Pi`/`E`/`Inf` …). No observables, no `LogL`/`uuid`, no Operas functions, no RNG/I/O.
+- **DAG.** Expressions may reference earlier-defined Mapper names; load-time topological
+  sort; cycles → `JV2-MAP-004`.
+- **Names.** Mapper keys must not collide with `Variables[].name`, reserved constants, or
+  DATABASE columns (`uuid`, `sample_index`, `status`, `LogL`).
+- **Output.** Sampling variables **and** Mapper outputs all appear in `Sample.params`
+  (variables are never dropped).
+- **Arity of `u`.** `len(u_coords) == len(Variables)` (strict; no silent truncation).
+- **Plot axes.** Auto axis preference: `levelset.variable_names` → **`Mapper` write order**
+  → `Variables` order → archive columns.
+- **Resume.** Checkpoint card fingerprint includes a Mapper text hash; changing Mapper
+  (or Variables used by it) refuses `--resume` (`mapper_hash` / D22.5).
+
+Design: [`DESIGN_SAMPLING_MAPPER_2.0.md`](DESIGN_SAMPLING_MAPPER_2.0.md).
+
+### 7.3 Implementation notes
+
+- **Single pipeline.** Control process and Workers share `MapperPipeline` /
+  picklable `MapperSpec` (no dual u→x implementations on the hot path).
+- **Top-level `Mapper:` is still rejected** (`JV2-SCH-001 $`) — only
+  `Sampling.Mapper` is legal.
+- Historical note: older docs described a top-level `Mapper` with `type`/`keys`/`variables`.
+  That surface never shipped; do not revive it.
 
 ---
 
@@ -1308,8 +1373,19 @@ in the Worker, once imported at startup).
 | `call_mode` | no | `call` | intended `call` \| `acall`; **unknown values currently fall through to sync call** (A.17) |
 | `timeout_sec` (alias `timeout`) | no | none | thread-based timeout; the runaway thread is **not** killed |
 | `kwargs` | no | `{}` | static kwargs; `observables` is always injected, and every input observable is also passed as a kwarg |
-| `input` | no | pass-through | `"x"` (copy), `{name, expression}` (shared expression language; compiled once per Worker and reused per Sample), or `{name, entry}` (dotted copy) |
+| `input` | no | pass-through | `{name, expression}` (shared expression language; compiled once per Worker and reused per Sample) or `{name, entry}` (dotted copy). The bare-string copy form `"x"` is **implemented but currently unusable** — see the box below |
 | `output` | effectively yes | `[]` | `{name, entry}`; **an empty list discards the entire result** |
+
+> **Schema is stricter than the runtime (2026-08-04, D22.8).** `operas.py:319-321` explicitly
+> handles a bare string in `input` (`payload[item] = observables.get(item)` — copy that
+> observable through), but the schema requires every `input[]` entry to be an object:
+>
+> ```
+> JV2-SCH-001  $.Operas.Modules[0].input[0]   'x' is not of type 'object'
+> ```
+>
+> So `input: ["x"]` is rejected at `Jarvis2 validate` even though the Worker would execute it.
+> Until that is fixed, write `- {name: x, entry: x}`.
 
 The operator must return a `Mapping`, else `TypeError` → Sample fails.
 
@@ -1358,19 +1434,26 @@ Operas:
 
 ---
 
-## 11. `Likelihood`
+## 11. `Likelihood` → `Sampling.LogLikelihood`
+
+> **Correction (2026-08-04).** A **top-level `Likelihood:` block is rejected**
+> (`JV2-SCH-001 $`, suggestion: *"Move its expressions to `Sampling.LogLikelihood`; top-level
+> `Likelihood` is not a V2 interface."*). Authorable likelihood terms live under `Sampling`.
+> The `Likelihood.expressions` → `Sampling.LogLikelihood` precedence described below is an
+> **internal** config precedence (both shapes exist in the normalized in-memory config); it is
+> not a choice a card can make.
 
 ```yaml
-Likelihood:
-  expressions:
+Sampling:
+  LogLikelihood:
     - name: LogL_Z
       expression: LogGauss(z, 1.0, 0.1)
 ```
 
 | Key | Required | Default | Notes |
 |---|---|---|---|
-| `expressions[].name` | no | `"LogL"` | term name; a term named exactly `LogL` becomes the total (§6.8) |
-| `expressions[].expression` | **yes** | — | sympy expression string, evaluated over observables |
+| `Sampling.LogLikelihood[].name` | no | `"LogL"` | term name; a term named exactly `LogL` becomes the total (§6.8) |
+| `Sampling.LogLikelihood[].expression` | **yes** | — | sympy expression string, evaluated over observables |
 
 Precedence: `Likelihood.expressions` → `Sampling.LogLikelihood` (first non-empty wins; they
 are never merged). Semantics in §6.8. When neither exists the plan carries no likelihood step

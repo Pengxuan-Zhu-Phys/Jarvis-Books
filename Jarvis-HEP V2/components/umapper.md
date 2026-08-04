@@ -1,81 +1,90 @@
-# Component — UMapper (`jarvishep2/mapper.py`)
+# Component — UMapper / MapperPipeline (`jarvishep2/mapper.py`)
 
-**Role**: the Worker-held `u → x` mapper. Turns a Sampler's normalized draw (`u_coords ∈ [0,1]^d`)
-into physical parameters (`x`) per the variable/distribution definitions. Held by each Worker;
-never on the Sampler hot path.
-**Status**: **As-built** @ `jarvis2` `d0de31a`. `mapper.py` 113 lines.
-**Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §3, §4.
-**Reuses V1**: none by import — the distribution math lives in
-[`Sampling/variables.py`](parameters_variables.md) (`Variable.map_standard_random_to_distribution`),
-which `DistributionUMapper` delegates to.
-
----
-
-## 1. Module & line count
-
-`jarvishep2/mapper.py` (113 lines). Exports `DistributionUMapper`, `FlatUMapper`,
-`IdentityParamMapper`, `build_mapper`. All satisfy
-[`Sample.UMapperProtocol`](sample.md) (a single `map(u_coords) -> Mapping`).
-
-> **As-built drift:** the design proposed a single `UMapper` + `VariableSpec` with
-> `from_config/map/map_array/inverse/dim/signature`. **Shipped: three small mapper classes, each
-> with only `map()`, plus a `build_mapper` factory.** There is no `inverse`/`map_array`/
-> `signature`/`dim` and no file named `mapping.py`.
+**Role**: single `u → physical params` path for both the control process (`selection`) and
+Workers (`Sample.bind_params`). Distribution layer first, then optional
+`Sampling.Mapper` expressions.
+**Status**: **As-built** (D22). Design:
+[`../DESIGN_SAMPLING_MAPPER_2.0.md`](../DESIGN_SAMPLING_MAPPER_2.0.md).
+**Reuses V1**: distribution math in
+[`Sampling/variables.py`](parameters_variables.md)
+(`Variable.map_standard_random_to_distribution`).
 
 ---
 
-## 2. Classes defined
+## 1. Module
 
-### 2.1 `DistributionUMapper`
-Map `u_coords` using V1-compatible `Variable` distributions.
-- **Attributes:** `_variables: list[Variable]` (built from config mappings; each carries name,
-  description, distribution type, parameters).
-- **`__init__(variables: Sequence[Mapping])`** — for each variable dict, read
-  `distribution.type` / `distribution.parameters` and construct a `Variable`.
-- **`map(u_coords) -> dict[str, float]`** — reshape to 1-D, require `len ≥ #variables`, map each
-  coordinate via `Variable.map_standard_random_to_distribution`. Raises `ValueError` if too short.
+`jarvishep2/mapper.py`. Primary exports:
 
-### 2.2 `FlatUMapper`
-Map normalized coords to flat-distributed parameters using each variable's `min`/`max`.
-- **Attributes:** `_names: list[str]`, `_bounds: list[tuple[float,float]]`.
-- **`map(u_coords) -> dict[str, float]`** — `lo + u*(hi-lo)` per variable.
+| Symbol | Role |
+|--------|------|
+| `MapperPipeline` | Sole production mapper: `from_config` / `from_spec` / `map` |
+| `MapperSpec` | Picklable pure-data spec (variables + ordered expressions) |
+| `build_mapper_spec_from_config` | Card → `MapperSpec` (validation + DAG) |
+| `build_mapper` | Worker factory from picklable config (`type` + optional pipeline payload) |
+| `DistributionUMapper` / `FlatUMapper` / `IdentityParamMapper` | Internal / test helpers |
 
-### 2.3 `IdentityParamMapper`
-Test helper that passes coords straight through.
-- **Attributes:** `_keys: tuple[str, ...]`.
-- **`map(u_coords) -> dict[str, float]`** — `{key: coord}` per configured key, or `{"u": coord0}`
-  when no keys.
+All mappers satisfy [`Sample.UMapperProtocol`](sample.md) (`map(u_coords) -> Mapping`).
 
 ---
 
-## 3. Module-level functions
+## 2. YAML surface
 
-| Function | Behavior |
-|----------|----------|
-| `build_mapper(config) -> UMapperProtocol \| None` | Factory by `config["type"]`: `none`→None, `identity`→`IdentityParamMapper(keys)`, `distribution`→`DistributionUMapper(variables)`, default/`flat`→`FlatUMapper(variables)`. Returns `None` when no variables. |
+Optional under `Sampling` — **flat** name → expression (no nested `derive`):
+
+```yaml
+Sampling:
+  Mapper:
+    x: "cos(t)"
+    y: "sin(t)"
+```
+
+Omitted → distribution-only pipeline (backward compatible). Top-level `Mapper:` remains
+rejected. Full rules: design doc §4–§5; reference [`YAML_REFERENCE_2.0.md`](../YAML_REFERENCE_2.0.md) §7.
+
+Internal `MapperSpec` still uses fields named `derive_order` / `derive_exprs` — those are
+code identifiers only, not YAML keys.
 
 ---
 
-## 4. Determinism / parity
+## 3. Classes
 
-- `map(u)` is pure and deterministic; coordinate `u_coords[i]` always maps to the i-th configured
-  variable (construction order is the stable u-index ↔ variable mapping).
-- Built from **picklable config** at Worker spawn (no closures), so every Worker maps identically.
+### 3.1 `MapperPipeline` (production)
+
+1. Map `u` through each `Variables[].distribution` → sampling variable values.
+2. Evaluate Mapper expressions in topological order → merge into the same dict.
+3. `len(u) == len(Variables)` strictly (M5).
+
+Control samplers call `MapperPipeline.from_config(config)` once in `set_config`.
+Workers receive picklable `MapperSpec` via `worker_config` and rebuild with
+`MapperPipeline.from_spec`.
+
+### 3.2 Legacy helpers
+
+- **`DistributionUMapper`** — distribution-only (pipeline’s first stage).
+- **`FlatUMapper`** — min/max linear map; YAML-unreachable, tests only.
+- **`IdentityParamMapper`** — pass-through keys; fallback when no Variables.
 
 ---
 
-## 5. Interfaces / collaborators
+## 4. Determinism / resume
 
-- **Sample.bind_params(mapper)** ([sample.md](sample.md)) calls `mapper.map(self.u_coords)`.
-- **Worker** ([worker.md](worker.md)) builds the mapper from `worker_config["mapper"]` via
-  `build_mapper`; default mapper config is produced by
-  [`worker_config._default_mapper`](config_schema.md).
-- **Variable** ([parameters_variables.md](parameters_variables.md)) supplies the distribution math.
+- `map(u)` is pure: closed expression namespace (no observables / RNG / I/O).
+- Control and Worker share one implementation (M2).
+- Checkpoint `mapper_hash` fingerprints Mapper + variable names; drift refuses `--resume`.
+
+---
+
+## 5. Collaborators
+
+- **Sample.bind_params** — Worker applies pipeline after dequeue.
+- **Samplers** (`randoms`, `grid`, `bridson`, `adaptive_bridson`, `mcmc`, `dynesty`,
+  `fixed_set`) — control-side `selection` uses the same pipeline.
+- **plot_scene** — axis preference prefers Mapper key write order.
+- **worker_config._default_mapper** — emits pipeline / distribution / none / identity.
 
 ---
 
 ## 6. Tests
 
-Exercised via the mapper path in `tests/test_worker_calculator.py`,
-`tests/test_worker_mvp.py`, `tests/test_samplers_catalog.py`, and the distributed acceptance
-suite (Sample params bound through `build_mapper`).
+`tests/test_sampling_mapper.py` (D22 unit + closed-namespace + fingerprint).
+Regression via worker / sampler suites that bind params through `build_mapper`.
