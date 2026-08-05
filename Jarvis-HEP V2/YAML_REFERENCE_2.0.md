@@ -1357,10 +1357,16 @@ is in flight, then borrows and rebuilds only when necessary.
 
 ## 10. `Operas`
 
-Every dynamically discovered Jarvis-Operas function is callable in shared expressions by its
-qualified registered name, for example `math.add(x, y)`. Persisted user functions and installed
-`jarvis_operas.core` / `jarvis_operas.user` entry points are discovered independently in each
-spawn Worker. There is deliberately no V2-only function-registration or alias YAML block.
+Every dynamically discovered Jarvis-Operas **function** is callable in shared expressions by
+its qualified registered name, for example `math.add(x, y)`. **Namespace constants** (D23)
+use the same dotted syntax **without parentheses**, for example `pdg.mZ` or
+`(mz - pdg.mZ) / pdg.mZ`. Constants are folded at parse time into literal floats (they do
+not appear in free symbols or the lambdify parameter list). A name cannot be both a bare
+constant and a callable form: `pdg.mZ()` is an error.
+
+Persisted user functions and installed `jarvis_operas.core` / `jarvis_operas.user` entry
+points are discovered independently in each spawn Worker. There is deliberately no V2-only
+function-registration or alias YAML block.
 
 `Operas.Modules[]` — in-process Python operators (no subprocess, no staging — runs directly
 in the Worker, once imported at startup).
@@ -1369,7 +1375,7 @@ in the Worker, once imported at startup).
 |---|---|---|---|
 | `make_paraller` | no | ignored | retained V1 spelling/shape; V2 Worker and workflow-layer concurrency own scheduling |
 | `name` | effectively yes | `Operas<i>` | dict key for the execution plan |
-| `operator` | **yes** (`KeyError`) | — | importlib dotted callable first, then optional Jarvis-Operas registry name; resolved once per Worker |
+| `operator` | **yes** (`KeyError`) | — | importlib dotted callable first, then optional Jarvis-Operas registry name; resolved once per Worker. **Must not** be a namespace constant (`pdg.mZ` etc.) — that is rejected with `JV2-OPR-002`; write the constant in an expression instead |
 | `call_mode` | no | `call` | intended `call` \| `acall`; **unknown values currently fall through to sync call** (A.17) |
 | `timeout_sec` (alias `timeout`) | no | none | thread-based timeout; the runaway thread is **not** killed |
 | `kwargs` | no | `{}` | static kwargs; `observables` is always injected, and every input observable is also passed as a kwarg |
