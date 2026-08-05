@@ -29,13 +29,15 @@ All mappers satisfy [`Sample.UMapperProtocol`](sample.md) (`map(u_coords) -> Map
 
 ## 2. YAML surface
 
-Optional under `Sampling` — **flat** name → expression (no nested `derive`):
+Optional under `Sampling` — list of fixed-key mappings (no free-form name keys):
 
 ```yaml
 Sampling:
   Mapper:
-    x: "cos(t)"
-    y: "sin(t)"
+    - name: x
+      expression: "cos(t)"
+    - name: y
+      expression: "sin(t)"
 ```
 
 Omitted → distribution-only pipeline (backward compatible). Top-level `Mapper:` remains

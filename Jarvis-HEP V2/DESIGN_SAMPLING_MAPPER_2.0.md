@@ -1,6 +1,6 @@
 # DESIGN — `Sampling.Mapper`（u → 物理参数的显式映射，V2，D22）
 
-**Status**: **已实现**（扁平 `Sampling.Mapper`：name → expression）。2026-08-04；YAML 形态修订：去掉嵌套 `derive`，Mapper 本身即为映射表。
+**Status**: **已实现**。YAML：`Sampling.Mapper` 为 **`{name, expression}` 列表**（2026-08-05 起；此前短时的扁平 name→expr 对象因对 JSON Schema 不友好已废弃）。
 **Scope**: **V2-only**。V1 冻结在 1.7.4，非 bug 不加新功能，本设计永不回移。
 **维护者提问（2026-08-04）**：
 
@@ -26,7 +26,7 @@
 |---|---|
 | **Q1** mapper 依赖表达式系统？ | **做。**收益明确（零新语法、编译一次缓存、与 `selection`/`LogLikelihood` 同一套词汇），但必须带三条硬约束：**命名空间封闭**（禁止看见 observable / 随机数 / I/O）、**全系统只能有一个实现**、**表达式层叠加在 distribution 层之上而不取代它**。 |
 | **Q2** `x=sin(t), y=cos(t)` 怎么做？ | **两个方案都不选。**不把 `x,y` 做成 observable（绘图轴、selection 时序、DATABASE 语义三处都会错），也不引入 `v_coords`（那是 D21 刚拆掉的"第二套坐标真相"）。选**第三条路**：`u` 仍是唯一被持久化的坐标，`Sampling.Mapper` 输出**任意元数的具名物理参数**，`x,y` 进 `Sample.params`。 |
-| 新增 YAML | `Sampling.Mapper`：扁平 `{名字: 表达式}`（无嵌套 `derive`），`Sampling` 下唯一新键。 |
+| 新增 YAML | `Sampling.Mapper`：`[{name, expression}, …]` 列表（schema 键固定，用户符号不进 property 名），`Sampling` 下唯一新键。 |
 | 必须告警 | 派生维度 > 采样维度 且 Method 是统计型采样器（Dynesty / MultiNest / MCMC 族）时，**装载期 WARNING**：先验活在 `Variables` 空间，样本落在派生空间的零测度流形上。 |
 | 必须一并修 | `YAML_REFERENCE §7` 记录了一个**代码已拒绝**的顶层 `Mapper` 块；`worker_config.py:25` 留着读它的**死分支**；`FlatUMapper` 从 YAML **已不可达**。 |
 
@@ -282,9 +282,11 @@ Sampling:
   Bounds:
     Radius: 0.01
     MaxAttempt: 30
-  Mapper:                         # 纯函数：采样变量 → 物理参数（扁平 name→expr）
-    x: "cos(t)"
-    y: "sin(t)"
+  Mapper:                         # 纯函数：采样变量 → 物理参数（列表，固定键）
+    - name: x
+      expression: "cos(t)"
+    - name: y
+      expression: "sin(t)"
   selection: "y > 0"              # 现在写得出来了
 ```
 
@@ -323,41 +325,44 @@ Sampling:
 
 ### 4.1 语法
 
-`Sampling.Mapper` 是 `Sampling` 下的**闭合**块：自身就是**有序映射**
-`{参数名: 表达式字符串}`（`additionalProperties: string`）。**没有**嵌套的
-`derive` / `parameters` 层——去掉一层冗余，卡片写法直接就是 Mapper 列表。
+`Sampling.Mapper` 是 `Sampling` 下的**列表**，每项是固定键的映射
+`{name, expression}`（`additionalProperties: false`）。**不要**写成
+`x: "cos(t)"` 这种“用户符号当 property 名”的自由对象——那对 JSON Schema 不友好，
+会把结构字段与用户输入混在同一层。
 
 ```yaml
 Sampling:
   Mapper:
-    <参数名>: <表达式字符串>
-    ...
+    - name: <参数名>
+      expression: <表达式字符串>
 ```
 
 示例：
 
 ```yaml
   Mapper:
-    x: "cos(t)"
-    y: "sin(t)"
+    - name: x
+      expression: "cos(t)"
+    - name: y
+      expression: "sin(t)"
 ```
 
-- `Mapper` 是**有序映射**（YAML 保序），书写顺序仅用于绘图轴偏好（§4.7）；求值顺序由
-  DAG 决定（§4.3），与书写顺序无关。
-- 每个值必须是**非空字符串**表达式，语法同 `selection` / `LogLikelihood`。
-- 键名即派生物理参数名；内部实现（`MapperSpec.derive_order` 等）可仍用 derive 前缀，
-  那是代码字段名，**不出现在 YAML 表面**。
-- `Mapper` 缺省时行为与今天完全一致（自动推导 distribution mapper）——**纯附加，不破坏
-  任何现有卡片**。
+- 列表顺序仅用于绘图轴偏好（§4.7）；求值顺序由 DAG 决定（§4.3），与书写顺序无关。
+- `name` / `expression` 均为非空字符串；表达式语法同 `selection` / `LogLikelihood`。
+- 内部实现（`MapperSpec.derive_order` 等）可仍用 derive 前缀，那是代码字段名，
+  **不出现在 YAML 表面**。
+- `Mapper` 缺省时行为与无 Mapper 时完全一致（自动推导 distribution mapper）——
+  **纯附加**。
+- 旧的扁平 map 形态（`Mapper: {x: "cos(t)"}`）**拒绝**（`JV2-MAP-001` / schema 类型错误）。
 
-**长写法留给以后**（不变量 1，附加键；届时需放宽 schema，允许 string | object）：
+**长写法留给以后**（不变量 1，在条目上附加可选键）：
 
 ```yaml
   Mapper:
-    y:                          # v2 扩展，v1 不实现
+    - name: y
       expression: "sin(t)"
-      description: "unit-circle y"
-      latex: "$y$"              # 与 D15.7 Variables[].latex 对齐
+      description: "unit-circle y"   # v2 扩展
+      latex: "$y$"                   # 与 D15.7 Variables[].latex 对齐
 ```
 
 ### 4.2 命名空间与可见性
@@ -376,9 +381,12 @@ Sampling:
 
 ```yaml
     Mapper:
-      z: "x + y"          # 允许，即使写在 x,y 之前
-      x: "cos(t)"
-      y: "sin(t)"
+      - name: z
+        expression: "x + y"   # 允许，即使写在 x,y 之前
+      - name: x
+        expression: "cos(t)"
+      - name: y
+        expression: "sin(t)"
 ```
 
 装载期对 Mapper 名做依赖图 + 拓扑排序，得到一个固定的求值序列，存进 pipeline spec
@@ -429,7 +437,7 @@ u ─┬─> MapperPipeline ─> {t, x, y}  ─┬─> selection（控制进程�
 
 ```
 levelset.variable_names
-  → Sampling.Mapper 的书写顺序               ← 新增
+  → Sampling.Mapper 列表书写顺序             ← 新增
   → Sampling.Variables 顺序
   → 归档数值列
 ```
@@ -442,7 +450,7 @@ levelset.variable_names
 
 | Path | § | Required | Default |
 |---|---|---|---|
-| `Sampling.Mapper.<name>` | 6.14 | no | — |
+| `Sampling.Mapper[].name` / `expression` | 6.14 | no | — |
 
 ---
 
@@ -452,7 +460,7 @@ levelset.variable_names
 
 | 码 | 级别 | 触发 | suggestion |
 |---|---|---|---|
-| `JV2-MAP-001` | error | `Mapper` 不是映射 / 某个值不是非空字符串 | 给出最小正确形状：`Mapper: {x: "cos(t)"}` |
+| `JV2-MAP-001` | error | `Mapper` 不是列表 / 条目缺 `name`/`expression` / 误用扁平 map | 给出列表形状：`Mapper: [{name: x, expression: "cos(t)"}]` |
 | `JV2-MAP-002` | error | 表达式引用了不在命名空间里的符号（§2.3 子集检查） | 列出未知符号 + 当前可用符号集 |
 | `JV2-MAP-003` | error | Mapper 名与 `Variables[].name` 冲突 | 点名冲突的名字 |
 | `JV2-MAP-004` | error | Mapper 表达式依赖成环 | 打印环 |
@@ -612,7 +620,7 @@ max |difference| over 2000 random rows: 0.0
 |---|---|---|
 | **P1** | 无 Mapper 卡片零回归 | 65 张示例卡 `Jarvis2 validate` 通过率不变；同 seed 下 params 输出逐位相同（M6） |
 | **P2** | 双侧一致 | 单测：同一 `u` 经控制侧 pipeline 与 Worker 侧 pipeline 得到相同 dict（M2） |
-| **P3** | 封闭性 | `Mapper: {x: "sin(t) + LogL"}` 在 `Jarvis2 validate` 阶段报 `JV2-MAP-002` 并点名 `LogL`；不连 Redis、不起进程 |
+| **P3** | 封闭性 | `Mapper: [{name: x, expression: "sin(t) + LogL"}]` 在 `Jarvis2 validate` 阶段报 `JV2-MAP-002` 并点名 `LogL`；不连 Redis、不起进程 |
 | **P4** | 参数方程端到端 | §3.4 的卡片跑 200 点：DATABASE 含 `t,x,y` 三列；`x²+y²=1` 在 1e-12 内；`selection: "y > 0"` 确实只留半圆；自动出图的轴是 `x,y` 不是 `t` |
 | **P5** | 续跑等价 | 该卡片跑到中途 SIGINT → `--resume` → 最终 DATABASE 的 `(uuid → (t,x,y))` 映射与未中断运行逐行相同；无重复 uuid |
 | **P6** | 指纹保护 | 改掉 `Mapper` 表达式后 `--resume` 被拒绝并给出可执行的说明（§8） |
@@ -629,7 +637,7 @@ max |difference| over 2000 random rows: 0.0
 |---|---|---|
 | D22.1 | **文档先行**：修 §7 / §3.3 的顶层 `Mapper` 矛盾（纯文档，可立即做） | — |
 | D22.2 | `MapperPipeline` + `MapperSpec`；收编 Worker 侧与控制侧的两套实现（**无新 YAML**，纯重构 + M2/M5/M6 回归） | D22.1 |
-| D22.3 | `Sampling.Mapper` 扁平 map schema + `JV2-MAP-0xx` 装载期诊断（§5） | D22.2 |
+| D22.3 | `Sampling.Mapper` 列表 schema（`{name, expression}`）+ `JV2-MAP-0xx` 装载期诊断（§5） | D22.2 |
 | D22.4 | 求值接线：`selection` 符号集扩展、`bind_params` 播种、DATABASE 列 | D22.3 |
 | D22.5 | checkpoint 卡片指纹纳入 Mapper 文本哈希；`--resume` 变更拒绝（§8） | D22.3 |
 | D22.6 | 绘图轴优先级 + skill/参考文档 + 一张参数方程示例卡 | D22.4 |

@@ -176,11 +176,13 @@ Sampling:
 
 # ---- u -> x mapper (§7) ----------------------------------------------------
 # Default: auto-derived from Sampling.Variables (distribution → params).
-# Optional explicit reparameterization (flat name → expression):
+# Optional explicit reparameterization (list of {name, expression}):
 #   Sampling:
 #     Mapper:
-#       x: "cos(t)"
-#       y: "sin(t)"
+#       - name: x
+#         expression: "cos(t)"
+#       - name: y
+#         expression: "sin(t)"
 # Top-level `Mapper:` (outside Sampling) is still rejected.
 
 # ---- external tool registry -------------------------------------------------
@@ -324,7 +326,7 @@ detail (error types, aliases, code citations).
 | `Sampling.data` / `Sampling.points_csv` | [6.7](#67-check_modules-jarvis2-check--samplingmode-check_modules) | yes (check_modules) | — |
 | `Sampling.Bounds.Seed` / `Sampling.Bounds.seed` | [6.1](#61-keys-common-to-bridson--random--grid) | no | `0` |
 | `Sampling.selection` | [6.1](#61-keys-common-to-bridson--random--grid) | no | — |
-| `Sampling.Mapper.<name>` | [7](#7-the-ux-mapper-samplingmapper--auto-derived) | no | — |
+| `Sampling.Mapper[].name` / `expression` | [7](#7-the-ux-mapper-samplingmapper--auto-derived) | no | — |
 | `Sampling.Variables[].name` | [6.2](#62-variables-entry--distribution-types) | yes | — |
 | `Sampling.Variables[].description` | [6.2](#62-variables-entry--distribution-types) | no | — |
 | `Sampling.Variables[].distribution.type` | [6.2](#62-variables-entry--distribution-types) | yes | — |
@@ -368,7 +370,7 @@ detail (error types, aliases, code citations).
 ### 3.3 `LibDeps` / `Calculators` / `Operas` / `Likelihood`
 
 > **Top-level** `Mapper` is rejected. Optional **`Sampling.Mapper`** is a flat
-> name → expression map (D22) — see [§7](#7-the-ux-mapper-samplingmapper--auto-derived).
+> list of `{name, expression}` (D22) — see [§7](#7-the-ux-mapper-samplingmapper--auto-derived).
 > Omitted → distribution-only auto mapper (backward compatible).
 
 | Path | §  | Required | Default |
@@ -1114,8 +1116,9 @@ auto-built from `Sampling.Variables` (D22 / `MapperPipeline`).
 
 ### 7.2 Optional `Sampling.Mapper` — flat name → expression
 
-`Sampling.Mapper` is an **ordered map** of physical parameter names to pure expression
-strings. **There is no nested `derive` key** — the map *is* Mapper:
+`Sampling.Mapper` is an **ordered list** of fixed-key mappings
+`{name, expression}`. Schema keys stay fixed so user symbols never become
+object property names (JSON Schema–friendly):
 
 ```yaml
 Sampling:
@@ -1126,10 +1129,14 @@ Sampling:
         type: Flat
         parameters: {min: 0.0, max: 6.283185307, length: 1.0}
   Mapper:
-    x: "cos(t)"
-    y: "sin(t)"
+    - name: x
+      expression: "cos(t)"
+    - name: y
+      expression: "sin(t)"
   selection: "y > 0"
 ```
+
+The free-form object form `Mapper: {x: "cos(t)"}` is **rejected** (`JV2-MAP-001` / schema).
 
 Rules (enforced at `Jarvis2 validate` / load — prefix `JV2-MAP`):
 
