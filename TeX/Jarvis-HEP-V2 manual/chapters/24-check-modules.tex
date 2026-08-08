@@ -13,7 +13,7 @@ of discovering a broken \yamlkey{entry} path an hour into a real scan.
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 check task.yaml
+Jarvis check task.yaml
 \end{jcmd}
 \end{terminal}
 
@@ -94,7 +94,7 @@ rendered text as the file log, so what you debug is what production records.
   \item Keep \file{data/check\_points.csv} in the project: two or three points whose
         expected observables you know --- a published benchmark, a point you computed
         by hand, given as u-space coordinates for your declared \yamlkey{Variables}.
-  \item Run \cli{Jarvis2 check} after \emph{any} edit to \yamlkey{execution} blocks,
+  \item Run \cli{Jarvis check} after \emph{any} edit to \yamlkey{execution} blocks,
         \yamlkey{Dump} variables, or \yamlkey{entry} paths.
   \item Compare the captured observables against the known values before launching the
         scan.
@@ -102,13 +102,13 @@ rendered text as the file log, so what you debug is what production records.
 
 \begin{jtip}
 The check points double as an integration test for tool upgrades: after rebuilding an
-external calculator, one \cli{Jarvis2 check} against known-good numbers tells you
+external calculator, one \cli{Jarvis check} against known-good numbers tells you
 whether physics changed before any scan does.
 \end{jtip}
 
 \begin{jtip}
 No fixed points yet and just want a fast smoke of a \sampler{Dynesty} or
-\sampler{MultiNest} card? Skip the \textsc{csv} entirely --- \cli{Jarvis2 check} draws
+\sampler{MultiNest} card? Skip the \textsc{csv} entirely --- \cli{Jarvis check} draws
 \code{n\_samples} real points from your \yamlkey{Bounds}/\yamlkey{Variables} and runs
 them through the full pipeline, no separate fixture to maintain.
 \end{jtip}

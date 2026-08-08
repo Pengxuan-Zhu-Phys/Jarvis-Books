@@ -9,23 +9,26 @@ pays for itself. This is that picture.
 \section{The process family}
 \label{sec:process-family}
 
-A running scan is five kinds of process:
+A running scan is the five kinds of process in Table~\ref{tab:process-family}:
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Process} & \textbf{Owns} \\
     \midrule
-    \code{Jarvis2:<scan>} & the control process: the Sampler, the factory that spawns
+    \code{Jarvis:<scan>} & the control process: the Sampler, the factory that spawns
       and supervises everything else, checkpointing, the run summary \\
     \code{Jarvis-Redis:<scan>} & the broker (started for you when not already running) \\
-    \code{Jarvis2-Worker-N} & one Sample at a time: mapping, calculators, operas,
+    \code{Jarvis-Worker-N} & one Sample at a time: mapping, calculators, operas,
       likelihood; plus a per-Worker file-operation helper process for
       \yamlkey{save} copies and deletions \\
-    \code{Jarvis2-Archiver} & batched database writes, bucket packing \\
+    \code{Jarvis-Archiver} & batched database writes, bucket packing \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{The process family, as named in \clih{ps}.}
   \label{tab:process-family}
 \end{table}
@@ -40,13 +43,14 @@ process boundary.
 \label{sec:redis-schema}
 
 Redis is the \emph{only} shared truth, and it holds only light data --- IDs, counters,
-small dictionaries. Products live on disk.
+small dictionaries. Products live on disk. Table~\ref{tab:redis-schema} sketches the key
+shapes it uses.
 
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.213\linewidth}p{0.532\linewidth}@{}}
     \toprule
     \textbf{Key} & \textbf{Type} & \textbf{Role} \\
     \midrule
@@ -136,7 +140,7 @@ Bucket packing is gated three ways --- sealed, no active Samples, all records wr
         duplicate rows.
   \item \textbf{Redis dies}: the scan cannot continue --- \Jtwo\ fails fast with a
         connection error rather than degrading. The checkpoint covers you: restart the
-        service and \cli{Jarvis2 run --resume}.
+        service and \cli{Jarvis run --resume}.
   \item \textbf{Control process dies}: the 30-second checkpoint plus resume
         (Chapter~\ref{ch:checkpoint}).
 \end{itemize}

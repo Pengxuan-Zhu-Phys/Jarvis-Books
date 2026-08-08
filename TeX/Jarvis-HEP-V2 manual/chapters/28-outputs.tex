@@ -63,7 +63,7 @@ the \textsc{hdf5} is missing from the \textsc{csv}. For most analysis,
 into a \sampler{CSV} replay (Chapter~\ref{ch:csv-sampler}).
 
 Missing this file --- an interrupted run, or a deleted \textsc{csv} --- is not a lost
-cause: \cli{Jarvis2 convert <task>.yaml} regenerates it (and any other
+cause: \cli{Jarvis convert <task>.yaml} regenerates it (and any other
 \file{DATABASE/*.hdf5}) from the \textsc{hdf5} record alone, without touching Redis
 (Section~\ref{sec:cli-convert}).
 
@@ -99,5 +99,5 @@ The layout and field order of everything in this chapter is contract-stable
 \begin{jtip}
 Archive \file{outputs/<scan>/} and you have archived the scan: records, artifacts,
 summary --- plus the card itself if you pack at the project level
-(\cli{Jarvis2 project pack . --repro}, Chapter~\ref{ch:project-cli}).
+(\cli{Jarvis project pack . --repro}, Chapter~\ref{ch:project-cli}).
 \end{jtip}

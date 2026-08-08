@@ -103,12 +103,13 @@ Sampling:
       print_progress: true
 \end{yamlwin}
 
-\begin{fullwidth}
+Table~\ref{tab:dynesty-run-nested} documents the dynamic-only keys shown here.
+
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.22\linewidth}p{0.18\linewidth}p{0.56\linewidth}@{}}
+  \begin{tabular}{@{}p{0.229\linewidth}p{0.187\linewidth}p{0.584\linewidth}@{}}
     \toprule
     \textbf{Key} & \textbf{Default} & \textbf{Meaning} \\
     \midrule
@@ -136,7 +137,6 @@ Sampling:
   Chapter~\ref{ch:multinest}. Full surface: \code{Sampling\_Dynesty\_Full.yaml}.}
   \label{tab:dynesty-run-nested}
 \end{table}
-\end{fullwidth}
 
 \begin{jwarn}
 Do not write \yamlkey{Bounds.dynamic} here ``for clarity'' --- there is no such key
@@ -209,9 +209,14 @@ phases accordingly.
 \section{Dynamic or static?}
 \label{sec:dynesty-vs-static}
 
+Table~\ref{tab:dynesty-vs-static} answers the question by what you are trying to get out
+of the run.
+
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.44\linewidth}p{0.50\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.468\linewidth}p{0.532\linewidth}@{}}
     \toprule
     \textbf{You want\ldots} & \textbf{Use} \\
     \midrule
@@ -227,6 +232,7 @@ phases accordingly.
       \{pfrac: 0.0\}} \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{Choosing between the two engines.}
   \label{tab:dynesty-vs-static}
 \end{table}
@@ -244,10 +250,13 @@ runs the dynamic engine; there is nothing extra to turn on.
 Chapter~\ref{ch:multinest} applies, plus a batch phase that reallocates live points
 toward posterior resolution once the initial pass finishes --- the default choice
 between the two engines unless you need static, byte-compatible V1 behavior.
+Table~\ref{tab:dynesty-summary} states it field by field.
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Field} & \textbf{\sampler{Dynesty}} \\
     \midrule
@@ -257,12 +266,13 @@ between the two engines unless you need static, byte-compatible V1 behavior.
     Dimensions & any \\
     Required keys & none strictly; set \yamlkey{Bounds.nlive} \\
     u$\to$x mapping & yes \\
-    \yamlkey{Seed} role & \code{numpy} generator seed (proposal sequence only) \\
+    \yamlkey{Bounds.Seed} role & \code{numpy} generator seed (proposals only) \\
     \textsc{uuid}s & fresh per proposal, \textbf{not} seed-deterministic \\
     Mid-run resume & no --- use \code{dynesty}'s own \yamlkey{checkpoint\_file} \\
     Extra output & \file{dynesty\_result.csv}, \file{sampler\_summary.json} \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{\sampler{Dynesty} at a glance.}
   \label{tab:dynesty-summary}
 \end{table}

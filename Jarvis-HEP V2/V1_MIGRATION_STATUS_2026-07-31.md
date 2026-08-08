@@ -55,17 +55,17 @@ V2 的 Distributor 注册了 17 个方法名，但其中有别名（`AM`/`AMMCMC
 这与 `DESIGN_SAMPLERS_2.0.md` 的 Non-goals 一致（RL/DNN/差分进化明确列为later milestone），
 不是遗漏。
 
-### 2.2 CLI：3 个 V1 功能没有对应实现
+### 2.2 CLI：仅 `--benchmark` 尚无对应实现
 
 | V1 | 作用 | V2 |
 |---|---|---|
 | `--benchmark [秒数]` | 吞吐基准模式 | ❌ 无 |
-| `--refs` | 打印**引用信息**（内置采样器的参考文献） | ❌ 无 |
-| `--skip-library-installation` | 跳过库安装 | ❌ 无 |
+| `--refs` | 打印**引用信息**（内置采样器的参考文献） | ✅ `Jarvis2 --refs` |
+| `--skip-library-installation` | 跳过库安装 | ✅ `Jarvis2 run/check --skip-library-installation` |
 
-`--refs` 值得单独说：物理学家写论文要引用 dynesty / emcee 这类底层采样器，V1 提供了一条命令
-直接输出。V2 没有，用户得自己去翻文献。**这是唯一一个面向最终用户产出的缺口**，其余两个是
-运维/开发向。
+`--refs` 已于 2026-08-02 迁移为 `Jarvis2 --refs`：它输出 V2 logo、框架与内置采样器参考文献，
+不需要 task YAML、Redis 或 Worker。`--skip-library-installation` 已随 D18.4 提供；仅
+`--benchmark` 仍是 V1 CLI 兼容缺口。
 
 其余 V1 CLI 功能均已迁移（`--plot` `--convert` `--monitor` `--resume` `--check-modules`
 `--skip-draw-flowchart` `-v` `project` `portal`），且 V2 另有 V1 没有的
@@ -116,8 +116,7 @@ EnvReqs/LibDeps）**全部由 HEP 自己拥有**，没有任何外部组件参�
    （校验时给 warning，或从 `JV2-MTH-003` 的 "Available:" 列表里摘掉），
    而不是让"校验通过"暗示它已就绪。（此问题在 `SCHEMA_REVIEW_2026-07-31.md` §1 已提过，仍未决。）
 
-2. **`--refs` 要不要补**：这是唯一一个直接影响最终用户产出（论文引用）的 V1 缺口，
-   实现成本很低（一份静态引用表 + 一条命令）。
+2. **`--refs`**：已作为 D18.8 完成；后续只需在新增内置采样器时补充其引用。
 
 ---
 
@@ -170,13 +169,13 @@ Jarvis-Operas：内置实验限制见 `Jarvis2 operas list | grep dmddxe`；自�
 
 | | 类型 |
 |---|---|
-| V2 支持 | `Flat` `Log` `Normal` `Log-Normal` `Logit` |
-| **V2 缺** | `Binomial` `Poisson` `Beta` `Exponential` `Gamma` |
+| V2 支持 | `Flat` `Log` `Normal` `Log-Normal` `Logit` `Binomial` `Poisson` `Beta` `Exponential` `Gamma` |
+| **V2 缺** | — |
 
-V2 的 `variables.py` 用显式白名单硬拒绝（`JV2-VAR-002`），所以 V1 卡片里写 `Poisson`
-会直接失败。**缓解因素**：65 张真实卡片里 **0 张**用到这 5 种，所以这是潜在的 V1 卡片
-兼容缺口，不影响任何现有工作流。V1 的实现是 `variables.py` 里几行 numpy 调用，
-补齐成本很低（WP **D18.7**）。
+**D18.7 completed (2026-08-02).** The five V1 distributions now validate and run through
+V2's deterministic Worker mapper.  Binomial and Poisson preserve integer outputs; Beta,
+Exponential, and Gamma use inverse-CDF transforms, so a resumed distributed scan reproduces
+the same values from its unit-cube coordinates.
 
 ### 6.3 澄清：`modes` 不是缺口（V1 死代码）
 
@@ -198,10 +197,8 @@ V2 的 `variables.py` 用显式白名单硬拒绝（`JV2-VAR-002`），所以 V1
 |---|---|---|
 | LibDeps 装一次（完全没有安装引擎 + 2 个高频 token KeyError） | 高 | D18.1–18.5 |
 | `Utils.interpolations_1D` 迁移路径无指引（15 张卡片） | **中高**（能力在，是指引缺失） | D18.6 |
-| 5 种变量分布被硬拒 | 中（0 张卡片在用） | D18.7 |
 | 12 个 V1 采样器无实现 | 中（多数是 `DESIGN_SAMPLERS_2.0.md` 明列的 non-goal） | 待定 |
-| `--refs`（引用信息，写论文用） | 中低 | 待定 |
-| `--benchmark` / `--skip-library-installation` | 低（后者随 D18.4 一起） | D18.4 |
+| `--benchmark` | 低 | 待定 |
 
 ---
 
@@ -242,10 +239,11 @@ V2 拒绝它是**有意为之且正确的**。Jarvis-Operas 的 `interp1.*` / `d
 该桩的可选三行封堵见 D20 设计 §1.1.1，明确**不立 WP**。
 本文后续统计 V1 迁移缺口时不再计入 `modes`。
 
-### 7.3 新增：`--refs` 确认要补进 CLI
+### 7.3 `--refs` 已迁移进 CLI
 
-维护者确认这是要做的。V1 的 `--refs` 打印 logo + 内置采样器的**参考文献**，供用户写论文引用
-（dynesty、emcee 等）。V2 现在没有。立为 **D18.8**。
+V1 的 `--refs` 打印 logo + 内置采样器的**参考文献**，供用户写论文引用
+（dynesty、emcee 等）。**D18.8 completed (2026-08-02)**：V2 的 `Jarvis2 --refs` 输出相同
+类别的参考信息，并明确标出 Random/Grid/CSV 是无外部 sampler citation 的原生策略。
 
 ### 7.4 新增：Nuisance sampler 的定位澄清
 

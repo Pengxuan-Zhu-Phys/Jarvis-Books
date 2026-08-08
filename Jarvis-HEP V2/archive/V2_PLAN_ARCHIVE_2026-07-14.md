@@ -81,10 +81,15 @@ Statuses here are frozen history; the live plan only tracks open work.
 | D18.3 | LibDeps install engine | D18 | D18.1, D18.2 | **done** | 2026-08-01 | `LibraryInstaller` runs after environment preflight and before Redis/Workers. It preserves V1's sequential standalone `cd` handling for plain-string commands, resolves dependency layers, caps each layer at `make_paraller`, writes `logs/<scan>/library-<name>.log`, and throws `LibraryInstallError` before Redis on failure. |
 | D18.4 | LibDeps install control + skip CLI | D18 | D18.3 | **done** | 2026-08-01 | Reuses D13.11's `jarvis_install.json` / `.jarvis_install_stamp.json` filenames and schema. Fingerprints provide reuse; `reinstall: true` advances the global epoch and rebuilds non-interactively. `run`/`check --skip-library-installation` warn and require existing module paths. |
 | D18.5 | LibDeps docs + skill | D18 | D18.3 | **done** | 2026-08-01 | Updated YAML_REFERENCE and component references; added `skills/shared-libraries.md` and its validated fixture `tests/fixtures/shared_libraries_skill.yaml`. The skill documents first-build cost and the deliberate source-tree-change limitation. |
+| D20.1–D20.4 | Multimode Calculator: schema, shared physical packs, runtime expansion, and flowchart | D20 | — | **done** | 2026-08-02 | V2-only `Calculators.Modules[].modes` expands each mode to a dotted logical node while all modes share the parent's physical `runtime/<parent>/<PackID>` pool. Parent installation runs only for a zero build; mode installation replaces the previous mode without rerunning the parent installation. Each mode has independent optional initialization/execution/I/O, with execution-path precedence `mode.execution.path > mode.path > parent.path`. Redis tracks free lists and physical-pack affinity; one disk stamp is the restart fallback. Flowcharts render modes as ordinary Calculator nodes without an outer dashed container. |
+| D20.5 | Fix `JV2-MOD-005` cross-block dependency regression | D20 | D20.1 | **done** | 2026-08-02 | Bare `required_modules` names remain valid cross-block ordering hints (`LibDeps`, `Operas`, `Parameters`). Validation is strict only for dotted references whose parent is a declared multimode Calculator; invalid children keep did-you-mean guidance. The 65-card corpus has zero `JV2-MOD-*` regression errors. |
+| D20.6 | Preserve shared-pack mode affinity under Worker contention | D20 | D20.1 | **done** | 2026-08-02 | Acquisition prefers exact-mode and unassigned packs, then waits up to the bounded affinity window for a busy hot pack before borrowing/rebuilding. It borrows immediately when no target-mode pack is busy, avoiding a slowdown when packs are fewer than modes. A deterministic 3-mode/3-pack/3-Worker pressure gate records zero rebuilds in five repeated runs. `JV2-MOD-009` warns when pool sizing is below the practical `modes + Workers` target and states that fewer packs than modes necessarily thrash. |
+| D20.7 | Apply mode `selection` before pack acquisition and rebuild | D20 | D20.1 | **done** | 2026-08-02 | Worker mode groups filter skipped modes before greedy ordering and Redis acquisition. A selected-out mode neither acquires nor rebuilds a physical pack and therefore cannot pollute its affinity label. Direct-step and group-level regression tests cover the no-acquire guarantee. |
+| D20.8 | Align multimode documentation and validation polish | D20 | D20.5 | **done** | 2026-08-02 | Restored actionable Utils-to-Jarvis-Operas migration wording; bare parent dependency expansion excludes the current logical child; rewrote the design, YAML reference, schema guide, and external-calculator skill to the shared-only contract. Removed obsolete `@Mode`, `mode_packs`, per-mode physical paths, and `build`-stage claims. All four multimode YAML examples parse successfully. |
 
 ---
 
-## Archived Work Packages (WP-D0.1 … WP-D7.1)
+## Archived Work Packages (selected detailed records)
 
 ### WP-D0.1 — New `Sample` model
 
@@ -590,5 +595,145 @@ Statuses here are frozen history; the live plan only tracks open work.
   only by the control process; Workers write only their pack stamp. Pack summaries are
   refreshed best-effort during control-process shutdown.
 - **Out of scope**: D13.12, D13.13, D8/Agent JSON.
+
+---
+
+### WP-D20.1–D20.8 — Multimode Calculator and review closeout
+
+- **Goal**: run mutually exclusive build modes of one Calculator package through a shared
+  physical pack pool without introducing per-mode runtime directories or weakening the
+  existing single-mode path.
+- **Public interface**: `Calculators.Modules[].modes` declares mode objects. Logical names
+  use `Parent.mode`; a bare `Parent` dependency means every sibling mode, while one or more
+  dotted names select specific modes. There is no `@Mode` token and no mode suffix beneath
+  `runtime/<parent>/<PackID>`.
+- **Installation contract**: the parent installation initializes a pack only from zero.
+  Switching modes runs only that mode's optional installation. Mode initialization remains
+  optional and runs before that mode's execution. The shared stamp is removed before a
+  rebuild and written only after success.
+- **Scheduling**: Redis owns exact-mode, unassigned, and busy/free state; the disk stamp
+  restores affinity after restart. Workers greedily prefer the next mode already hot on an
+  available pack. Under full contention, a bounded exact-mode wait prevents first-push-wins
+  from collapsing affinity; when no hot target is busy, borrowing stays immediate.
+- **Review fixes**: bare cross-block dependencies are accepted; dotted children of known
+  multimode parents are strict; selected-out modes are filtered before acquire/rebuild;
+  self-dependency expansion is removed; Utils diagnostics point to Jarvis-Operas.
+- **Visualization**: each mode is an ordinary Calculator node. Semantic group metadata is
+  retained for consumers, but the rendered flowchart has no external dashed container.
+- **Verification**: 19 new multimode tests pass; the final focused D20 regression run reports
+  125 passed; the 3-mode/3-pack/3-Worker contention gate passed five
+  consecutive runs with zero rebuilds; all four documented multimode YAML blocks parse;
+  `git diff --check` passes. Full suite: 735 passed, 58 subtests passed, 6 unrelated known
+  failures (Redis collision fixture, one near-threshold scaling timing, and four legacy
+  `--plot` parser tests), retained under D13.15 rather than hidden.
+- **Design and evidence**: [`DESIGN_CALCULATOR_MODES_2.0.md`](../DESIGN_CALCULATOR_MODES_2.0.md)
+  and [`D20_MULTIMODE_REVIEW_2026-08-02.md`](../D20_MULTIMODE_REVIEW_2026-08-02.md).
+- **Out of scope**: D8, D14, D15, D18.7–D18.9, D19, and D13.12/D13.15 fixes.
+
+---
+
+### WP-D21.1–D21.8 — Crash-safe checkpoint/resume
+
+- **Status/date**: done, 2026-08-02. Design and acceptance evidence:
+  [`DESIGN_RESUME_2.0.md`](../DESIGN_RESUME_2.0.md).
+- **D21.1 — DATABASE truth + writer dedup**: resume reads UUIDs from every existing
+  `DATABASE/samples*.hdf5` file; the Archiver seeds a persisted set from those UUIDs and
+  suppresses duplicate writes. HDF5 is the only completion authority; sampler memory,
+  Redis counters, and checkpoint bookkeeping are caches.
+- **D21.2 — durable cross-process acknowledgement**: Archiver commits and flushes HDF5,
+  fsyncs it, then publishes UUIDs with `SADD hep:archived:<scan>`. Process-mode
+  `persistence_state()` reads that Redis set instead of returning an empty placeholder.
+  The set has a TTL and is rebuilt from HDF5 during resume.
+- **D21.3 — rolling restore point for enumerating samplers**: Random, Grid, Bridson, CSV,
+  and the shared fixed-set base keep the newest generator state whose submitted batch is
+  fully durable. Checkpoints never advance beyond in-flight work. Deterministic UUIDs are
+  derived from sampler identity, seed, and accepted index; CSV rows without source UUIDs
+  receive the same deterministic treatment.
+- **D21.4 — feedback generation barrier**: AdaptiveBridson advances its recovery point only
+  after a generation's UUIDs are durable. On resume it replays persisted samples when their
+  feedback is required to reconstruct adaptive state; Archiver dedup plus unique-row drain
+  accounting prevents duplicate DATABASE rows.
+- **D21.5 — truthful safety metadata**: `safe_barrier_confirmed` is computed with the actual
+  sampler barrier and durable UUID set. The unused `mark_completed()` / `_completed_uuids`
+  completion ledger was removed from production and tests.
+- **D21.6 — terminal failed samples**: failed and artifact-only outcomes write minimal
+  UUID/status records, so a deterministic failure is terminal and cannot enter an infinite
+  resume loop.
+- **D21.7 — end-to-end gates**: real control process, Worker processes, Archiver, Redis, and
+  HDF5 replace the former test that manually called `mark_completed()`. A 4000-point SIGINT
+  run resumed to 4000 rows / 4000 unique UUIDs, matched the uninterrupted same-seed result
+  per UUID, and stayed within the bounded in-flight recomputation allowance. A SIGKILL run
+  with its checkpoint deleted resumed from DATABASE alone to 200 rows / 200 unique UUIDs.
+  AdaptiveBridson's interrupted generation reproduced the uninterrupted `levelset.json`;
+  its final independent gate passed in 42.63 s.
+- **D21.8 — lifecycle recovery**: a Redis TTL control lease is refreshed and released with
+  compare-and-act Lua operations; Worker and Archiver exit when ownership no longer matches.
+  Stale `ps`/`kill` metadata is accepted when the control PID is dead; `--resume` cleans the
+  exact same-name orphan fleet and takes over a stale lease. FileOperation exits after init
+  adoption. Resume probes HDF5 writer consistency and invokes `h5clear` only when the exact
+  stale-writer error is present.
+- **Verification**: focused D21 regression 89 passed; Redis/graceful-stop/feedback supplement
+  39 passed; Ruff on changed D21 files and `git diff --check` passed. Full suite:
+  **749 passed, 58 subtests passed, 5 known failures in 961.20 s**. The remaining failures
+  are the D13.15 baseline (one Redis collision fixture and four legacy `--plot` parser
+  tests); the baseline near-threshold scaling failure passed in this run. No D21 regression.
+- **User documentation**: `skills/resume-and-recover.md` now states DATABASE authority,
+  checkpoint-less enumerating-sampler recovery, stale-runtime cleanup, and automatic HDF5
+  writer-flag recovery.
+- **Out of scope**: D8 agent bridge, D13.15 known-failure triage, D14 cluster execution,
+  D15 analysis, and unrelated CLI compatibility fixes.
+
+---
+
+### WP-D21.9 — FileOperation orphan lifecycle hardening
+
+- **Status/date**: done, 2026-08-02. Follow-up to D21.8 after inspecting 11 historical
+  `Jarvis2-FileOperation` processes with `ppid=1`.
+- **Root cause**: the shipped pre-D21 service blocked forever in `request_queue.get()` and
+  had no owner identity. If a Worker was SIGKILLed, its daemon child was adopted by init
+  and remained asleep indefinitely. Those historical processes also used the bare title
+  `Jarvis2-FileOperation`, so scan grouping hid them from `Jarvis2 ps R#` / `kill R#`.
+- **Remaining holes found during review**: the D21 idle timeout checked PPID only between
+  jobs, so a child blocked in a long copy/delete or response-queue write could still leak;
+  `delete_method: rm` could leave the nested `rm` process behind; a dead FileOperation made
+  its Worker wait forever for a response while continuing to heartbeat; scheduler cleanup
+  exceptions skipped FileOperation shutdown; and Factory's fallback repeated SIGTERM even
+  though Worker handles SIGTERM gracefully, then discarded the still-live Worker handle.
+- **Fix**: FileOperation now starts an independent owner-watch thread before its job loop,
+  becomes a session/process-group leader, and terminates the entire group when Worker PPID
+  changes. Its PID is included in Worker heartbeat child PIDs so the Factory watchdog has
+  an independent group-safe reap path. Client response waits poll child liveness. Shutdown
+  uses TERM then KILL for the whole group and closes queue/process handles. Worker init is
+  inside the cleanup boundary and each subsystem cleans independently. Factory escalates
+  graceful timeout to real SIGKILL and retains any unkillable Worker instead of forgetting
+  it. Bare legacy FileOperation titles are exposed through the fixed `ZP`
+  unscoped-process group for explicit CLI cleanup.
+- **Verification**: real POSIX test blocks FileOperation inside a FIFO copy, SIGKILLs its
+  Worker owner, and observes the busy child disappear; process-group, crashed-child,
+  heartbeat PID, scheduler-cleanup, Factory-SIGKILL, and legacy CLI grouping tests pass.
+  Final focused gate: **33 passed in 13.18 s**; broader Worker/FileOperation/resume gate:
+  **62 passed in 232.57 s**; Ruff and `git diff --check` pass. A full run reached
+  754 passed with the six D13.15 known failures plus one pre-existing fixed-sleep race in
+  the SIGTERM test; that test now uses a deterministic slow operator + heartbeat barrier,
+  closes its full Core runtime, and its final SIGTERM/SIGINT rerun passes. Final OS process
+  table contains **zero** `Jarvis2-FileOperation` processes.
+
+---
+
+### WP-D21.10 — ZP unscoped-process classification and cleanup
+
+- **Status/date**: done, 2026-08-02.
+- **Contract**: `R#` remains reserved for process groups owned by a matching live Control.
+  Known Jarvis components without one are collected under fixed reference `ZP` (Zambie
+  Process), including stale components which retain an old `:<scan>` suffix.
+- **CLI**: `Jarvis2 ps` includes a ZP row when needed; `Jarvis2 ps ZP` shows every member;
+  `Jarvis2 kill ZP -y` terminates the complete group without requiring runtime metadata.
+- **Safety**: OS discovery remains broad, but ZP kill eligibility is restricted to bare titles
+  emitted by Jarvis: Control, numeric Worker, Archiver, FileOperation, and managed Redis.
+  The separate Jarvis-Lit application is explicitly excluded by title and executable path.
+- **Verification**: process/CLI tests **58 passed**; Ruff on the implementation/tests and
+  `git diff --check` passed. A real titled FileOperation was classified as ZP beside an
+  unaffected R1 scan, then removed by `kill ZP -y`; the follow-up `ps ZP` was empty. A real
+  orphan `Jarvis2-Archiver:scan` was also classified as ZP instead of a false R1.
 
 ---

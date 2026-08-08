@@ -2,16 +2,16 @@
 \label{ch:monitoring}
 
 \newthought{Observability without interference.} A running scan can be inspected from a
-second terminal at any time --- \cli{Jarvis2 monitor} reads the runtime's shared state
+second terminal at any time --- \cli{Jarvis monitor} reads the runtime's shared state
 and prints a snapshot without writing a single byte to it --- and every run closes with
 a performance accounting in the console and on disk. This chapter covers both ends.
 
-\section{\clih{Jarvis2 monitor}}
+\section{\clih{Jarvis monitor}}
 \label{sec:monitor-cli}
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 monitor
+Jarvis monitor
 \end{jcmd}
 \end{terminal}
 
@@ -32,7 +32,7 @@ Repeat it with \cli{watch} for a poor man's dashboard:
 
 \begin{terminal}
 \begin{jcmd}
-watch -n 5 Jarvis2 monitor
+watch -n 5 Jarvis monitor
 \end{jcmd}
 \end{terminal}
 

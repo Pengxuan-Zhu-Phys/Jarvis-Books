@@ -4,7 +4,7 @@ title: 接入我自己的计算程序
 intent: "每个参数点要跑一个外部程序（SPheno / micrOMEGAs / 自写脚本），怎么接？"
 triggers: [外部程序, calculator, 计算器, SPheno, micrOMEGAs, 接程序]
 level: intermediate
-verified: 2026-07-21 @ jarvis2/2daf417
+verified: 2026-08-02 @ jarvis2/D20 working tree
 ---
 
 # 接入我自己的计算程序
@@ -82,6 +82,43 @@ Jarvis2 run my_card.yaml
 | 输入里写表达式 | `{name: "mx", expression: "x * 1000"}` | YAML_REFERENCE §7 |
 | 限时 | 模块加 `timeout: 600`（秒） | YAML_REFERENCE §9.4 |
 | A 跑完才能跑 B | B 的 `required_modules: [A]` | YAML_REFERENCE §9.4 |
+| 同一安装需切换互斥构建模式 | 父模块加 `modes` | YAML_REFERENCE §9.6 |
+
+## 同一程序的互斥构建模式
+
+只有在两种用法**不能同时存在于一份安装里**时才用 `modes`。例如 Prospino
+切换过程需要改 config 并原地重新 make。若两个二进制或子目录能共存，直接写两个普通
+calculator 模块。
+
+```yaml
+Calculators:
+  Pools: {Prospino: 8}
+  Modules:
+    - name: Prospino
+      path: "&J/calculators/Prospino/@PackID"
+      source: "&J/src/Prospino"
+      clone_shadow: true
+      installation: ["cp -R ${source}/. ${path}"]
+      modes:
+        - name: ng
+          installation: ["python configure.py ng", "make"]
+          execution:
+            commands: ["./prospino"]
+            output: [{name: xsec_ng, path: "@Sdir/ng.json", type: JSON}]
+        - name: ns
+          installation: ["python configure.py ns", "make"]
+          execution:
+            commands: ["./prospino"]
+            output: [{name: xsec_ns, path: "@Sdir/ns.json", type: JSON}]
+```
+
+所有 mode 共用 `Prospino/001` 这类物理 PackID 目录。父级 `installation`
+只在从零构建/强制重装时执行；切 mode 只执行目标 mode 的 `installation`。
+同一父模块的 mode 在一个样本内串行，不同 calculator 仍可并发。
+
+依赖写法：`required_modules: [Prospino]` 表示全部 mode；
+`[Prospino.ng]` 表示只依赖一个 mode。不存在 `@Mode` 或 `${mode_dir}`。
+建议池大小不低于 `mode 数 + Worker 数`；池小于 mode 数时反复重建不可避免。
 
 ## 常见坑
 
@@ -106,3 +143,5 @@ Jarvis2 run my_card.yaml
   或在 initialization 里清理。
 - **`Command failed [execution#...]`** → 进 `SAMPLE/.../<uuid>/` 看该点日志
   （见 [find-your-results](find-your-results.md)），命令原样在里面，可手工复跑。
+- **selection 必须写在具体 mode 或父模块上。** V2 会在取 Redis PackID 之前判断；
+  被跳过的 mode 不安装、不执行，也不会污染 mode 亲和。

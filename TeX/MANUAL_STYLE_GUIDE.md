@@ -24,10 +24,14 @@ When asked to write or revise any chapter/appendix:
    cross-references (at minimum their openers and the referenced sections).
 2. **Locate ground truth** (§1) for every factual claim you will add or touch.
 3. **Write against the template** for the chapter's type (§3).
-4. **Run the verification protocol** (§8) before declaring done. "It compiles" is
-   not done; the protocol has five stages.
-5. If the user forbade compiling, do stages V1–V2 only and say explicitly that
-   V3–V5 are deferred and must run in the next compile-permitted session.
+4. **Run the verification protocol** (§8) before declaring done — which, under the
+   standing rule below, means stages V1–V2.
+5. **DO NOT COMPILE.** Standing instruction from the user (2026-07-25), for *all*
+   TeX work in these books, not per-task: never run `latexmk`/`pdflatex`, never
+   inspect `main.log`, never rasterize the PDF. The user compiles by hand. Stages
+   V3–V5 of §8 are therefore never run by an agent; do not ask for permission to
+   run them, and do not report compile-derived numbers (page counts, Overfull
+   tallies, "0 undefined references") — you will not have them.
 
 Never mix a *content* change and a *mechanical migration* (rename, renumber,
 environment swap) in one uninspectable pass — do the mechanical pass scripted and
@@ -177,10 +181,15 @@ Each claim links back to the user-visible consequence it explains
 ```
 
 ### Appendices
-Only for genuinely cross-cutting flat lookups (full YAML key index, glossary,
-troubleshooting, gallery). A chapter must remain complete if its appendix vanished
-— the appendix test from v1 still binds. At most one appendix pointer per chapter
-body, never to complete an in-progress thought.
+**Never put a feature-summary table in an appendix** (user rule, 2026-07-25) — any
+table enumerating what the software *offers* (keys, flags, error codes, methods)
+belongs in a chapter, however cross-cutting it is. This supersedes the earlier
+carve-out for "master indexes": the YAML key index now lives in ch05, and the
+validation-code table with it. An appendix may only hold material organized around
+the reader's *situation* rather than the product's surface — a glossary, a
+symptom→fix troubleshooting list, a gallery of worked cards. A chapter must remain
+complete if its appendix vanished. At most one appendix pointer per chapter body,
+never to complete an in-progress thought.
 
 ---
 
@@ -378,9 +387,11 @@ overflow deterministically). Growing enumerations are lists, not tables (§T6).
 
 ## 8. Verification protocol (mandatory, ordered)
 
-Run from an **isolated scratch copy** of the book (copy the whole book directory to
-a scratch area; never compile in the user's working copy; delete the scratch copy
-afterwards).
+**Agents run V1–V2 only.** Compiling is the user's job (§0 rule 5): V3–V5 below are
+recorded so the *user* knows what a full check involves, and so the failure classes
+they catch stay documented — an agent never executes them and never reports their
+results. This makes V1's mechanical checks the last line of defence, so run them
+properly rather than skimming.
 
 **V1 — structural checks** (always, even when compiling is forbidden). Don't use
 bare `grep -c` for counts you'll compare — see the V4 note on why; `grep -n` (no
@@ -397,10 +408,10 @@ grep -n 'caption.*\\file{\|section.*\\file{\|chapter.*\\file{' chapters/*.tex
 **V2 — content self-review**: re-read the diff against §1 (every claim sourced?),
 §3 (template satisfied?), §5.3 (banned words?), §7 (right element per content?).
 
-**V3 — compile**: `latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex`.
+**V3 — compile** *(user only; never run by an agent)*: `latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex`.
 Required: exit 0.
 
-**V4 — log checks**: do these with Python, not bare `grep -c` — this sandbox's
+**V4 — log checks** *(user only)*: do these with Python, not bare `grep -c` — this sandbox's
 `grep` wrapper has been observed to print *nothing at all* (not even `0`) on some
 non-trivial match counts, which silently gets misread as "zero" if you trust empty
 output. Always use a direct string count instead:
@@ -428,7 +439,7 @@ without it, at minimum eyeball every `Overfull >15pt` hit's surrounding file/lin
 and judge whether it's plausibly pre-existing (old chapter, unrelated content) or
 newly caused by your edit.
 
-**V5 — visual check (rasterize)**: render every page whose content the change
+**V5 — visual check (rasterize)** *(user only)*: render every page whose content the change
 touched or could have shifted (PyMuPDF: `fitz.open(...)[p].get_pixmap(dpi=150)`),
 and *look at them* for the failure classes that emit no warning:
 - listing boxes that split across pages losing colour/decoration;
@@ -436,7 +447,8 @@ and *look at them* for the failure classes that emit no warning:
 - floats landing pages away from their reference;
 - table rows visually cramped or rules colliding.
 
-A change is "done" only after V5. Report the verification results with the work.
+An agent's change is "done" after V1–V2, and its report must say plainly that it
+was not compiled. Never let a hand-off imply a compile happened.
 
 ---
 

@@ -25,11 +25,14 @@ a time (one parameter point), enforces the safety rules (tool isolation, concurr
 limits), and files every report (databases, logs, summaries) where you can find it
 later.
 
-Concretely, the framework solves five problems that otherwise consume your time:
+Concretely, the framework solves five problems that otherwise consume your time ---
+Table~\ref{tab:at-a-glance} pairs each one with the answer \Jtwo\ gives:
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Problem} & \textbf{Jarvis-HEP 2 answer} \\
     \midrule
@@ -47,6 +50,7 @@ Concretely, the framework solves five problems that otherwise consume your time:
       lost and no duplicated points (Chapter~\ref{ch:checkpoint}) \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{What the framework does for you, at a glance.}
   \label{tab:at-a-glance}
 \end{table}
@@ -74,8 +78,8 @@ Every scan repeats the same three-step loop, once per parameter point:
         four-line example; Chapter~\ref{ch:calculators} is the full reference.} and
         in-process \emph{operas} (Python functions) compute named results such as
         masses or cross sections.
-  \item \textbf{Score the point.} Expressions under \yamlkey{Likelihood} combine the
-        observables into a \yamlkey{LogLikelihood} value.
+  \item \textbf{Score the point.} Expressions under \yamlkey{Sampling.LogLikelihood}
+        combine the observables into a \code{LogL} value.
 \end{enumerate}
 
 \begin{marginfigure}
@@ -98,6 +102,23 @@ this order.
 
 \section{How a whole scan runs}
 \label{sec:runtime-picture}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.85\linewidth]{figures/concept-flow.png}
+\caption[The Jarvis-HEP concept, at a glance.]{The \Jarvis\ workflow concept, as
+published in the original paper.\cite{Guo:2026kfy} Left to right: you provide the
+\textsc{yaml} task card and any external \emph{packages} (yellow); the framework runs
+the scan and hands back \textsc{hdf5}/\textsc{csv} tables, plots, and logs (green). The
+blue panel's vocabulary is version~1's --- \emph{Worker Factory}, per-package
+\emph{module pools} in layers \code{L1}--\code{L3}, a \emph{Data Recorder} --- \Jtwo\
+kept the same shape under new names: \code{TaskFactory} (Worker lifecycle only,
+Section~\ref{sec:runtime-picture}), per-Sample \emph{layers}
+(Chapter~\ref{ch:workflow-model}), and the \emph{Archiver}. The sixth \textsc{yaml}
+block shown, \code{Utils}, is now covered by \yamlkey{Operas}
+(Section~\ref{sec:card-shape}).}
+\label{fig:concept-flow}
+\end{figure}
 
 A running scan is a small team of cooperating processes. One parameter point, together
 with its files and logs, is called a \emph{Sample} --- the unit of work everything
@@ -159,24 +180,7 @@ at once (Chapter~\ref{ch:workflow-model}), rather than running one point's calcu
 one after another just because they share a point. One point's own wall-clock time
 shrinks along with the whole scan's throughput.
 
-\begin{fullwidth}
-\begin{figure}[ht]
-\centering
-\includegraphics[width=0.85\linewidth]{figures/concept-flow.png}
-\caption[The Jarvis-HEP concept, at a glance.]{The \Jarvis\ workflow concept, as
-published in the original paper.\cite{Guo:2026kfy} Left to right: you provide the
-\textsc{yaml} task card and any external \emph{packages} (yellow); the framework runs
-the scan and hands back \textsc{hdf5}/\textsc{csv} tables, plots, and logs (green). The
-blue panel's vocabulary is version~1's --- \emph{Worker Factory}, per-package
-\emph{module pools} in layers \code{L1}--\code{L3}, a \emph{Data Recorder} --- \Jtwo\
-kept the same shape under new names: \code{TaskFactory} (Worker lifecycle only,
-Section~\ref{sec:runtime-picture}), per-Sample \emph{layers}
-(Chapter~\ref{ch:workflow-model}), and the \emph{Archiver}. The sixth \textsc{yaml}
-block shown, \code{Utils}, is now covered by \yamlkey{Operas}
-(Section~\ref{sec:card-shape}).}
-\label{fig:concept-flow}
-\end{figure}
-\end{fullwidth}
+
 
 \section{What a finished run gives you}
 \label{sec:what-you-produce}
@@ -200,18 +204,19 @@ Every run writes a predictable, self-contained tree under your project
 
 \Jtwo\ delegates specialised jobs to sibling packages. Two install automatically; one
 is optional. Upgrading a sibling adds features without a runtime release.
+Table~\ref{tab:ecosystem} names all three and what each is responsible for.
 
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.213\linewidth}p{0.532\linewidth}@{}}
     \toprule
     \textbf{Package} & \textbf{Install} & \textbf{Role} \\
     \midrule
     \Jtwo   & this manual & sampling, distribution, orchestration, persistence \\
     \Portal & automatic   & file formats for calculator I/O --- \textsc{json},
-              \textsc{csv}, \textsc{slha}, \ldots\ (Chapter~\ref{ch:io-types}) \\
+              \textsc{csv}, \textsc{slha}, \ldots\ (Section~\ref{sec:format-catalog}) \\
     \Operas & automatic   & registry of reusable Python operators and expression
               functions (Chapter~\ref{ch:jarvis-operas}) \\
     \JPlot  & optional \code{[plot]} extra & \textsc{yaml}-driven figures from scan
@@ -224,18 +229,20 @@ is optional. Upgrading a sibling adds features without a runtime release.
 \end{table}
 
 \Jtwo\ ships as its own package (\code{jarvishep2}) with its own command
-(\cli{Jarvis2}). It installs side by side with a version~1 installation without
+(\cli{Jarvis}). It installs side by side with a version~1 installation without
 conflict, and this book assumes no knowledge of that older line --- every concept used
 here is defined here.
 
 \section{Your reading path}
 \label{sec:next}
 
-Pick the row that describes you:
+Pick the row of Table~\ref{tab:reading-paths} that describes you:
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{You are\ldots} & \textbf{Read\ldots} \\
     \midrule
@@ -243,17 +250,18 @@ Pick the row that describes you:
       and~\ref{ch:quickstart}, in order; then Chapter~\ref{ch:core-concepts} \\
     writing your first real card & Chapter~\ref{ch:core-concepts}, then
       Part~\ref{part:task-card} block by block \\
-    wiring in an external program & Chapters~\ref{ch:workflow-model}--\ref{ch:io-types},
-      with Appendix~\ref{app:markers-tokens} open \\
+    wiring in an external program & Chapters~\ref{ch:workflow-model} and~\ref{ch:calculators},
+      with Chapter~\ref{ch:command-system} open \\
     choosing a sampling strategy & Chapter~\ref{ch:choosing-sampler}, then that
       method's chapter \\
     operating and debugging scans & Part~\ref{part:running}, plus
       Appendix~\ref{app:troubleshooting} \\
     tuning or extending the system & Part~\ref{part:advanced} \\
     just looking something up & Chapter~\ref{ch:cli} (commands) or
-      Section~\ref{app:yaml-index} (keys) \\
+      Section~\ref{sec:part2-map} (which chapter owns a key) \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{Reading paths by need.}
   \label{tab:reading-paths}
 \end{table}

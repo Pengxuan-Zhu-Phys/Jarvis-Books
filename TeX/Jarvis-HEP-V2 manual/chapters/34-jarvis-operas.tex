@@ -25,8 +25,8 @@ Inspect an installation from the command line:
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 operas list            # every registered name, by namespace
-Jarvis2 operas info math.add   # signature and documentation
+Jarvis operas list            # every registered name, by namespace
+Jarvis operas info math.add   # signature and documentation
 \end{jcmd}
 \end{terminal}
 
@@ -50,8 +50,8 @@ name in any expression field --- likelihood terms, opera inputs, \yamlkey{Dump}
 variables, \yamlkey{selection}, \sampler{AdaptiveBridson} targets:
 
 \begin{yamlwin}
-Likelihood:
-  expressions:
+Sampling:
+  LogLikelihood:
     - name: LogL
       expression: user.external_loglike(x, y)
 \end{yamlwin}
@@ -89,7 +89,7 @@ Two supported routes:
   \item[Package an entry point] --- expose the function from an installed package
         under the \code{jarvis\_operas.user} (or \code{core}) entry-point group. The
         right answer for anything shared: versioned, \code{pip}-installable on the
-        cluster, visible to \cli{Jarvis2 operas list} everywhere.
+        cluster, visible to \cli{Jarvis operas list} everywhere.
 \end{description}
 
 \begin{jtip}

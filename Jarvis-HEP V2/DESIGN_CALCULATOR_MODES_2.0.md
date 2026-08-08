@@ -1,615 +1,342 @@
 # DESIGN — Multi-mode Calculators (`Calculators.Modules[].modes`, V2, D20)
 
-**Status**: **已实现（2026-08-02，工作区未提交）——实现选择了 shared-only，与本文 §5.6.4 建议的
-`per_mode` 不同，且显式拒绝 `@Mode` / `${mode_dir}`。本文 §3–§5 因此已过时，待按实现重写（WP D20.8）。**
-审阅结论与实测数据见 [`D20_MULTIMODE_REVIEW_2026-08-02.md`](D20_MULTIMODE_REVIEW_2026-08-02.md)。
-**Scope**: **V2-only。不回移 V1**（维护者定调 2026-08-01，见 §1.1）
-**更新 2026-08-01**: 补 §5.1-5.3（触发语义）与 §5.4（主场景为原地重建，新增可选 build 阶段）
-**Date**: 2026-08-01
-**Requirement (maintainer)**: *"一个软件包原则上有多种用法，即在一次扫描任务中需要调用两次，
-但这两次的初始化和执行命令不一样，也许还需要重新构建。所以我没想清楚 YAML 怎么设计。"*
+**Status**: implemented, shared-only; D20.5–D20.8 hardening completed in the working tree
+**Scope**: V2-only; do not backport to V1
+**Last updated**: 2026-08-02
+**Review evidence**: [`D20_MULTIMODE_REVIEW_2026-08-02.md`](D20_MULTIMODE_REVIEW_2026-08-02.md)
 
 ---
 
-## 1. 现状
+## 1. Decision
 
-`Calculators.Modules[].modes` 在 V2 schema 里被声明为 `string | [string]`，**零代码消费**
-（`Module/calculator.py` 与 `worker.py` 中出现次数均为 0）——**是没做完的设计，不是废弃功能**
-（维护者澄清，2026-08-01）。
+A multi-mode calculator represents one physical software installation whose
+uses are mutually exclusive. Switching use requires changing and rebuilding
+that same installation. Prospino processes are the reference case.
 
-V1 侧的准确状态（实测，非读 diff）：`config.py:487` 见到 `modes` 只打一行日志；
-`calculator.py:18` 据此分派到 `analyze_config_multi()`，而该方法体是 **`pass`**
-（`calculator.py:135-136`）。实际构造一个带 `modes` 的 `CalculatorModule` 验证：
+V2 implements one model only:
 
-```
-constructed ok; modes attr = True
-execution   -> MISSING
-installation-> MISSING
-basepath    -> MISSING
-type        -> MISSING
-```
+> **One parent calculator owns one physical PackID pool. Each mode is a logical
+> execution step. A held PackID is rebuilt into the requested mode when needed.**
 
-即 V1 **不报错地造出一个空壳模块**，直到运行期才在离病因很远的地方抛 `AttributeError`。
-比"设了个标志没用"更糟——它是一条会静默走通装载期的死路。
+There is no `per_mode` option, `mode_packs` switch, `@Mode` token,
+`${mode_dir}` token, or mode-specific physical PackID directory. These appeared
+in an earlier design draft and are intentionally not part of the interface.
+`@Mode` and `${mode_dir}` are rejected by `JV2-MOD-006`.
 
-注意：现有的 `string | [string]` 形态**表达不了**需求——它只能列出模式名，装不下"每个模式
-各自的 initialization / execution / 构建"。所以这个键无论如何都要重新定义，不存在
-"保持向后兼容"的包袱（0 张真实卡片在用）。
+Multimode must not be used merely because two commands share source code. If
+both uses can coexist in one installation—different micrOMEGAs subdirectories,
+different MadGraph process directories, or two independent binaries—declare
+two normal calculator modules. Multimode exists only for mutually exclusive
+build states: using B necessarily replaces A in the same runtime directory.
 
-## 1.1 范围：V2-only，不回移（维护者定调，2026-08-01）
+## 2. Why shared-only
 
-> *"multimode 功能只支持 V2，V1 已经是设计定型的产品了，非 bug 不加新功能。"*
+For a package with M modes and P PackID slots:
 
-这条定调不只是排期，它**实质性地放松了本设计的约束**，值得单列：
+| Model | Physical directories | Runtime cost |
+| --- | ---: | --- |
+| per-mode | M × P | each directory builds once |
+| shared-only | P | rebuild only when a PackID changes mode |
 
-| | 其他 V2 设计（D18 LibDeps、D12.1 命令归一化） | **D20 multimode** |
-|---|---|---|
-| 参照物 | V1 有可运行的实现，要对齐其行为与 YAML 形态 | **没有实现可对齐**（V1 是 `pass`） |
-| 兼容包袱 | 要接受 V1 卡片的老写法（字符串命令、`installed: false`、`--skip-library-installation`） | **零**——0 张卡片在用，且不会有 |
-| 形态自由度 | 受限：改形态就是破坏老卡片 | **完全自由**：`build` 阶段、`mode_packs`、`@Mode` token 都可以按 V2 自己的最优解定 |
+Prospino may expose many processes while rebuilding quickly. Creating
+`modes × packs` complete copies defeats the purpose of multimode. A shared pool
+keeps disk use proportional to PackID count, while affinity scheduling reduces
+unnecessary rebuilds.
 
-**三条直接推论**，实现者按此办：
+The shared model is safe because Redis grants exclusive ownership of a physical
+PackID. Modes of the same parent are serialized within one sample; different
+calculator parents remain eligible for concurrency.
 
-1. **不动 V1 的 `analyze_config_multi()` 桩**。它是设计未完，不是 bug，按定调不补。
-2. **不改 V1 文档**。`modes` 只写进 V2 的 YAML_REFERENCE 与 skill；V1 手册保持不提。
-3. **多模式卡片是 V2 专属，不可回跑 V1**。这一点要写进 skill：拿到 V2 多模式卡片的 V1
-   会造出上面那个空壳模块，报的错与真正病因无关。
-
-### 1.1.1 唯一一处可以商量的 V1 改动（不建议现在做）
-
-上面那个空壳模块，严格说属于**装载期该拒绝却没拒绝**——按"非 bug 不加新功能"的界线，
-它更像 bug 而非缺功能。若维护者想封这个坑，代价是 `calculator.py:135` 里三行：
-
-```python
-def analyze_config_multi(self):
-    raise ConfigError(f"Module '{self.name}': multi-mode calculators require Jarvis-HEP V2")
-```
-
-**但我不建议现在做**：触发它需要用户手写一个 V1 从未文档化过的块，实际发生概率极低，
-而 V1 的每一次改动都要重跑其回归。列在此处只为把这个选项记录在案，不作为 WP。
-
-### 1.1.2 什么仍然是 V2 内部的一致性要求（别和 V1 parity 混淆）
-
-放松的只是"对 V1 的兼容"，**不是"对 V2 自身的一致"**。最容易混淆的一处：模式级
-`installation` **仍应接受纯字符串命令列表**——理由不是 V1 兼容，而是**模块级 `installation`
-在 V2 里就是这个形态**，同一个键名在同一张卡片里出现两种写法会让用户困惑。
-凡遇到"要不要照着某个老形态做"的问题，先分清是 **V1 遗产**（可自由抛弃）还是
-**V2 内部一致性**（必须遵守）。
-
-## 2. 需求拆解
-
-一个软件包，在一次扫描中被用作 N 种不同用途。以真实场景为准：
-
-| 场景 | 每模式不同的部分 | 是否需要各自构建 |
-|---|---|---|
-| **MadGraph**：生成 ProcA / ProcB | 进程卡、生成出的目录、运行命令 | **是**——每个进程是一次独立的代码生成 |
-| **FlexibleSUSY**（你们 HinoLLP 在用）：不同模型 | 模型定义、编译产物 | **是** |
-| **micrOMEGAs**：relic density / direct detection | 调用的例程、输出量 | 否——同一份二进制，不同调用 |
-| **SPheno**：不同输入卡 | 输入文件、输出量 | 否 |
-
-所以设计必须同时支持"要重新构建"和"共用一份构建"两类，而**不能**要求用户为后者付出前者的代价。
-
-## 3. 核心设计：`modes` 是**声明层的展开**，不是运行时的新概念
-
-> **一个模式 = 一个继承了公共声明的兄弟 calculator 模块。**
-> `modes` 在配置装载期展开成 N 个模块，运行时**不新增任何概念**。
-
-这是本设计的关键判断。V2 运行时**已经**具备模式所需的一切：
-
-| 模式需要 | 运行时已有的机制 |
-|---|---|
-| 各自的执行命令 / 输入输出 | 模块的 `execution` |
-| 各自的依赖顺序 | `required_modules` → `workflow.resolve_module_layers` |
-| 各自的并发槽位 | `calc:free:<name>` 池 + PackID |
-| 各自的构建 | `installation` + `jarvis_install.json` 控制（D13.11） |
-| 各自的跳过条件 | 模块级 `selection`（D12.1 已交付） |
-| 各自的超时 | 模块的 `timeout` |
-
-因此**唯一真正新增的东西是"共享声明"**，那是配置展开的职责。展开之后，
-`MadGraph.ProcA` 就是一个普普通通的模块，池、pack、层、flowchart、日志、DATABASE 一律照旧。
-
-**这条判断决定了后续每一个细节**，也是我建议采纳它的理由：任何把模式做成运行时特殊分支的方案，
-都要在 Worker、池管理、层推导、flowchart 五个地方各加一条 if。
-
-## 4. YAML 形态
-
-### 4.1 最小可用
+## 3. Canonical YAML
 
 ```yaml
 Calculators:
+  Pools:
+    Prospino: 8
+
   Modules:
-    - name: micrOMEGAs
+    - name: Prospino
+      path: "../runtime/Prospino/@PackID"
+      source: "../source/Prospino"
       clone_shadow: true
-      path: "&J/calculators/micrOMEGAs/@PackID"
-      source: "&J/src/micrOMEGAs"
-      installation:                        # 公共构建：在每个模式的 pack 里各跑一次
-        - "cp -r ${source}/* ${path}"
-        - "make -j4"
-      modes:
-        - name: Relic                      # → 模块 micrOMEGAs.Relic
-          execution:
-            commands: ["./main relic.in"]
-            output:
-              - {name: relic_out, path: "@Sdir/relic.json", type: JSON}
-        - name: DirectDet                  # → 模块 micrOMEGAs.DirectDet
-          execution:
-            commands: ["./main dd.in"]
-            output:
-              - {name: dd_out, path: "@Sdir/dd.json", type: JSON}
-```
 
-### 4.2 每模式各自构建（MadGraph / FlexibleSUSY）
-
-```yaml
-    - name: MadGraph
-      clone_shadow: true
-      path: "&J/calculators/MadGraph/@Mode/@PackID"    # @Mode 使各模式目录分离
-      source: "&J/src/MG5"
-      installation:                        # 公共部分
-        - "cp -r ${source}/* ${path}"
-      modes:
-        - name: ProcA
-          installation:                    # 模式专属构建，在公共部分之后执行
-            - "./bin/mg5_aMC ${mode_dir}/procA.dat"
-          initialization: ["rm -f ${path}/Events/*"]
-          execution:
-            commands: ["./ProcA/bin/generate_events -f"]
-            output: [{name: xsec_A, path: "@Sdir/A.dat", type: DAT}]
-        - name: ProcB
-          installation:
-            - "./bin/mg5_aMC ${mode_dir}/procB.dat"
-          execution:
-            commands: ["./ProcB/bin/generate_events -f"]
-            output: [{name: xsec_B, path: "@Sdir/B.dat", type: DAT}]
-```
-
-### 4.3 模式之间的依赖
-
-模式是普通模块，直接用点号寻址：
-
-```yaml
-        - name: DirectDet
-          required_modules: ["micrOMEGAs.Relic"]     # 先算 relic，再算 DD
-```
-
-## 5. 展开规则（实现契约）
-
-1. **命名**：模式模块名 = `<模块名>.<模式名>`。模块名本就是自由字符串且直接用作
-   Redis 池键（`calc:free:<name>`），点号无需转义。
-2. **继承**：模式**继承**模块的 `source` / `clone_shadow` / `env_setup` / `timeout` /
-   `make_paraller` / `selection` / `required_modules`；模式内同名键**覆盖**之。
-3. **命令拼接**：`installation` 与 `initialization` 为**模块级在前、模式级在后**拼接
-   （公共构建 → 专属构建）。`execution` **不拼接**，必须由模式提供（模块级 `execution`
-   在有 `modes` 时非法——见 §7 校验）。
-4. **新 token `@Mode`**：展开为模式名，供 `path` 模板分目录；`${mode_dir}` 展开为该模式的
-   运行目录，与现有 `${path}`/`${source}` 同族。
-5. **池与 pack 按模式独立**——见 §6.1，这不是可选项。
-6. **`required_modules` 中的裸模块名**（如 `["MadGraph"]`）展开为"该模块的全部模式"，
-   便于"等这个包的所有用途都算完"。
-
-### 5.1 installation / initialization 的触发语义（维护者提问，2026-08-01）
-
-两个 block **都是可选的**。它们的触发时机完全不同，这是本设计最容易误解的一点，因此单列一节。
-
-| block | 触发频率 | 由谁把关 |
-|---|---|---|
-| `installation` | **每个 pack 目录一生一次** | 安装 stamp 的指纹 + epoch（D13.11） |
-| `initialization` | **每个样本一次**，无条件 | 无（V1 契约就是每次都跑） |
-
-`installation` **既不是"每次都触发"，也不是"按需把 pack 改造成目标模式"**。精确行为如下
-（沿用 `RuntimePreparer.prepare()` 现有路径，模式不引入新分支）：
-
-```
-Worker 拿到 pack
-  └─ ensure_shadow_installed()      ← 每个样本都会"检查"
-       ├─ 进程内已装过该 pack？      → 直接返回（同一 Worker 内只查一次）
-       ├─ stamp 指纹 + epoch 匹配？  → 直接返回（跨 Worker、跨 run 复用）
-       └─ 否则                       → 真正执行 installation 命令，然后写 stamp
-  └─ run_initialization()           ← 每个样本无条件执行
-```
-
-即：**检查每次都做（读一个 stamp 文件，开销可忽略），命令执行是每个 pack 目录一生一次**，
-除非操作者在 `jarvis_install.json` 里置 `reinstall: true`。
-
-### 5.2 为什么不会出现"按需切换模式"——每模式独立 pack 的第二个理由
-
-维护者提出的另一种可能：每次拿到 calculator 时判断它当前属于哪个模式，若不是目标模式，
-就用 `installation` 把它改造过去。
-
-**本设计里这种情况不会发生**，因为 `MadGraph.ProcA` 的 `001` 和 `MadGraph.ProcB` 的 `001`
-是**两个不同目录**，永远不需要互相转换。
-
-而这恰是**共享 pack 方案的致命伤**，也是 §6.1 结论的第二条独立论据（§6.1 只给了并发那条）：
-若模式共用 pack，就**只能**采用按需改造，于是扫描在 ProcA / ProcB 之间交替时，
-**每交替一次就要重新生成一次 MadGraph 进程**，最坏每个样本重建一次。stamp 机制救不了这个场景，
-因为两个模式的指纹本来就应该不同，"指纹不匹配"在这里是常态而非异常。
-
-一句话：**每模式独立 pack，把"模式切换"这件事从运行时彻底消掉了。**
-
-### 5.3 代价：模块级 installation 会跑「模式数 × pack 数」次
-
-因为每个模式有自己的 `001…N`，模块级（公共）`installation` 会在**每个模式的每个 pack**
-里各跑一次。2 个模式 × `make_paraller: 4` = **8 次**。
-
-所以 §8 那条边界要当硬性建议读：**真正昂贵且公共的构建放 LibDeps**（全局装一次），
-模块级 `installation` 只留轻量准备（解包、拷贝、软链）。
-
-## 5.4 主场景修正：「改 config 再 make」的原地构建（维护者澄清，2026-08-01）
-
-> *"有一些软件的模式切换是改一下 config 配置之后重新 make。这在早期用 Fortran 构建的软件中很常见。"*
-
-这是 `modes` 的**主场景**，比 §2 里举的 MadGraph 更普遍，而且**证据就在你们自己的卡片里**：
-
-```yaml
-# iDM_Vector_Bridson.yaml
-- name: MicroOMEGAs_Vector
-  path: "&J/calculators/microOMEGAs_vector/@PackID"
-  installation:
-    - "cp -R ${source}/. ${path}"
-    - "cd ${path}/vector-iDM && make clean && make main=main.cpp"
-
-# iDM_Axial_Bridson.yaml
-- name: MicroOMEGAs_Axial
-  path: "&J/calculators/microOMEGAs/@PackID"
-  # 卡片原注释: "Same micrOMEGAs 7 base package as the vector scan;
-  #             axial-iDM differs only in its axial DM-current model files."
-```
-
-**同一个包、只差模型文件，现在要把整个模块声明复制一份、还分散在两张卡片里。**
-`modes` 要消灭的正是这个。
-
-### 5.4.1 这不改变 §6.1 的结论——每模式独立 pack 依然正确
-
-原地构建意味着**一个目录在同一时刻只能是一个模式**，这反而让"共享 pack"更不可行。三种方案的编译次数：
-
-| 方案 | micrOMEGAs 编译次数（2 模式 × `make_paraller: 4`） |
-|---|---|
-| 共享 pack + 按需改造 | **每次模式交替一次**——最坏每样本一次，成千上万次 |
-| 每模式独立 pack（§3 原设计） | **8 次**（首次），之后 stamp 复用 |
-| 每模式独立 pack + 全局构建（§5.4.2） | **2 次**（每模式一次），之后 pack 只拷贝 |
-
-### 5.4.2 补充 `build` 阶段：昂贵的模式构建做一次，pack 只拷贝
-
-对"config + make"这类软件，**昂贵的部分恰恰是模式专属的**（公共部分只是 `cp -R`）。
-若照 §5 原样把 `make` 放进模式的 `installation`，就会 **模式数 × pack 数** 次编译。
-
-因此为模式增加一个**可选的 `build` 阶段**：**全局每模式一次**，产物再被各 pack 拷贝。
-
-```yaml
-- name: micrOMEGAs
-  clone_shadow: true
-  path: "&J/calculators/micrOMEGAs/@Mode/@PackID"
-  source: "&J/src/micromegas"
-  modes:
-    - name: Vector
-      build:                                   # ← 全局一次，每模式一份构建产物
-        path: "&J/builds/micrOMEGAs.Vector"
-        commands:
-          - "cp -R ${source}/. ${build_dir}"
-          - "cd ${build_dir}/vector-iDM && make clean && make main=main.cpp"
-      installation:                            # ← 每 pack 一次，只拷贝产物（廉价）
-        - "cp -R ${build_dir}/. ${path}"
-      execution:
-        commands: ["./vector-iDM/main"]
-        output: [{name: omega_vec, path: "@Sdir/out.json", type: JSON}]
-    - name: Axial
-      build:
-        path: "&J/builds/micrOMEGAs.Axial"
-        commands:
-          - "cp -R ${source}/. ${build_dir}"
-          - "cd ${build_dir}/axial-iDM && make clean && make main=main.cpp"
+      # Shared base. It runs only for a new/invalidated PackID base.
       installation:
-        - "cp -R ${build_dir}/. ${path}"
-      execution:
-        commands: ["./axial-iDM/main"]
-        output: [{name: omega_ax, path: "@Sdir/out.json", type: JSON}]
+        - "cp -R ${source}/. ${path}"
+
+      # Optional; runs before every selected mode call.
+      initialization:
+        - "rm -f ${path}/prospino.dat"
+
+      modes:
+        - name: ng
+
+          # Optional mode rebuild. It does not replay parent.installation.
+          installation:
+            - "python configure.py ng"
+            - "make"
+
+          # Optional; parent initialization runs first, then this block.
+          initialization:
+            - "rm -f ng.out"
+
+          # Optional execution-directory fallback.
+          path: "${path}/run-ng"
+
+          execution:
+            # Highest-priority execution directory.
+            path: "${path}/run-ng/current"
+            commands:
+              - "./prospino"
+            output:
+              - name: xsec_ng
+                path: "@Sdir/ng.json"
+                type: JSON
+                variables: [{name: xsec_ng}]
+
+        - name: ns
+          installation:
+            - "python configure.py ns"
+            - "make"
+          execution:
+            commands: ["./prospino"]
+            output:
+              - name: xsec_ns
+                path: "@Sdir/ns.json"
+                type: JSON
+                variables: [{name: xsec_ns}]
 ```
 
-**三段式生命周期**（与现有两段式向下兼容，`build` 不写就退化成今天的行为）：
-
-| 阶段 | 频率 | 放什么 | 由谁执行 |
-|---|---|---|---|
-| `build` | **全局每模式一次** | 改 config + `make`（重） | 控制进程 preflight |
-| `installation` | 每 pack 一次 | 拷贝构建产物（轻） | Worker 首次拿到该 pack |
-| `initialization` | 每样本一次 | 清理输出、写输入卡 | Worker 每个样本 |
-
-**实现上零新机器**：`build` 阶段的执行器、stamp/指纹、`reinstall` 控制、per-module 日志
-与 **LibDeps（D18）完全同构**——同样是"控制进程 preflight 里全局装一次"。直接复用其安装引擎，
-`build.path` 下同样写 `.jarvis_install_stamp.json`，同样受 `jarvis_install.json` 的
-`reinstall` 开关管辖。
-
-**新 token `${build_dir}`**：展开为该模式的 `build.path`，供 `installation` 引用产物。
-
-### 5.4.3 备选：不加 `build`，直接用 LibDeps
-
-同样的效果今天就能表达——把每个模式的构建声明成一个 LibDeps 模块，
-`installation` 里 `cp -R ${LibDeps:micrOMEGAs_Vector}/. ${path}`。**零新增代码**。
-
-代价是模式定义被拆到两个顶层块、名字要人工保持同步。`modes` 存在的意义本就是
-"把一个包的多种用法收拢在一处"，所以**推荐 `build`**；若维护者倾向零新键，
-则本节降级为一条文档约定（在 skill 里写清这个配方即可）。
-
-## 5.5 更正 §6.1：Prospino 类软件下，「共享池 + 取用时重建」才是对的
-
-> *"有个程序包叫 Prospino，算 SUSY 过程的截面。它可以算很多过程，但每个过程都需要改一下
-> make 的 config 文件之后重新 make 才能切换过去。重新 make 比较快，但每次切换都要重新 make。"*
-> —— 维护者，2026-08-01
-
-**先承认错误**：§6.1 断言"每模式独立 pack 不是权衡，现有并发模型已把答案定死"，
-这个论证是**过度推广**的。
-
-并发论据只能排除**"所有模式共用同一个 pack 目录"**，
-排除不了**"共用一个 pack 池、每个 pack 在取用时被重建成所需模式"**：
+The parent `path` is always the shared physical installation anchor and must
+contain `@PackID`. A mode may declare `path` and `execution.path`, but those
+fields select only the command working directory. Execution-directory
+precedence is:
 
 ```
-Prospino 池: [001, 002, 003, 004]
-  样本 S 同层需要 ng 与 ns 两个模式：
-    ng → 取到 001 → 001 当前是 ns？重建成 ng（几秒）→ 运行
-    ns → 取到 002 → 002 当前是 ns？直接运行
-  两者在不同目录里并发，无冲突。
+mode.execution.path > mode.path > parent.path
 ```
 
-维护者最初那句"每次拿到 calculator 时判断一下 mode，不是就用 installation 改过去"，
-描述的正是这个方案——**对 Prospino 这类软件它是正确的**，我不该一口否掉。
+No form creates `Prospino/<mode>/<PackID>`; the physical directory remains, for
+example, `../runtime/Prospino/001`.
 
-### 5.5.1 两种策略各有其适用区间
+## 4. Declaration expansion
 
-| | `per_mode`（§3 原设计） | `shared`（本节） |
-|---|---|---|
-| 池与目录 | 每模式一个池，`模式数 × pack 数` 个目录 | **一个池，`pack 数` 个目录** |
-| 构建次数 | 每目录一次，之后永不重建 | 每次 pack **换模式**时重建一次 |
-| 适用 | 构建**贵**、模式**少**（MadGraph、micrOMEGAs：分钟级编译、2–3 个模式） | 构建**便宜**、模式**多**（Prospino：秒级重编、十余个过程） |
-| 代价形态 | 磁盘 ∝ 模式数 | 时间 ∝ 模式切换次数 |
+`modes` is user-facing declaration syntax. After schema and semantic validation,
+the loader expands it into dotted logical module names:
 
-Prospino 若用 `per_mode`：12 个过程 × 4 槽 = **48 份拷贝**，磁盘吃紧且首轮 48 次编译；
-用 `shared`：**4 份拷贝**，代价是切换时几秒重编——显然后者对。
+```text
+Prospino + modes [ng, ns]
+    -> Prospino.ng
+    -> Prospino.ns
+```
 
-MadGraph 若用 `shared`：每次 ProcA/ProcB 交替都重新生成进程，最坏每样本一次——灾难。
+Each expanded child carries internal metadata identifying the shared parent and
+target mode. Both children retain the same parent physical path and pool name.
+Normal calculators without `modes` are unchanged.
 
-**所以这是一个真实的、有物理含义的权衡，必须让卡片来声明**：
+### 4.1 Inheritance and lifecycle blocks
+
+- The parent owns physical fields: `source`, `deps_source`, `clone_shadow`,
+  `make_paraller`, and `symlink_name`. A mode cannot override them.
+- A mode may override logical/runtime fields such as `env_setup`, `timeout`,
+  `selection`, `required_modules`, and execution path.
+- Parent `execution` is forbidden. Every mode owns its `execution` block.
+- Parent and mode `installation` are separate stages, not one replayed list.
+- Parent initialization and mode initialization are concatenated for every
+  selected call, parent first.
+
+### 4.2 Dependencies
+
+The dot is the module/mode separator:
 
 ```yaml
-- name: Prospino
-  mode_packs: shared          # per_mode（默认） | shared
+required_modules: [Prospino.ng]       # one explicit mode
+required_modules: [Prospino.ng, Prospino.ns]
+required_modules: [Prospino]          # all modes of this parent
 ```
 
-**默认取 `per_mode`**，理由是两种误配的后果不对称：`per_mode` 用错只是多占磁盘、
-且是一次性成本；`shared` 用错是**扫描全程持续重建**。让代价可预测的那个当默认。
+A bare multimode parent expands to all children except the child itself. Thus
+`Prospino.ns` with `required_modules: [Prospino]` depends on sibling modes but
+does not acquire a self-dependency.
 
-### 5.5.2 `shared` 的实现语义
+Bare dependency names are not owned exclusively by Calculators; production
+cards legitimately reference LibDeps modules, Operas modules, and the reserved
+`Parameters` pseudo-module. `JV2-MOD-005` therefore validates only dotted names
+whose parent is a declared multimode calculator. `Prospino.typo` is rejected
+with a did-you-mean suggestion; bare `LoopTools`, `BuildBSMPTInput`, and
+`Parameters` are allowed.
 
-1. **池**：`calc:free:<Module>`（不含模式名），pack 目录 `…/<Module>/@PackID`。
-2. **stamp 增加 `mode` 字段**：记录该 pack 当前构建成了哪个模式。
-3. **取用时**：`ensure_shadow_installed` 增加一步判断——
-   `stamp.mode != 需要的模式` **或** 指纹/epoch 不匹配 → 执行该模式的 `installation`
-   （即那次重新 make），成功后更新 stamp。
-4. **写前清 stamp（关键）**：重建**开始前**先删除 stamp，成功后再写。
-   否则重建中途崩溃会留下"stamp 说是 A、目录其实是半个 B"的状态，
-   下次取用 A 时会跳过重建、直接跑一个坏掉的构建产物。这是标准的 write-ahead 顺序，
-   必须写进实现契约。
-5. **模式转换在持槽期间进行**，天然互斥，无需额外加锁。
+## 5. Installation lifecycle and disk truth
 
-### 5.5.3 `shared` 的硬性约束：池大小 ≥ 单样本内并发模式数
+For a requested mode, Worker preparation follows this lifecycle:
 
-同层模式在**一个样本内并发**，所以该样本会**同时**持有多个 pack。
-若 `Pools[<Module>]` 小于单个样本内并发使用的模式数，第二次 acquire 会一直等到超时，
-样本以 `timed out acquiring calculator slot` 失败——**每个样本都会失败**。
+1. Acquire exclusive ownership of a physical parent PackID from Redis.
+2. Read the PackID's `.jarvis_install_stamp.json`.
+3. Run parent `installation` only when the physical base is new, explicitly
+   reinstalled, or its parent fingerprint/epoch changed.
+4. If the trusted stamp mode differs from the requested mode, run only that
+   mode's optional `installation`.
+5. Write the successful parent fingerprint, epoch, and mode into the stamp.
+6. Run parent initialization and then mode initialization.
+7. Run mode execution in the resolved execution directory.
 
-因此装载期必须校验：`mode_packs: shared` 时，
-`Pools[<Module>]`（或 `make_paraller`）**≥ 任一层内该模块被并发使用的模式数**，
-否则报错（建议 `JV2-MOD-006`），并在消息里给出应设的最小值。
+Before any rebuild, the old stamp is deleted. A crash can therefore leave an
+unassigned/invalid pack, never a stamp that claims mode A while the directory is
+a half-built mode B. The stamp is written only after successful preparation.
 
-这是 `shared` 相比 `per_mode` 多出来的唯一一个坑，但它是可静态计算、可提前拦截的。
+All modes of one parent share one `jarvis_install.json` and one reinstall epoch.
+Setting `reinstall: true` invalidates the shared base once; it does not advance
+the epoch once per mode. On process restart, pool registration reads successful
+disk stamps and restores `pack -> mode` affinity. Redis is the live concurrency
+authority; the stamp is persistent truth and recovery fallback.
 
-## 5.6 收窄适用范围：multimode 只为「互斥构建」而存在（维护者观察，2026-08-01）
+## 6. Redis model
 
-> *"iDM 中的 micrOMEGAs 那种情况也存在，但它好像无需使用 multimode 就可以实现。"*
+For parent `Prospino`, Redis uses:
 
-**这个观察是对的，而且它把 multimode 的存在理由收窄成了一句话。** 核对 iDM 卡片：
-
-```yaml
-# 两个"模式"其实是同一个包的两个子目录，彼此可共存
-installation: ["cp -R ${source}/. ${path}", "cd ${path}/vector-iDM && make ..."]
-installation: ["cp -R ${source}/. ${path}", "cd axial-iDM && make ..."]
+```text
+calc:free:Prospino:mode:ng
+calc:free:Prospino:mode:ns
+calc:free:Prospino:unassigned
+calc:busy:Prospino
+calc:packmode:Prospino
 ```
 
-`vector-iDM/` 与 `axial-iDM/` 是并列子目录，**一份安装里可以同时build 好两个**，
-选哪个只是"跑哪个二进制"——那就是普通的 `execution.commands` 差异，
-**声明两个普通模块即可，完全不需要 modes**。
+A free PackID belongs to exactly one mode-affinity list or the unassigned list.
+`calc:busy:Prospino` guarantees exclusive physical ownership. Successful
+release atomically records the trusted target mode and returns the pack to that
+mode's free list. Preparation failure returns it to `unassigned`.
 
-### 5.6.1 判据
+### 6.1 Acquire preference and bounded warm wait
 
-| 包 | 多种用法能否共存于一份安装 | 需要 multimode 吗 |
-|---|---|---|
-| micrOMEGAs（vector / axial 子目录） | ✅ 可共存 | ❌ **不需要**——两个普通模块 |
-| MadGraph（ProcA / ProcB 各自 output 目录） | ✅ 可共存 | ❌ **不需要** |
-| **Prospino**（`final_state_in` 是同一构建目标的编译期配置） | ❌ **互斥** | ✅ **必须** |
+Acquisition order is:
 
-> **multimode 的唯一存在理由：多种用法在一份安装里互斥——即"要用 B 就必须先把 A 拆掉"。**
+1. a free pack already warm for the target mode;
+2. an unassigned/never-built pack;
+3. if a target-mode pack is currently busy, wait for it for a bounded interval;
+4. only then borrow the most plentiful other-mode pack and rebuild it.
 
-这条判据要写进 YAML_REFERENCE 与 skill 的开头。否则用户会对本可以用两个普通模块表达的场景
-滥用 modes，白白引入池、pack、重建这些复杂度。
+The default warm wait is three seconds and never exceeds the normal calculator
+acquire timeout. Waiting occurs only when a target-mode pack is actually in
+flight. If no target pack exists, the Worker borrows immediately; this avoids
+penalizing pools smaller than the mode count.
 
-**因此 §2 的场景表需要更正**：MadGraph 与 micrOMEGAs 都**不是** multimode 的适用场景，
-它们只是"共享 source 的两个模块"。真正的适用场景是 Prospino 这类编译期互斥的软件。
+This wait is essential under contention. Without it, a Worker immediately
+destroys another useful affinity while its exact warm pack is about to return;
+multi-key BLPOP cannot preserve preference after blocking because whichever key
+is pushed first wins.
 
-### 5.6.2 收窄之后，`per_mode` 与 `shared` 的取舍变了
+### 6.2 Worker ordering
 
-既然只剩互斥构建这一类，两种策略的对比要重算：
+For modes of the same parent in one dependency layer, a Worker executes them
+serially and greedily:
 
-| | `per_mode` | `shared`（朴素轮换） |
-|---|---|---|
-| 目录数 | 模式数 × pack 数 | pack 数 |
-| **重建次数** | **首轮各一次，之后为零** | **取决于命中率** |
+1. Prefer the pending mode with the most free warm packs.
+2. If no warm pack is free, prefer the mode with the fewest packs currently
+   busy for that target, spreading cold starts across Workers.
+3. Acquire using §6.1 and execute the selected mode.
 
-朴素 `shared` 的危险在于**命中率**：若取用是从一个扁平 free list 里 FIFO 取，
-拿到的 pack 恰好已是所需模式的概率约为 `1/模式数`。声明 4 个过程时，
-**约 75% 的取用会触发一次重建**。即使单次只要几秒，一万个样本 × 每样本数次取用，
-累计就是数小时纯编译——而 `per_mode` 是零。
+This naturally staggers Workers: one sample may run `ng` first while another
+runs `ns` first. There is no static ratio. Redis state and current contention
+determine the order at every step.
 
-所以"重建很快"**不足以**让朴素 `shared` 成立，真正决定性的是**命中率**。
+Different calculator parents in the same layer may still run concurrently.
+Dependency layers remain authoritative; the greedy rule never reorders steps
+across layers.
 
-### 5.6.3 建议方案：带模式亲和的池（affinity pool）
+### 6.3 Pool sizing
 
-把"一个扁平池"换成**每模式一个 free list + 借用规则**：
+Affinity cannot remove a physical capacity limit. Observed guidance is:
 
-```
-acquire(Prospino, mode=ng):
-  1. calc:free:Prospino:ng 非空  → 直接取，零重建          ← 稳态下走这条
-  2. 否则从最长的其他模式 list 借一个 → 重建成 ng → 归还时进 ng 的 list
-```
-
-稳态性质：**每个 pack 会自然沉淀到一个模式上**，重建只在"同时需要的模式数超过池容量"时发生。
-于是同时拿到两者的好处——磁盘 ∝ **pack 数**（不是模式数 × pack 数），重建 ≈ **仅预热阶段**。
-
-代价是 `redis_queue` 侧要从"一个 list"变成"每模式一个 list + 借用"，复杂度中等；
-借用时的竞态最坏只导致一次多余重建，无正确性风险。
-
-### 5.6.4 分阶段建议
-
-鉴于适用面已收窄到 Prospino 这一类，建议：
-
-- **v1 只做 `per_mode`**（零重建、实现最简、行为可预测），先把 modes 的展开、寻址、
-  校验这些主体跑通；
-- 待真实 Prospino 卡片跑起来、磁盘确实成为问题时，再加 §5.6.3 的亲和池作为 `mode_packs: shared`。
-
-这样 §5.5 的 `mode_packs` 开关**保留在设计里但 v1 只实现一档**，避免过早引入亲和池的复杂度。
-
-## 5.7 Redis 结构与「少切换」调度（维护者提问，2026-08-01）
-
-### 5.7.1 Redis 要不要改？取决于策略
-
-| 策略 | Redis 改动 |
-|---|---|
-| **`per_mode`（v1 建议）** | **零改动**。展开后 `Prospino.ng` 就是一个普通模块名，池键 `calc:free:Prospino.ng`、`calc:busy:Prospino.ng` 全部沿用现有机制。**这正是 §3「展开成兄弟模块」的回报**。 |
-| `shared` / 亲和池 | **需要改**：(a) 每个 pack 要带 `mode` 标签（写在 stamp 里，Redis 侧则需 `calc:packmode:<Module>` 之类的 hash 以便调度时可见）；(b) `calc:free:<Module>` 由一条 list 变成**每模式一条 list + 借用**。 |
-
-所以"要不要改 Redis"与"要不要省磁盘"是同一个决定。v1 选 `per_mode` 就完全不碰 broker。
-
-### 5.7.2 「少切换」调度：你说的对，但当前结构下有个前提没成立
-
-维护者的设想：*"sample A 先算 proc A，sample B 先算 proc B，避免来回切换。"*
-
-**这个直觉是对的，但它隐含"一个样本内的多个模式是顺序执行的"。而现状不是**——
-`worker.py:366 _run_calculator_steps` 对同层 calculator 用 `ThreadPoolExecutor`
-**并发 fan-out**（除非 `force_serial_layers`）。同一个包的多个模式互不依赖，
-会被 `resolve_module_layers` 放进同一层，于是**一个样本会同时持有 M 个 pack**。
-
-后果：`shared` 池必须 ≥ `模式数 × 并发样本数`，否则不是"切换开销大"，而是
-**第二次 acquire 直接等到超时、样本失败**（§5.5.3 已记为 `JV2-MOD-006`）。
-而池一旦开到 `M × W`，磁盘就和 `per_mode` 一样了——**`shared` 省磁盘的前提被抵消掉**。
-
-### 5.7.3 因此：`shared` 下应把同模块的多模式**串行化**
-
-对互斥构建的包，同模块的模式本来就在争同一个池，并发执行没有收益（它们抢的是同一批 pack），
-反而抬高池的下限。所以：
-
-> **`mode_packs: shared` 时，同一模块的多个模式在一个样本内串行执行**（不同模块之间仍并发）。
-
-于是一个样本同时只持有 **1 个** pack，池可以小到 `W`（每 Worker 一个），
-维护者设想的"错开顺序"也才有了作用空间。
-
-### 5.7.4 少切换的实现：Worker 侧贪心，不需要全局调度
-
-不需要中心化排产。让每个 Worker 在**自己待办的模式步骤**里，优先挑**当前已有空闲 pack
-恰好是该模式**的那个：
-
-```
-worker 处理样本，待办模式步骤 {ng, ns, ll}
-  1. 查各模式的空闲数（LLEN calc:free:Prospino:<mode>，或读一次状态 hash）
-  2. 优先取"已有空闲且模式匹配"的那个 → 零重建
-  3. 都不匹配才借用并重建
+```text
+Calculators.Pools.<parent> >= mode count + Worker count
 ```
 
-**这会自发产生维护者描述的错开效果**：Worker A 发现 ng 有空闲就先做 ng；
-Worker B 此时看到 ng 已被占、ns 空闲，于是先做 ns——不需要任何协调，
-"A 先算 ProcA、B 先算 ProcB" 是这条贪心规则的**自然结果**而非需要显式编排的策略。
+This is a performance recommendation, not a correctness requirement. When the
+pool is approximately that size, steady-state contention can reach zero mode
+rebuilds. A pool equal only to mode count can still degenerate under multiple
+Workers. If PackID count is smaller than mode count, rebuild thrashing is
+structurally unavoidable because every mode cannot remain resident.
 
-竞态无害：两个 Worker 同时窥探、同时选中 ng，最坏多一次重建，无正确性问题。
+`JV2-MOD-009` reports an undersized pool as a warning and suggests a concrete
+size. It does not reject the task. Users may deliberately accept rebuilds to
+save disk.
 
-### 5.7.5 小结
+## 7. Selection semantics
 
-- **v1（`per_mode`）**：Redis 零改动，无切换问题，无需调度机制。代价是 `模式数 × pack 数` 目录。
-- **未来（`shared` + 亲和池）**：需要 pack 的 mode 标签 + 每模式 free list + 借用；
-  同时必须**串行化同模块模式** + **Worker 侧贪心选模式**，两者缺一不可——
-  只做池不做调度会退化成来回切换，只做调度不做池则无池可选。
+Mode selection is evaluated before Redis acquisition and before greedy mode
+ordering. A mode whose `selection` is false:
 
-这也是把 `shared` 推迟到 v2 的另一条理由：它不是"换个池键"那么简单，而是
-**池结构 + 执行顺序 + 选择策略**三件事的组合。
+- does not acquire or hold a PackID;
+- does not run parent or mode installation;
+- does not run initialization or execution;
+- does not rewrite the pack's affinity label;
+- does not record a misleading mode PackID for the sample.
 
-## 6. 三个曾经想不清楚的问题，及答案
+This ordering is required because parameter-dependent mode selection is a
+primary multimode use case. Preparing first would rebuild for a mode that never
+ran and would pollute affinity for peer Workers.
 
-### 6.1 模式与 PackID 槽位的关系 → ~~必须每模式独立~~ **已被 §5.5 更正**
+## 8. Flowchart semantics
 
-> ⚠ **本节结论过度推广，见 §5.5**：并发论据只排除了「所有模式共用同一个 pack 目录」，
-> 排除不了「共用一个池、取用时把 pack 重建成所需模式」。对 Prospino 这类「改 config 重新
-> make、重建很快、过程很多」的软件，`shared` 池才是对的。最终设计为
-> `mode_packs: per_mode | shared`，默认 `per_mode`。以下原文保留以记录推理过程。
+The workflow graph contains separate logical nodes such as `Prospino.ng` and
+`Prospino.ns`, because each mode owns distinct I/O and dependency edges. These
+nodes do not represent separate physical packs.
 
-这个问题看似要在"每模式一套 pack"和"共享一套 pack"之间权衡，**但现有并发模型已经把答案定死了**：
+The scene JSON records a `shared_runtime` group and per-node metadata containing
+the parent pool and `serialized_with_sibling_modes` constraint. The current
+visual renderer does not draw an external dashed container; the grouping stays
+semantic so the graph remains uncluttered. Mode labels state the shared PackID
+and serialization relationship.
 
-`workflow.resolve_module_layers` 会把**互不依赖的模块排进同一层**，而同层 calculator 在一个
-样本内**并发执行**（D2.2）。所以两个独立的模式会同时运行——它们**不可能共用一个 pack 目录**，
-否则就是两个进程同时写同一个工作目录，正是 clone_shadow 要防的事。
+## 9. Validation contract
 
-结论：**每个模式有自己的池（`calc:free:MadGraph.ProcA`）和自己的 `001…N` pack 目录**。
-不提供 `shared/per_mode` 开关——那个开关的"共享"档在并发下是错的。
+| Code | Rule |
+| --- | --- |
+| `JV2-MOD-001` | Parent/mode names cannot use `.` internally; dot is the separator. |
+| `JV2-MOD-002` | A multimode parent cannot define `execution`. |
+| `JV2-MOD-003` | Parent and sibling mode names must be unique. |
+| `JV2-MOD-004` | Sibling modes cannot publish duplicate output names. |
+| `JV2-MOD-005` | A dotted mode under a known multimode parent must exist; includes did-you-mean. |
+| `JV2-MOD-006` | Shared physical contract: `clone_shadow`, `@PackID`, physical overrides, and forbidden `@Mode`/`${mode_dir}`. |
+| `JV2-MOD-007` | `Calculators.Pools` must use the physical parent, not `Parent.mode`. |
+| `JV2-MOD-008` | Pool parent must name a declared calculator. |
+| `JV2-MOD-009` | Warning for pool capacity likely to cause affinity thrashing. |
 
-想省磁盘的用户用现有手段即可：`Calculators.Pools: {MadGraph.ProcA: 1}` 限制槽位数。
+The schema surface is closed. Unknown keys and misspellings fail before Redis,
+Workers, output directories, or installation side effects start.
 
-### 6.2 `required_modules` 如何引用模式 → **点号寻址，裸名 = 全部模式**
+## 10. Failure and recovery rules
 
-`"MadGraph.ProcA"` 指定单个模式；`"MadGraph"` 表示"该模块的所有模式"（展开为全部模式名）。
-后者覆盖"等这个包全部用途算完"的常见意图，且让**老卡片的裸名引用在加 modes 后语义仍然正确**。
+- Rebuild start deletes the old stamp.
+- Successful preparation sets `runtime_ready`; a later execution failure may
+  return the pack to the newly prepared target-mode list.
+- Preparation failure returns the pack to `unassigned`.
+- Redis release is atomic; socket failure retains local ownership for watchdog
+  recovery instead of silently double-freeing the pack.
+- Worker/process cleanup force-releases held shared packs to `unassigned` when
+  the trusted mode cannot be established.
+- Restart registration restores only modes found in successful stamps.
 
-### 6.3 `execution.input/output` 是否按模式声明 → **必须按模式，且要防重名**
+## 11. Compatibility and non-goals
 
-各模式产出不同的物理量，`input`/`output` 只能在模式内声明。
+- V1 is unchanged. V1's unfinished multimode stub is not a compatibility target.
+- Ordinary single-mode calculators keep their original Redis keys, pools,
+  installation lifecycle, workflow behavior, and YAML.
+- Multimode is not extended to Operas; Operas can declare multiple normal
+  functional modules without a mutable native build.
+- There is no global per-mode `build` stage. Expensive globally reusable builds
+  belong in `LibDeps`; mode `installation` is the PackID-local switch step.
+- There is no user-configurable `per_mode/shared` strategy in V2.
 
-**但这里有个必须堵上的坑**：两个模式若声明了**同名的 output**（如都叫 `omega_h2`），
-它们会先后写进同一个 `sample.observables`，**后者静默覆盖前者**——又是一个"跑得很正常、
-结果悄悄不对"的失败。
+## 12. Work packages and acceptance
 
-处置：**装载期校验**——同一模块下任意两个模式声明了相同的 output `name` 即报错，
-提示改名或用 `@Mode` 前缀。不做自动改名（自动加前缀会改变 DATABASE 列名，
-且让用户的表达式对不上）。这与 D17 "宁可装载期报错，不要运行期静默错" 的原则一致。
+| WP | Result | Acceptance |
+| --- | --- | --- |
+| D20.1–D20.4 | shared-only multimode implementation | expansion, schema, Redis, Worker, flowchart, real-process E2E |
+| D20.5 | dependency-validation regression fix | 65 shipped cards have zero `JV2-MOD-*` errors; bad known dotted mode still rejected |
+| D20.6 | contention hardening | bounded target-mode wait; 3 modes/3 packs/3 Workers preserve affinity; sizing warning/documentation |
+| D20.7 | selection before acquire | skipped mode never touches Redis, build, or affinity |
+| D20.8 | polish and design synchronization | Utils migration wording restored; self-dependency removed; this document matches code |
 
-## 7. 校验规则（D17 zone: `closed`）
-
-| 规则 | 错误码（建议） |
-|---|---|
-| `modes` 非空数组，元素含 `name` | `JV2-MOD-001` |
-| 有 `modes` 时，模块级不得出现 `execution` | `JV2-MOD-002` |
-| 同模块内模式名重复 | `JV2-MOD-003` |
-| 同模块内两个模式的 output `name` 冲突（§6.3） | `JV2-MOD-004` |
-| `required_modules` 引用了不存在的 `模块.模式` | `JV2-MOD-005`（带 did-you-mean） |
-| 模式名含非 ASCII / 点号 | 复用 `JV2-ENC-001` / 新增名称字符约束 |
-
-## 8. 与既有能力的边界
-
-- **公共且昂贵的构建应放 LibDeps，而不是模块级 `installation`。** 因为每个模式有自己的 pack，
-  模块级 `installation` 会在**每个模式的每个 pack 里各跑一次**。真正"全局装一次"的东西
-  （ROOT、Delphes）属于 LibDeps（D18 已实现）。文档要把这条写清楚，否则用户会在
-  `installation` 里放重型编译然后抱怨慢。
-- **不扩展到 `Operas.Modules`**：Operas 算子是纯函数调用，多用途直接写成多个模块即可，
-  没有共享构建的问题。
-
-## 9. 工作包（建议）
-
-| WP | 内容 | 验收 |
-|---|---|---|
-| D20.1 | 配置展开器 + schema（`modes` 重定义，zone `closed`） | 一张双模式卡片展开为两个模块；`Jarvis2 validate` 覆盖 §7 全部规则 |
-| D20.2 | `@Mode` / `${mode_dir}` token + 每模式 pack 路径 | 两模式的 pack 目录互不重叠；并发跑不互踩 |
-| D20.3 | `required_modules` 点号寻址 + 裸名展开 | 依赖序正确；跨模式依赖进入正确的层 |
-| D20.4 | 文档 + skill（`multi-mode-calculator.md`，卡片实测通过） | D16 规则 |
-
-**回滚**：不写 `modes` 的卡片走今天的路径，一字不变。
-
-## 10. 需要维护者拍板的两点
-
-1. **寻址分隔符用点号还是冒号**：本设计用 `MadGraph.ProcA`。若担心与 Operas 的
-   `namespace.function` 视觉混淆，可改 `MadGraph:ProcA`。两者实现代价相同，纯偏好问题。
-   §1.1 定调后这一条**没有任何外部输入**（V1 不参与），完全是 V2 的口味选择。
-2. **裸名 `required_modules: ["MadGraph"]` 的语义**：本设计定为"全部模式"。
-   另一种选择是"报错，必须写明模式"——更严格但会让老卡片在加 modes 后失效。
-   建议维持"全部模式"，理由见 §6.2。
+Rollback remains simple: cards without `modes` never enter the shared-mode path.

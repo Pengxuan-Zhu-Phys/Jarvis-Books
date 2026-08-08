@@ -179,7 +179,7 @@ rebuilding the project.
 
 \begin{jtip}
 Every fixed-set, adaptive, and \textsc{mcmc} method mints deterministic \textsc{uuid}s
-from \code{(method, seed, \ldots)} --- fix \yamlkey{Seed} and the run is re-proposable:
+from \code{(method, seed, \ldots)} --- fix \yamlkey{Bounds.Seed} and the run is re-proposable:
 resume after a crash, replay on another machine, extend a \textsc{csv} of survivors, all
 without double-computing a point (Chapter~\ref{ch:reproducibility}).
 \sampler{Dynesty}/\sampler{MultiNest} are the exception --- their proposal \textsc{uuid}s

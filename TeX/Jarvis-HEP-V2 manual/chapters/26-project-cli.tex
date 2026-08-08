@@ -1,7 +1,7 @@
 \chapter{Project Tools \& the Example Catalog}
 \label{ch:project-cli}
 
-\newthought{Projects are the unit of sharing.} \cli{Jarvis2 project} scaffolds new
+\newthought{Projects are the unit of sharing.} \cli{Jarvis project} scaffolds new
 projects, packs existing ones into tarballs, browses the official example catalog, and
 --- for restricted material --- encrypts and decrypts packs so that no user ever touches
 \cli{openssl} by hand.
@@ -11,9 +11,9 @@ projects, packs existing ones into tarballs, browses the official example catalo
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 project create MyScan
+Jarvis project create MyScan
 cd MyScan
-Jarvis2 run bin/quickstart_bridson_operas.yaml
+Jarvis run bin/quickstart_bridson_operas.yaml
 \end{jcmd}
 \end{terminal}
 
@@ -37,10 +37,10 @@ shares one runtime profile (Section~\ref{sec:check-default-deps}).
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 project pack . --share    # curated: bin/ data/ outputs/ images/ + markers
-Jarvis2 project pack . --repro    # default: all non-hidden top-level content
-Jarvis2 project pack . --full     # everything
-Jarvis2 project pack . --man      # write an editable pack manifest only
+Jarvis project pack . --share    # curated: bin/ data/ outputs/ images/ + markers
+Jarvis project pack . --repro    # default: all non-hidden top-level content
+Jarvis project pack . --full     # everything
+Jarvis project pack . --man      # write an editable pack manifest only
 \end{jcmd}
 \end{terminal}
 
@@ -65,9 +65,9 @@ Curated example projects are indexed by a single \textsc{json} document in the
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 project list          # table: Name, Access, Key, Category, Summary
-Jarvis2 project info Eggbox   # details, incl. entry-point card and key hint
-Jarvis2 project fetch Eggbox  # download + unpack a public project
+Jarvis project list          # table: Name, Access, Key, Category, Summary
+Jarvis project info Eggbox   # details, incl. entry-point card and key hint
+Jarvis project fetch Eggbox  # download + unpack a public project
 \end{jcmd}
 \end{terminal}
 
@@ -88,10 +88,10 @@ the rest.
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 project fetch SecretName --key 'YOUR_KEY'
+Jarvis project fetch SecretName --key 'YOUR_KEY'
 # or set it once per shell:
 export JARVIS_PROJECT_FETCH_KEY='YOUR_KEY'
-Jarvis2 project fetch SecretName
+Jarvis project fetch SecretName
 \end{jcmd}
 \end{terminal}
 
@@ -103,10 +103,10 @@ the catalog's key \emph{hint} for that entry.
 \begin{terminal}
 \begin{jcmd}
 # one-shot: pack then encrypt -> MyPrivate_repro_....tar.gz.jenc
-Jarvis2 project pack MyPrivate --repro --encrypt --key 'YOUR_KEY'
+Jarvis project pack MyPrivate --repro --encrypt --key 'YOUR_KEY'
 
 # or encrypt an existing tarball
-Jarvis2 project encrypt MyPrivate_repro_....tar.gz --key 'YOUR_KEY'
+Jarvis project encrypt MyPrivate_repro_....tar.gz --key 'YOUR_KEY'
 \end{jcmd}
 \end{terminal}
 

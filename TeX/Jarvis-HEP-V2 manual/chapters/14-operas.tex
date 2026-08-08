@@ -28,11 +28,13 @@ Operas:
           entry: z                   # dotted path into the returned mapping
 \end{yamlwin}
 
+Table~\ref{tab:opera-keys} takes those keys one at a time.
+
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.21\linewidth}p{0.11\linewidth}p{0.17\linewidth}p{0.41\linewidth}@{}}
+  \begin{tabular}{@{}p{0.233\linewidth}p{0.122\linewidth}p{0.189\linewidth}p{0.456\linewidth}@{}}
     \toprule
     \textbf{Key} & \textbf{Req.} & \textbf{Default} & \textbf{Meaning} \\
     \midrule
@@ -121,9 +123,14 @@ it a calculator, where the process-group kill is unconditional.
 \section{Operas vs calculators}
 \label{sec:opera-vs-calc}
 
+The two backends overlap enough that the choice is worth making deliberately;
+Table~\ref{tab:opera-vs-calc} sets them side by side.
+
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.20\linewidth}p{0.37\linewidth}p{0.37\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.213\linewidth}p{0.394\linewidth}p{0.393\linewidth}@{}}
     \toprule
     & \textbf{Opera} & \textbf{Calculator} \\
     \midrule
@@ -135,6 +142,7 @@ it a calculator, where the process-group kill is unconditional.
     Files            & none                      & input/output specs \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{Choosing a backend for a workflow step.}
   \label{tab:opera-vs-calc}
 \end{table}

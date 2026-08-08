@@ -3,14 +3,14 @@
 
 \newthought{This chapter is for anyone setting up \Jtwo} --- on a laptop, a group
 server, or a cluster login node. It requires nothing beyond a shell and Python. After
-following it, you have a working \cli{Jarvis2} command, a running Redis service, and a
+following it, you have a working \cli{Jarvis} command, a running Redis service, and a
 verified installation --- ready for the quick start in Chapter~\ref{ch:quickstart}.
 
 The whole installation is two components:
 
 \begin{enumerate}
   \item the \textbf{Python package} \code{jarvishep2} --- the runtime, the
-        \cli{Jarvis2} command, and its two core plugin packages;
+        \cli{Jarvis} command, and its two core plugin packages;
   \item a local \textbf{Redis service} --- the small data server every scan
         coordinates through (Section~\ref{sec:runtime-picture}).
 \end{enumerate}
@@ -51,31 +51,35 @@ python3 -m pip install -e '.[distributed]'
   \item Confirm the command is on your \code{PATH}; it prints the usage text:
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 --help
+Jarvis --help
 \end{jcmd}
 \end{terminal}
 \end{enumerate}
 
 Two plugin packages install automatically as core dependencies: \Portal\ (calculator
-file formats, Chapter~\ref{ch:io-types}) and \Operas\ (the operator registry,
+file formats, Section~\ref{sec:format-catalog}) and \Operas\ (the operator registry,
 Chapter~\ref{ch:jarvis-operas}).
 
-Add extras to the bracket list as needed:
+Add extras to the bracket list as needed; Table~\ref{tab:extras} lists what each one
+pulls in:
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Extra} & \textbf{Pulls in} \\
     \midrule
     \code{distributed} & \code{redis}, \code{msgpack}, \code{aiofiles} --- required
                          for real scans \\
-    \code{plot}        & \JPlot\ --- enables \cli{Jarvis2 plot}
+    \code{plot}        & \JPlot\ --- enables \cli{Jarvis plot}
                          (Chapter~\ref{ch:jarvisplot}) \\
     \code{dev}         & \code{pytest}, \code{fakeredis}, \code{colorlog} --- the
                          test suite \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{Package extras. Combine freely:
   \cli{pip install -e '.[distributed,plot,dev]'}.}
   \label{tab:extras}
@@ -94,7 +98,7 @@ python3 -m pip install -e '.[distributed,dev]'
 
 \begin{jnote}
 \Jtwo\ is its own distribution (\code{jarvishep2}) with its own command
-(\cli{Jarvis2}). It coexists in one environment with a version~1 installation ---
+(\cli{Jarvis}). It coexists in one environment with a version~1 installation ---
 neither package touches the other.
 \end{jnote}
 
@@ -103,7 +107,7 @@ neither package touches the other.
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 --version    # or the short form: Jarvis2 -v
+Jarvis --version    # or the short form: Jarvis -v
 \end{jcmd}
 \end{terminal}
 
@@ -117,17 +121,17 @@ into the executable.
 \begin{figure}[ht]
 \centering
 \JarvisVersionBanner
-\caption[The \clih{Jarvis2 --version} banner.]{The \clih{Jarvis2 --version} banner,
+\caption[The \clih{Jarvis --version} banner.]{The \clih{Jarvis --version} banner,
 reproduced in the project's own palette; the version on the last line is read from your
 installed package at runtime, and here shows the release this manual documents.}
 \label{fig:version-banner}
 \end{figure}
 
 \begin{jwarn}
-If your shell reports \cli{Jarvis2: command not found}, the executable is not on your
+If your shell reports \cli{Jarvis: command not found}, the executable is not on your
 \code{PATH} --- almost always because you installed into a different environment than
 the one you are using now. Re-activate the environment where you ran \cli{pip install},
-and confirm with \cli{which Jarvis2}. Under \code{pyenv}, \cli{Jarvis2} lives in that
+and confirm with \cli{which Jarvis}. Under \code{pyenv}, \cli{Jarvis} lives in that
 version's \code{bin/} directory.
 \end{jwarn}
 
@@ -198,7 +202,7 @@ redis-cli ping        # -> PONG
 \end{enumerate}
 
 \begin{jwarn}
-Start Redis \emph{before} launching a scan. If the service is down, \cli{Jarvis2 run}
+Start Redis \emph{before} launching a scan. If the service is down, \cli{Jarvis run}
 fails immediately with a connection error --- it never hangs, but it also never starts.
 \end{jwarn}
 
@@ -209,8 +213,8 @@ fails immediately with a connection error --- it never hangs, but it also never 
   \item Confirm the plugin registries respond --- each prints a non-empty list:
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 portal man     # file formats (JSON, CSV, SLHA, ...)
-Jarvis2 operas list    # registered operators
+Jarvis portal man     # file formats (JSON, CSV, SLHA, ...)
+Jarvis operas list    # registered operators
 \end{jcmd}
 \end{terminal}
   \item Smoke-test the real pipeline --- sampler, Redis, a Worker, and archiving ---
@@ -218,7 +222,8 @@ Jarvis2 operas list    # registered operators
 \begin{yamlwin}
 Sampling:
   Method: Random
-  "Point number": 20
+  Bounds:
+    "Point number": 20
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
@@ -240,7 +245,7 @@ Operas:
         of the full budget (Chapter~\ref{ch:check-modules}):
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 check smoke.yaml
+Jarvis check smoke.yaml
 \end{jcmd}
 \end{terminal}
 \end{enumerate}
@@ -252,7 +257,7 @@ what you just installed. All three commands succeeded? The installation is compl
 \begin{jnote}
 This is deliberately the same card shape Chapter~\ref{ch:quickstart} builds on ---
 \cli{check} here just confirms the pipeline works before that chapter walks through it
-key by key and runs it for real with \cli{Jarvis2 run}.
+key by key and runs it for real with \cli{Jarvis run}.
 \end{jnote}
 
 \section{Uninstall}

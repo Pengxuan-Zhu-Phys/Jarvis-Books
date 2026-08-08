@@ -2,11 +2,61 @@
 \label{ch:variables}
 
 \newthought{Variables define the space you scan.} Each entry under
-\yamlkey{Sampling.Variables} names one physical parameter, and its
-\yamlkey{distribution} fixes how a u-space coordinate in $[0,1]$ maps to a physical
-value. This chapter covers the entry schema, the five distribution types, and the
-\yamlkey{Mapper} block that makes the u\,$\rightarrow$\,x step explicit when you need
-control over it.
+\yamlkey{Sampling.Variables} names one sampling coordinate, and its
+\yamlkey{distribution} fixes how a u-space coordinate in $[0,1]$ becomes a physical
+value. Sometimes that is the whole story. Sometimes the coordinates you want to
+\emph{sample} are not the parameters you want to \emph{use} --- and that is what
+\yamlkey{Sampling.Mapper} is for.
+
+\section{Two ways to describe a space}
+\label{sec:mapper-modes}
+
+There are exactly two shapes a \yamlkey{Sampling} block can take here, and picking
+between them is the first decision of this chapter.
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\textnormal{\textbf{Variables only.}}] Every parameter your workflow needs is
+        something you can sample directly. One \yamlkey{Variables} entry per parameter,
+        each with its own distribution, and nothing else. This is the common case and
+        the whole of Sections~\ref{sec:variables-entry} and~\ref{sec:distributions}.
+  \item[\textnormal{\textbf{Variables + Mapper.}}] You sample in one set of coordinates
+        and hand the workflow another. \yamlkey{Variables} declares what the sampler
+        moves through; \yamlkey{Mapper} derives the rest with expressions
+        (Section~\ref{sec:mapper}).
+\end{description}
+
+The second mode earns its keep when the parameters you care about are
+\emph{constrained}. Suppose two masses must sum to a fixed scale. Declaring \code{m\_1}
+and \code{m\_2} as independent variables and then rejecting everything off the constraint
+with \yamlkey{selection} wastes almost the entire box. Sampling the sum and a ratio
+instead puts every point on the surface by construction:
+
+\begin{yamlwin}
+Sampling:
+  Method: Random
+  Variables:
+    - name: m_sum
+      distribution: {type: Flat, parameters: {min: 200.0, max: 2000.0}}
+    - name: r
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
+  Mapper:
+    - name: m_1
+      expression: "m_sum * r"
+    - name: m_2
+      expression: "m_sum * (1 - r)"
+\end{yamlwin}
+
+The scan is still two-dimensional --- \yamlkey{Mapper} adds parameters, never
+dimensions --- but \code{m\_1} and \code{m\_2} arrive at the workflow as ordinary
+parameters, and no point is ever thrown away.
+
+\begin{jtip}
+The question to ask is not ``do I want derived quantities?'' but ``\emph{where does the
+sampler need to be uniform?}'' If a derived quantity is only ever \emph{read} --- a ratio
+you want plotted, a combination entering the likelihood --- an \yamlkey{Operas} module or
+a likelihood term does the job just as well. Reach for \yamlkey{Mapper} when the
+\emph{geometry} of the scan is the point.
+\end{jtip}
 
 \section{The \yamlkey{Variables[]} entry}
 \label{sec:variables-entry}
@@ -41,20 +91,18 @@ instantly with \code{KeyError: 'max'}, check your \yamlkey{parameters} maps firs
 \section{The distribution catalog}
 \label{sec:distributions}
 
-\begin{fullwidth}
 \begin{table}[ht]
-  \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.16\linewidth}p{0.24\linewidth}p{0.56\linewidth}@{}}
+  \begin{tabular}{@{}p{0.18\linewidth}p{0.26\linewidth}p{0.56\linewidth}@{}}
     \toprule
     \textbf{type} & \textbf{Parameters} & \textbf{Mapping $u\in[0,1] \to x$} \\
     \midrule
-    \code{Flat}       & \yamlkey{min}, \yamlkey{max} & $x = \mathrm{min} + (\mathrm{max}-\mathrm{min})\,u$ \\
-    \code{Log}        & \yamlkey{min}, \yamlkey{max} ($>0$) & $x = \exp\!\big(\ln \mathrm{min}$ \allowbreak $+ (\ln \mathrm{max} - \ln \mathrm{min})\,u\big)$ \\
-    \code{Normal}     & \yamlkey{mean}, \yamlkey{stddev} & $x = \mathrm{mean} + \mathrm{stddev}\cdot\Phi^{-1}(u)$ \\
-    \code{Log-Normal} & \yamlkey{mean}, \yamlkey{stddev} & $x = \exp\!\big(\mathrm{mean}$ \allowbreak $+ \mathrm{stddev}\cdot\Phi^{-1}(u)\big)$ \\
-    \code{Logit}      & \yamlkey{location} (0), \yamlkey{scale} (1) & $x = \mathrm{logit}(u)\cdot\mathrm{scale} + \mathrm{location}$ \\
+    \code{Flat}       & \yamlkey{min}, \yamlkey{max} & $x = \yamlkey{min} + (\yamlkey{max}-\yamlkey{min})\,u$ \\
+    \code{Log}        & \yamlkey{min}, \yamlkey{max} ($>0$) & $x = \exp\!\big(\ln \yamlkey{min}$ \allowbreak $+ (\ln \yamlkey{max} - \ln \yamlkey{min})\,u\big)$ \\
+    \code{Normal}     & \yamlkey{mean}, \yamlkey{stddev} & $x = \yamlkey{mean} + \yamlkey{stddev}\cdot\Phi^{-1}(u)$ \\
+    \code{Log-Normal} & \yamlkey{mean}, \yamlkey{stddev} & $x = \exp\!\big(\yamlkey{mean}$ \allowbreak $+ \yamlkey{stddev}\cdot\Phi^{-1}(u)\big)$ \\
+    \code{Logit}      & \yamlkey{location} (0), \yamlkey{scale} (1) & $x = \mathrm{logit}(u)\cdot\yamlkey{scale} + \yamlkey{location}$ \\
     \bottomrule
   \end{tabular}
   \endgroup
@@ -63,7 +111,6 @@ instantly with \code{KeyError: 'max'}, check your \yamlkey{parameters} maps firs
   \code{Logit}'s default as shown.}
   \label{tab:distributions}
 \end{table}
-\end{fullwidth}
 
 Intuition for choosing:
 
@@ -83,57 +130,224 @@ edge for this dimension) inside \yamlkey{distribution.parameters} --- geometry k
 ride along with the distribution parameters. Details in
 Chapters~\ref{ch:grid} and~\ref{ch:bridson}.
 
-\section{The \yamlkey{Mapper} block}
+\section{The \yamlkey{Sampling.Mapper} block}
 \label{sec:mapper}
 
-The u\,$\rightarrow$\,x map is rebuilt inside every Worker
-(Section~\ref{sec:uspace}). Normally you never mention it: the top-level \yamlkey{Mapper}
-block is auto-derived ---
-
-\begin{itemize}
-  \item \sampler{CSV} method $\rightarrow$ \yamlkey{type: none} (points are already
-        physical; they travel with the task);
-  \item \yamlkey{Sampling.Variables} present $\rightarrow$ \yamlkey{type: distribution}
-        with those variables;
-  \item otherwise $\rightarrow$ \yamlkey{type: identity} over \code{[x, y]} (a test
-        fallback).
-\end{itemize}
-
-Write it explicitly only to override:
+\yamlkey{Mapper} is an ordered \emph{list}, one entry per derived parameter, and each
+entry has exactly two keys:
 
 \begin{yamlwin}
-Mapper:
-  type: distribution     # distribution | identity | none
-  # keys: [x, y]         # identity: observable names for u components
-  # variables: [...]     # distribution: same schema as Sampling.Variables
+Sampling:
+  Variables:
+    - name: t
+      distribution: {type: Flat, parameters: {min: 0.0, max: 6.283}}
+  Mapper:
+    - name: x
+      expression: "cos(t)"
+    - name: y
+      expression: "sin(t)"
 \end{yamlwin}
 
 \begin{keylist}
-  \item[type: distribution] The standard mapping of
-        Table~\ref{tab:distributions}; supply \yamlkey{variables} (same schema as
-        \yamlkey{Sampling.Variables}) to map differently from what the sampler saw.
-  \item[type: identity] Pass u-coordinates through unchanged, named by \yamlkey{keys}.
-        Useful when the workflow itself works in the unit cube.
-  \item[type: none] No mapping; every Sample must carry its parameters with the task
-        (the \sampler{CSV} arrangement).
+  \item[name] \req. The derived parameter's name --- the symbol it gets everywhere
+        downstream.
+  \item[expression] \req. How to compute it, in the shared language of
+        Chapter~\ref{ch:expressions}, so the full function catalog and every \Operas\
+        namespace are available.
+\end{keylist}
+
+Those two keys are the whole entry; anything else is rejected. Note the shape this
+gives the block: your parameter names are \emph{values} of \yamlkey{name}, never
+\textsc{yaml} keys. \yamlkey{Mapper} therefore reads like
+\yamlkey{Variables} --- a list of named things --- rather than like a settings map, which
+is the right way to think about it, since both lists describe parameters and neither
+describes options.
+
+\subsection{What happens, in order}
+\label{sec:mapper-order}
+
+For every point the runtime does two steps, always in this order:
+
+\begin{enumerate}[leftmargin=1.6em]
+  \item \textbf{Distributions.} Each u-coordinate becomes a physical value through its
+        variable's \yamlkey{distribution} (Table~\ref{tab:distributions}). This step
+        happens whether or not you wrote a \yamlkey{Mapper}.
+  \item \textbf{Derivations.} Each \yamlkey{Mapper} expression is evaluated and its
+        result added to the same dictionary, so later entries can use earlier ones.
+\end{enumerate}
+
+What comes out is one flat set of parameters --- the sampling variables \emph{and} the
+derived names together. From that moment they are indistinguishable: both are seeded into
+the observables dictionary, both are visible to \yamlkey{selection}, to calculators and
+\yamlkey{Operas} modules, to the likelihood, and both land in the output records.
+\JPlot\ even prefers \yamlkey{Mapper} names when it picks default plot axes, on the
+assumption that if you bothered to derive them, they are the coordinates you think in.
+
+\begin{jnote}
+The control process and every Worker run the \emph{same} mapping implementation over the
+same u-coordinates. A point's parameters therefore do not depend on where they were
+computed --- which is what lets a resumed scan rebind a \code{uuid} to exactly the
+coordinates it had before.
+\end{jnote}
+
+\subsection{Order does not matter (dependencies do)}
+
+\yamlkey{Mapper} entries may reference each other, and the runtime sorts out the order
+itself by following the dependencies. This list works exactly as written, even though
+\code{z} is listed before the two names it uses:
+
+\begin{yamlwin}
+Mapper:
+  - name: z
+    expression: "x + y"    # evaluated last anyway
+  - name: x
+    expression: "cos(t)"
+  - name: y
+    expression: "sin(t)"
+\end{yamlwin}
+
+What is not allowed is a cycle --- \code{x} defined from \code{y} while \code{y} is
+defined from \code{x} --- which is reported at load time as \code{JV2-MAP-004} naming the
+entries involved.
+
+\subsection{A closed namespace}
+\label{sec:mapper-namespace}
+
+A \yamlkey{Mapper} expression may refer to \textbf{sampling variables and other
+\yamlkey{Mapper} names, and nothing else}. Observables produced by calculators or
+\yamlkey{Operas} modules are not visible; neither is \code{LogL}, nor \code{uuid}.
+
+This is a real restriction and it is deliberate. The mapping runs \emph{before} anything
+has been computed --- it is what produces the parameters those calculators will be given.
+Letting it read their output would be circular. Referencing an unknown name is
+\code{JV2-MAP-002}, and the message lists every name that \emph{was} available, which is
+usually enough to see the mistake.
+
+Derived names must also be new:
+
+\begin{keylist}
+  \item[not already taken] A derived name cannot shadow a \yamlkey{Variables} name, and
+        two \yamlkey{Mapper} entries cannot share a name (\code{JV2-MAP-003}).
+  \item[not a reserved constant] \code{Pi}, \code{pi}, \code{PI}, \code{E}, \code{Inf}
+        (\code{JV2-MAP-005}).
+  \item[not a reserved column] \code{uuid}, \code{sample\_index}, \code{status},
+        \code{LogL} (\code{JV2-MAP-006}).
 \end{keylist}
 
 \begin{jwarn}
-Any \emph{other} \yamlkey{type} string --- including the tempting \code{flat} --- falls
-through to a minimal linear mapper that reads \yamlkey{min}/\yamlkey{max} directly and
-supports nothing else; and if \yamlkey{variables} is absent there, the mapper is silently
-\code{None}. Treat the three types above as the complete public surface.
+One name clash is only a \emph{warning}, and it is the one worth watching:
+\code{JV2-MAP-052} fires when a \yamlkey{Mapper} name is also produced downstream as an
+\yamlkey{Operas} output or a calculator \yamlkey{Dump} variable. The scan runs, but the
+downstream value overwrites the observable while the recorded parameter keeps the mapped
+one --- the same name carrying two different numbers. Rename one of them.
 \end{jwarn}
+
+\subsection{Dimensions, priors, and which methods care}
+\label{sec:mapper-priors}
+
+The sampler moves through one dimension per \yamlkey{Variables} entry. \yamlkey{Mapper}
+never changes that count, so \sampler{Grid}'s \yamlkey{num} and \sampler{Bridson}'s
+\yamlkey{length} still belong to the variables, and a card with two variables and five
+\yamlkey{Mapper} entries is still a two-dimensional scan.
+
+For the coverage methods --- \sampler{Random}, \sampler{Grid}, \sampler{Bridson},
+\sampler{AdaptiveBridson} --- that is the end of it. For the statistical methods
+(\sampler{Dynesty}, \sampler{MultiNest} and the \textsc{mcmc} family) there is one thing
+to be careful about, and the validator will say so:
+
+\begin{keylist}
+  \item[JV2-MAP-050] More \yamlkey{Mapper} parameters than sampling variables. Your
+        points lie on a lower-dimensional surface inside the space you appear to be
+        exploring --- fine for a coverage scan, rarely what you want for inference.
+  \item[JV2-MAP-051] A nonlinear \yamlkey{Mapper} expression. The prior is defined by
+        \yamlkey{Variables}, not by the derived parameters, and a nonlinear map does not
+        carry a flat prior across unchanged.
+\end{keylist}
+
+Both are warnings, not errors --- the scan runs. If the derived parameters really are
+your inference coordinates, the fix is yours to make: include the absolute Jacobian of
+the transform as a term in \yamlkey{LogLikelihood} (Chapter~\ref{ch:loglikelihood}).
+
+\begin{jnote}
+\sampler{CSV} does not accept a \yamlkey{Mapper} (\code{JV2-MAP-010}). Its points are
+already physical --- they come from the file's columns --- so there is no
+u\,$\rightarrow$\,x step to reparameterize. Derive what you need as extra columns in the
+\textsc{csv} itself.
+\end{jnote}
+
+\subsection{Changing a \yamlkey{Mapper} ends a resume}
+
+The checkpoint records a fingerprint of the \yamlkey{Mapper} entries together with the
+variable distributions. If either changed, \cli{-{}-resume} is \textbf{refused} and the
+stale checkpoint is removed, so a later run cannot quietly pick it up. Reordering the
+list is not a change --- the fingerprint is taken over the entries by name, and the
+evaluation order comes from the dependencies anyway --- but editing a name or an
+expression is.
+
+The reason is worth stating plainly: a resumed scan replays \code{uuid}s against
+coordinates. Under an edited mapping the same \code{uuid} would name a different point in
+parameter space, and the finished half of your scan would no longer mean what its records
+say. Editing a \yamlkey{Mapper} means starting a fresh scan --- or restoring the original
+card.
+
+\subsection{Diagnostics at a glance}
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.2\linewidth}p{0.15\linewidth}p{0.65\linewidth}@{}}
+    \toprule
+    \textbf{Code} & \textbf{Level} & \textbf{Meaning} \\
+    \midrule
+    \code{JV2-MAP-001} & error & \yamlkey{Mapper} is not a list of
+      \yamlkey{name}/\yamlkey{expression} entries, or an entry is missing one of them \\
+    \code{JV2-MAP-002} & error & expression references a name outside the closed
+      namespace \\
+    \code{JV2-MAP-003} & error & derived name shadows a \yamlkey{Variables} name or
+      repeats an earlier \yamlkey{Mapper} name \\
+    \code{JV2-MAP-004} & error & dependency cycle among \yamlkey{Mapper} entries \\
+    \code{JV2-MAP-005} & error & derived name is a reserved constant \\
+    \code{JV2-MAP-006} & error & derived name is a reserved output column \\
+    \code{JV2-MAP-007} & error & the expression does not parse \\
+    \code{JV2-MAP-010} & error & \yamlkey{Mapper} used with \sampler{CSV} \\
+    \code{JV2-MAP-050} & warning & more derived parameters than sampling dimensions,
+      under a statistical method \\
+    \code{JV2-MAP-051} & warning & nonlinear reparameterization under a statistical
+      method \\
+    \code{JV2-MAP-052} & warning & derived name also produced downstream \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\yamlkey{Sampling.Mapper} diagnostics. Errors are reported at load time,
+  before any Worker starts.}
+  \label{tab:map-codes}
+\end{table}
 
 \section{Practical guidance}
 
 \begin{jtip}
 Declare every variable with the distribution you \emph{mean}, not \code{Flat} plus a
-transformation in the workflow. The declared distribution is what samplers use for
-geometry (\sampler{Bridson} radii, \sampler{AdaptiveBridson} refinement), what the
-mapper applies, and what your records show --- keeping physics intent in one place.
+transformation somewhere else. The declared distribution is what samplers use for
+geometry (\sampler{Bridson} radii, \sampler{AdaptiveBridson} refinement), what sets the
+prior, and what your records show --- keeping the intent in one place. In particular, a
+\code{Log} variable is not the same scan as a \code{Flat} variable with an
+\code{exp()} in the \yamlkey{Mapper}: the first is uniform per decade, the second is
+uniform per unit, and only the first is what you meant when you said ``scan this mass
+logarithmically''.
 \end{jtip}
 
-Variable names to avoid: single letters that collide with mathematical constants and
-functions in the expression language (\code{E}, \code{I}, \code{N}, \code{pi},
-\code{beta}, \code{gamma}); Chapter~\ref{ch:expressions} lists the reserved names.
+Names to avoid, for variables and derived parameters alike: single letters that collide
+with mathematical constants and functions in the expression language (\code{E},
+\code{I}, \code{N}, \code{pi}, \code{beta}, \code{gamma}); Chapter~\ref{ch:expressions}
+lists the reserved names. For \yamlkey{Mapper} entries the hard cases are rejected at
+load time (Table~\ref{tab:map-codes}), but a variable named \code{beta} will simply
+behave strangely.
+
+\begin{jtip}
+Start with \yamlkey{Variables} alone. Add a \yamlkey{Mapper} when you can name the
+constraint it enforces --- ``the two masses sum to the scale'', ``the point lies on the
+unit circle'' --- and keep the derivations short enough to read. A \yamlkey{Mapper} that
+has grown into a calculation belongs in an \yamlkey{Operas} module instead, where it can
+be tested.
+\end{jtip}

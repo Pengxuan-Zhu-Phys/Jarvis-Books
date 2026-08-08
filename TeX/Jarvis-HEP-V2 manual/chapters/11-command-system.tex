@@ -1,0 +1,288 @@
+\chapter{The Command System}
+\label{ch:command-system}
+
+\newthought{Everything in this part of the book eventually becomes a command.} A
+calculator is a program you launch; a library dependency is a program you build; an
+initialization step is a program you run once. Between the string you write in the card
+and the process that actually starts, there is exactly one piece of machinery --- and
+this chapter is about it, because every chapter that follows depends on knowing what it
+does.
+
+The problem it solves is stated quickly. A command string has to name things that live
+in two different worlds:
+
+\begin{description}[leftmargin=1.6em]
+  \item[Things known when the card is read] where the project lives, where an external
+        tool was installed, what the scan is called. These are the same for the whole
+        run.
+  \item[Things not known until a point exists] this Sample's identity, its working
+        directory, which calculator slot the Worker happens to hold. These differ for
+        every one of the million points you may be about to run.
+\end{description}
+
+Writing absolute paths would solve the first and ignore the second --- and would produce
+a card nobody else can run. So \Jtwo\ resolves command strings in \textbf{two phases}, at
+two different times, in two different processes. Section~\ref{sec:tokens} introduced that
+idea; this chapter is the complete account.
+
+\section{One parser, built once, shipped to the Workers}
+\label{sec:parser-lifecycle}
+
+There is a single object doing all of this --- a command parser, built once in the
+control process when the card is loaded. Its construction is the moment every static
+answer gets pinned down: the project root, the scan name, the path of every
+\yamlkey{LibDeps} module, the absolute path of every registered executable.
+
+Once built, the parser is \emph{serialized and handed to each Worker}. This matters more
+than it looks. A Worker never re-reads your task card and never re-derives a path; it
+receives a parser that already knows every static answer and only ever fills in the
+per-Sample blanks. Two consequences you can rely on:
+
+\begin{itemize}
+  \item \textbf{A path resolves identically everywhere.} All Workers, on all machines,
+        inherit one set of answers computed once. There is no way for two Workers to
+        disagree about where a tool lives.
+  \item \textbf{A broken path fails at load, not at minute forty.} Registering an
+        executable checks that the source exists, so a typo in a tool path stops the run
+        before a single Sample is submitted.
+\end{itemize}
+
+\section{Phase 1: resolved once, at load}
+\label{sec:phase1}
+
+Phase 1 runs in the control process, immediately after the card is validated. It walks
+the configuration \emph{recursively} --- every string in every mapping and list, not just
+the fields named \yamlkey{cmd} --- and substitutes every static token it finds. A path
+buried in an I/O spec gets the same treatment as a command.
+Table~\ref{tab:phase1-tokens} is the complete set.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.312\linewidth}p{0.688\linewidth}@{}}
+    \toprule
+    \textbf{Token} & \textbf{Resolves to} \\
+    \midrule
+    \marker{\&J/} (or bare \marker{\&J}) & the project root \\
+    \code{\$\{Scan:name\}} & the scan name \\
+    \code{\$\{Scan:root\}} & \file{<root>/\allowbreak{}outputs/\allowbreak{}<scan>};
+      any other suffix (\code{output}, \code{outputs}, \ldots) resolves the same way \\
+    \code{\$\{LibDeps:<name>\}} & the path of the tool registered under
+      \yamlkey{LibDeps.Modules} (Chapter~\ref{ch:libdeps}). An unknown name is a hard
+      error naming the reference \\
+    \code{\$\{LibDeps:path\}} & the \yamlkey{LibDeps.path} base directory itself ---
+      useful for reaching a sibling of your tools \\
+    \emph{a registered executable name} & its absolute path
+      (Section~\ref{sec:registered}) \\
+    \code{@\{ROOT path\}} & the \textsc{cern} \textsc{root} installation prefix
+      (Section~\ref{sec:root-path}) \\
+    \jtt{\textasciitilde} & your home directory \\
+    \code{\$\{source\}}, \code{\$\{path\}} & the module's \yamlkey{source} and runtime
+      \yamlkey{path} --- \emph{only} inside \yamlkey{installation} and
+      \yamlkey{initialization} commands (Chapter~\ref{ch:calculators}) \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Phase-1 tokens. All are resolved once, in the control process, before any
+  Sample exists.}
+  \label{tab:phase1-tokens}
+\end{table}
+
+\begin{jnote}
+Phase 1 is also a checkpoint. If a static token survives its own phase --- a
+\marker{\&J} that was never expanded, an unknown \code{\$\{LibDeps:\ldots\}} --- the load
+stops there with the offending string quoted, rather than passing a half-resolved path to
+a program that will fail more confusingly later.
+\end{jnote}
+
+\section{Phase 2: resolved per Sample, in the Worker}
+\label{sec:phase2}
+
+Phase 2 runs in the Worker, moments before the process starts, once per Sample. It knows
+only three things, because those are the only three that vary per point ---
+Table~\ref{tab:phase2-tokens} names them.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.229\linewidth}p{0.771\linewidth}@{}}
+    \toprule
+    \textbf{Token} & \textbf{Resolves to} \\
+    \midrule
+    \token{@SampleID} & the Sample's \textsc{uuid} \\
+    \token{@Sdir} & the Sample's save directory under \file{SAMPLE/}.
+      \textbf{Referring to it creates it} --- the directory is materialized on demand, so
+      a Sample that never mentions \token{@Sdir} never costs an inode \\
+    \token{@PackID} & the calculator slot the Worker currently holds --- a stable
+      \code{001}\ldots\code{N}, and the isolation key for tools that cannot run twice in
+      one directory (Chapter~\ref{ch:calculators}) \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Phase-2 tokens. Each is what keeps two Samples running the same program at the
+  same instant from colliding.}
+  \label{tab:phase2-tokens}
+\end{table}
+
+\section{The rule that connects them}
+\label{sec:phase-rule}
+
+One sentence governs the whole system:
+
+\begin{quote}
+Phase-2 tokens pass through Phase 1 untouched; a Phase-1 token reaching Phase 2 is an
+error.
+\end{quote}
+
+The first half is what lets a single string carry both kinds, which is the normal case.
+The second half is what stops a mistake from becoming a mystery. Phase 2 has no way to
+resolve \code{\$\{LibDeps:SPheno\}} --- the Worker was never given the vocabulary --- so
+rather than passing the literal text to a shell and letting the program fail with
+something unhelpful, it refuses and says exactly which stage and field the bad string
+came from:
+
+\begin{terminal}
+\begin{jout}
+Phase 2 cannot resolve static tokens in stage 'execution'
+field 'command': ${LibDeps:SPheno}/bin/SPheno @Sdir/in.slha
+\end{jout}
+\end{terminal}
+
+In practice you meet this error in one situation: a string that was added to the card
+somewhere Phase 1 does not walk, or that was assembled at run time out of pieces. The fix
+is always to make sure the static half is written in the card, where Phase 1 can see it.
+
+\subsection*{One string, both phases}
+
+Because a string may mix them, Phase 1 splits it at the token boundaries, resolves the
+static stretches, and leaves the per-Sample tokens standing. Written in the card:
+
+\begin{terminal}[as written in the task card]
+\begin{jcmd}
+spheno ${LibDeps:SPheno}/templates/base.in @Sdir/@SampleID.out
+\end{jcmd}
+\end{terminal}
+
+After Phase 1, in the control process --- note that \code{spheno} itself resolved too,
+because it is a registered executable:
+
+\begin{terminal}[after Phase 1, stored once for the whole run]
+\begin{jcmd}
+/scratch/tools/SPheno-4.0.5/bin/SPheno \
+  /scratch/tools/SPheno-4.0.5/templates/base.in @Sdir/@SampleID.out
+\end{jcmd}
+\end{terminal}
+
+And after Phase 2, in a Worker, for one particular point:
+
+\begin{terminal}[what the Worker actually ran]
+\begin{jcmd}
+/scratch/tools/SPheno-4.0.5/bin/SPheno \
+  /scratch/tools/SPheno-4.0.5/templates/base.in \
+  /work/proj/outputs/scan/SAMPLE/000003/8f2c1d.../8f2c1d....out
+\end{jcmd}
+\end{terminal}
+
+\section{Registered executables}
+\label{sec:registered}
+
+The tokens above are explicit --- you can see them in the string. Registered executables
+are the one substitution that is \emph{implicit}: you declare a name once, and from then
+on that bare word inside any command becomes an absolute path.
+
+\begin{yamlwin}
+LibDeps:
+  path: "&J/External"
+  Modules: [{name: SPheno}]
+  registered_executables:
+    - name: spheno
+      source: "${LibDeps:SPheno}/bin/SPheno"
+      resolution: direct_path      # direct_path (default) | symlink
+\end{yamlwin}
+
+\begin{keylist}
+  \item[name] \req. The bare word to substitute. It is replaced on \emph{word
+        boundaries}, so a name never eats part of a longer word or a path segment ---
+        registering \code{root} does not corrupt \file{/usr/local/rootfs}.
+  \item[source] \req. Where the program actually is. It is itself Phase-1 resolved, so it
+        may use \marker{\&J/} or \code{\$\{LibDeps:\ldots\}} as above. \textbf{The file
+        must exist} --- registration fails at load if it does not.
+  \item[resolution] \opt, default \code{direct\_path}. With \code{direct\_path} the name
+        becomes the tool's own absolute path. With \code{symlink}, \Jtwo\ instead creates
+        a link under \file{deps/registered/} inside the project and substitutes
+        \emph{that}. Use \code{symlink} for tools that misbehave when invoked through a
+        long or shifting path, or when you want the project to record which binaries it
+        used.
+\end{keylist}
+
+\begin{jnote}
+When several registered names overlap, the longest is substituted first. So registering
+both \code{spheno} and \code{spheno\_hp} does what you meant: \code{spheno\_hp} is
+matched as itself rather than as \code{spheno} followed by a stray suffix.
+\end{jnote}
+
+\section{\code{@\{ROOT path\}} and \yamlkey{EnvReqs.CERN\_ROOT}}
+\label{sec:root-path}
+
+Tools that link against \textsc{cern} \textsc{root} usually need its installation prefix
+at build time. Hard-coding that prefix is exactly what makes a project unbuildable on the
+next machine, so it gets a token of its own --- \code{@\{ROOT path\}} --- fed by an
+\yamlkey{EnvReqs} block:
+
+\begin{yamlwin}
+EnvReqs:
+  CERN_ROOT:
+    required: true             # check that ROOT is installed
+    version: "6.28"            # minimum version, optional
+    get_path_command: "root-config --prefix"
+\end{yamlwin}
+
+\begin{keylist}
+  \item[required] \opt, default \code{false}. When true, \Jtwo\ runs
+        \cli{root-config --version} during preflight and fails the run if \textsc{root}
+        is missing or older than \yamlkey{version}.
+  \item[get\_path\_command] \opt. A command whose standard output \emph{is} the prefix.
+        This is the portable form --- the machine tells you where its own \textsc{root}
+        is, rather than the card asserting it.
+  \item[path] \opt. A literal prefix, for when no such command exists. Note that this one
+        is read \emph{even when} \yamlkey{required} is false, so a card may supply the
+        prefix for a build without demanding a version check.
+\end{keylist}
+
+Using \code{@\{ROOT path\}} without configuring either \yamlkey{get\_path\_command} or
+\yamlkey{path} is an error that says so directly.
+
+\begin{jwarn}
+\yamlkey{CERN\_ROOT} sits in the part of \yamlkey{EnvReqs} that \Jtwo\ passes through
+rather than checks key by key (Chapter~\ref{ch:envreqs}), so a misspelled key inside it
+is not reported --- it simply leaves the prefix unset, and you meet the problem as the
+\code{@\{ROOT path\}} error above rather than as a validation message.
+\end{jwarn}
+
+\section{Where each token is allowed}
+\label{sec:token-scope}
+
+\begin{keylist}
+  \item[Phase-1 tokens] any path-like or command field: \yamlkey{path},
+        \yamlkey{source}, \yamlkey{cmd}, \yamlkey{cwd}, \yamlkey{data},
+        \yamlkey{Sampling.Bounds.path}, \yamlkey{default\_yaml\_path}, and so on. Phase 1
+        walks the whole configuration, so the practical answer is \emph{anywhere a string
+        appears}.
+  \item[\token{@SampleID}, \token{@Sdir}] calculator \yamlkey{execution} commands and I/O
+        spec paths --- that is, anywhere that runs or writes once per point.
+  \item[\token{@PackID}] module \yamlkey{path} and the commands of
+        \yamlkey{clone\_shadow} modules, plus anywhere you want the slot recorded for
+        traceability.
+  \item[\code{\$\{source\}}, \code{\$\{path\}}] \yamlkey{installation} and
+        \yamlkey{initialization} command lists only. These stages run before any Sample
+        exists, which is also why Phase-2 tokens are rejected there.
+\end{keylist}
+
+\begin{jtip}
+If you are unsure whether a string resolved the way you expected, run
+\cli{Jarvis check} on the card. The smoke path executes the real commands for a couple
+of points (Chapter~\ref{ch:check-modules}) and mirrors them to your terminal, which is
+the fastest way to see a fully resolved command line without committing to a scan.
+\end{jtip}

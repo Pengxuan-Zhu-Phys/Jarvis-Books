@@ -14,11 +14,13 @@ things.
 
 Before the definitions, the whole machine in one pass. Take a single point out of the
 quick-start scan and follow it from the moment the sampler invents it to the moment you
-open it in a spreadsheet.
+open it in a spreadsheet. Table~\ref{tab:one-point} follows it stage by stage.
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.213\linewidth}p{0.532\linewidth}@{}}
     \toprule
     \textbf{Stage} & \textbf{It is now} & \textbf{Where it lives} \\
     \midrule
@@ -39,6 +41,7 @@ open it in a spreadsheet.
       \file{DATABASE/\allowbreak{}samples.hdf5}, exported to \file{samples.csv} \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption[One point, from proposal to spreadsheet.]{One point, from proposal to
   spreadsheet. Each row is one of this chapter's five ideas at work.}
   \label{tab:one-point}
@@ -70,7 +73,7 @@ one directory: the \emph{project root}.
 
 Normal usage runs from a standalone project directory, not from a checkout of the
 framework. A project is any directory holding your task cards, data, external tools, and
-outputs. When \cli{Jarvis2} loads a task card, it resolves the root in this order, and
+outputs. When \cli{Jarvis} loads a task card, it resolves the root in this order, and
 stops at the first hit:
 
 \begin{enumerate}
@@ -85,7 +88,7 @@ stops at the first hit:
 
 That last clause is why the quick start worked with nothing but a loose \textsc{yaml}
 file: no marker anywhere, so the card's own directory became the root, and \file{outputs/}
-appeared beside it. \cli{Jarvis2 project create} scaffolds a properly marked project
+appeared beside it. \cli{Jarvis project create} scaffolds a properly marked project
 instead (Chapter~\ref{ch:project-cli}), and the difference shows the moment you move the
 card: a marked project keeps its root, a loose card takes its root with it.
 
@@ -106,35 +109,15 @@ The important structure is that tokens resolve in two \emph{phases}, at two diff
 times, in two different processes. Knowing which phase a token belongs to tells you
 exactly where it may appear.
 
-\textbf{Phase 1 --- static, resolved once at load time} in the control process:
+\textbf{Phase 1 --- static, resolved once at load time} in the control process. These are
+the answers that are the same for the whole run: \marker{\&J/} for the project root,
+\code{\$\{Scan:name\}} for the scan, \code{\$\{LibDeps:<name>\}} for where an external
+tool was installed, and the bare name of any tool you registered.
 
-\begin{keylist}
-  \item[\marker{\&J/}] The project root. \marker{\&J/data/points.csv} means
-        ``\file{data/points.csv} under the project root''.
-  \item[\$\{Scan:name\}] The scan name; \code{\$\{Scan:root\}} (and any other suffix,
-        e.g.\ \code{output}) resolves to the output root
-        \file{<root>/outputs/<scan>}.
-  \item[\$\{LibDeps:<name>\}] The path registered for an external tool under
-        \yamlkey{LibDeps.Modules} (Chapter~\ref{ch:libdeps}); an unknown name is a hard
-        error at load time.
-  \item[registered executable names] A bare tool name registered under
-        \yamlkey{LibDeps.registered\_executables} is replaced by its absolute path inside
-        any command string.
-  \item[\jtt{\textasciitilde}] Expanded to your home directory.
-  \item[\code{\$\{source\}}, \code{\$\{path\}}] Only inside a module's
-        \yamlkey{installation}/\yamlkey{initialization} commands: the calculator's
-        \yamlkey{source} and runtime \yamlkey{path} (Chapter~\ref{ch:calculators}).
-\end{keylist}
-
-\textbf{Phase 2 --- per-Sample, resolved inside the Worker} just before execution:
-
-\begin{keylist}
-  \item[\token{@SampleID}] The Sample's \textsc{uuid}.
-  \item[\token{@Sdir}] The Sample's save directory under \file{SAMPLE/}; using it forces
-        the directory to be created.
-  \item[\token{@PackID}] The calculator slot id the Worker holds --- the key to physical
-        isolation for non-thread-safe tools (Chapter~\ref{ch:calculators}).
-\end{keylist}
+\textbf{Phase 2 --- per-Sample, resolved inside the Worker} just before execution. These
+are the three things that cannot be known until a point exists: \token{@SampleID} (its
+\textsc{uuid}), \token{@Sdir} (its own directory), and \token{@PackID} (the calculator
+slot the Worker holds).
 
 \subsection{Watching one string get resolved}
 
@@ -170,8 +153,9 @@ Phase 2 cannot resolve static tokens in stage 'execution' field 'command': ...
 \end{jout}
 \end{terminal}
 
-The two lists above are the complete set. Appendix~\ref{app:markers-tokens} repeats them
-as one flat table if you want a print or skim copy.
+That is the whole idea, and it is enough to read the task-card chapters with.
+Chapter~\ref{ch:command-system} gives the complete token tables, the rules about where
+each one may appear, and how registered executables work.
 
 \section{u-space and physical space}
 \label{sec:uspace}
@@ -180,7 +164,8 @@ Samplers do not think in your physics units, and this is deliberate. Every sampl
 proposes points in \emph{u-space} --- the unit hypercube $[0,1]^d$, one dimension per
 entry of \yamlkey{Sampling.Variables} --- and a \emph{mapper} converts each coordinate to
 the physical value your workflow sees, using that variable's declared distribution
-(Chapter~\ref{ch:variables}).
+(Chapter~\ref{ch:variables}). Figure~\ref{fig:uspace} is the whole arrangement in three
+steps.
 
 \begin{marginfigure}
 \centering
@@ -193,11 +178,14 @@ $\big\downarrow$ \emph{workflow}\\[2pt]
 \label{fig:uspace}
 \end{marginfigure}
 
-The same \code{u} means completely different physics depending on what you declared:
+The same \code{u} means completely different physics depending on what you declared ---
+compare the two right-hand columns of Table~\ref{tab:uspace-mapping}:
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.213\linewidth}p{0.532\linewidth}@{}}
     \toprule
     \textbf{u} & \textbf{Flat 0--5} & \textbf{Log 100--10000} \\
     \midrule
@@ -208,6 +196,7 @@ The same \code{u} means completely different physics depending on what you decla
     1.00 & 5.00 & 10000.00 \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption[One u-coordinate, two declared distributions.]{One u-coordinate, two declared
   distributions. Half of u-space is below 1000 in the log case and below 2.5 in the flat
   one --- and the sampler cannot tell the difference.}
@@ -216,7 +205,7 @@ The same \code{u} means completely different physics depending on what you decla
 
 \begin{jwarn}
 \textbf{Sampler geometry keys are u-space quantities, never physical ones.}
-\sampler{Bridson}'s \yamlkey{Radius} and \sampler{AdaptiveBridson}'s
+\sampler{Bridson}'s \yamlkey{Bounds.Radius} and \sampler{AdaptiveBridson}'s
 \yamlkey{initial\_radius} and \yamlkey{min\_radius} are fractions of the unit cube. Writing
 \yamlkey{Radius: 50} for a mass you think of in \textsc{gev} does not request 50\,GeV of
 spacing --- it requests fifty times the entire width of every axis, and you get one
@@ -322,7 +311,7 @@ next year, these are the parts to write it against.
 \begin{itemize}
   \item The task-card schema --- every key documented in Part~\ref{part:task-card}; new
         keys are always optional.
-  \item The \cli{Jarvis2} command surface and its exit codes (Chapter~\ref{ch:cli}).
+  \item The \cli{Jarvis} command surface and its exit codes (Chapter~\ref{ch:cli}).
   \item The output layout: \file{DATABASE/samples.hdf5} record structure, the
         full-column \file{samples.csv}, the \file{SAMPLE/} bucket layout, and
         \file{run\_summary} fields.

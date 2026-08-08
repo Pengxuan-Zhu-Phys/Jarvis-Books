@@ -5,7 +5,7 @@
 nothing but the packages you installed in Chapter~\ref{ch:installation}: twenty random
 points through a built-in test operator, archived into \textsc{hdf5} and \textsc{csv}. It
 then tours the output tree and shows the two commands you will reach for next ---
-\cli{Jarvis2 monitor} and \cli{Jarvis2 project}.
+\cli{Jarvis monitor} and \cli{Jarvis project}.
 
 \section{Before you start}
 
@@ -37,8 +37,9 @@ EnvReqs:
 
 Sampling:
   Method: Random
-  "Point number": 20          # note: the key contains a space
-  Seed: 7
+  Bounds:                     # this method's own settings
+    "Point number": 20        # note: the key contains a space
+    Seed: 7
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
@@ -84,16 +85,16 @@ No external programs, no input files: the whole workflow runs inside the Workers
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 run quickstart.yaml
+Jarvis run quickstart.yaml
 \end{jcmd}
 \end{terminal}
 
-\cli{Jarvis2 run} loads and validates the card, starts the managed processes, submits
+\cli{Jarvis run} loads and validates the card, starts the managed processes, submits
 the twenty points, and shuts everything down once the last Sample is archived. Every
 managed process is named \code{<role>:\allowbreak{}quickstart} in \cli{ps}/\cli{top} ---
-\code{Jarvis2}, \code{Jarvis2-\allowbreak{}Worker-\allowbreak{}1},
-\code{Jarvis2-\allowbreak{}Worker-\allowbreak{}2},
-\code{Jarvis2-\allowbreak{}Archiver}, and \code{Jarvis-\allowbreak{}Redis} if it
+\code{Jarvis}, \code{Jarvis-\allowbreak{}Worker-\allowbreak{}1},
+\code{Jarvis-\allowbreak{}Worker-\allowbreak{}2},
+\code{Jarvis-\allowbreak{}Archiver}, and \code{Jarvis-\allowbreak{}Redis} if it
 started that too --- so the scan
 stays identifiable even with several running at once. The console ends with a
 \code{[Scan Performance]} block: wall time, \code{samples / sec}, average time per
@@ -188,8 +189,7 @@ I actually need}, and \emph{what likelihood judges them}. For this example: \cod
 $z = 100 \pm 10$.
 \end{jtip}
 
-\begin{fullwidth}
-\begin{figure}[ht]
+\begin{figure*}[ht]
 \centering
 \includegraphics[width=0.7\linewidth]{figures/eggbox_vis.png}
 \caption[The eggbox landscape.]{$z(x,y) = (\sin x\cos y + 2)^5$ over the scan range ---
@@ -198,8 +198,7 @@ the repeating peaks and valleys are why the function (and this tutorial) is call
 band $z = 100 \pm 10$; \sampler{Bridson} covers the $(x,y)$ plane below, and every
 peak/valley the sampler lands on becomes one Sample.}
 \label{fig:eggbox-landscape}
-\end{figure}
-\end{fullwidth}
+\end{figure*}
 
 \section{Building a black-box card, block by block}
 \label{sec:quickstart-card2}
@@ -220,6 +219,9 @@ output root explicit instead of relying on the default (Chapter~\ref{ch:task-yam
 \begin{yamlwin}
 Sampling:
   Method: "Bridson"
+  Bounds:
+    Radius: 1
+    MaxAttempt: 30
   Variables:
     - name: x
       description: "Variable X."
@@ -227,14 +229,14 @@ Sampling:
     - name: y
       description: "Variable Y."
       distribution: {type: Flat, parameters: {min: 0.0, max: 5.0, length: 1.0}}
-  Radius: 1
-  MaxAttempt: 30
   LogLikelihood:
     - {name: "LogL_Z", expression: "LogGauss(z, 100, 10)"}
 \end{yamlwin}
 
 \sampler{Bridson} instead of \sampler{Random} this time (Chapter~\ref{ch:bridson}) ---
-\yamlkey{Radius} and \yamlkey{MaxAttempt} are its two required keys, and every
+note that \yamlkey{Variables} and \yamlkey{LogLikelihood} did not move when the method
+changed; only \yamlkey{Method} and the \yamlkey{Bounds} block under it did.
+\yamlkey{Radius} and \yamlkey{MaxAttempt} are its two required \yamlkey{Bounds} keys, and every
 variable needs a \yamlkey{length} for the blue-noise geometry. \yamlkey{LogLikelihood}
 is the same shape as before, now scoring the observable this card's calculator will
 produce.
@@ -330,7 +332,8 @@ Field by field:
 Nothing above is eggbox-specific. Swap \yamlkey{source}/\yamlkey{path} for your own
 tool, \yamlkey{execution.commands} for however you actually invoke it, and
 \yamlkey{type: JSON} for whatever format it reads and writes (\textsc{slha}, plain
-text, \ldots --- Chapter~\ref{ch:io-types} has every format \Portal\ supports). The
+text, \ldots --- Section~\ref{sec:format-catalog} has every format \Portal\
+supports). The
 shape --- install once, initialize per point, run, read output --- never changes.
 \end{jnote}
 
@@ -339,12 +342,12 @@ shape --- install once, initialize per point, run, read output --- never changes
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 run bin/Example_Bridson_process.yaml
+Jarvis run bin/Example_Bridson_process.yaml
 \end{jcmd}
 \end{terminal}
 
 \begin{jtip}
-Do not type the card above by hand to try it: \cli{Jarvis2 project fetch Eggbox}
+Do not type the card above by hand to try it: \cli{Jarvis project fetch Eggbox}
 (Section~\ref{sec:quickstart-project}) downloads it complete and runnable, as
 \file{bin/Example\_Bridson\_process.yaml}, right beside
 \file{bin/Example\_Bridson\_Operas.yaml} --- the Operas version you ran earlier. Diff
@@ -392,7 +395,7 @@ attach the read-only monitor:
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 monitor
+Jarvis monitor
 \end{jcmd}
 \end{terminal}
 
@@ -402,7 +405,7 @@ calculator slots --- and exits. It never writes to Redis, so it is always safe
 
 \begin{jtip}
 On a scan that runs for hours, you do not have to wait for it to finish to look at
-results: \cli{Jarvis2 convert <task>.yaml} re-derives \file{samples.csv} from whatever
+results: \cli{Jarvis convert <task>.yaml} re-derives \file{samples.csv} from whatever
 the Archiver has flushed to \textsc{hdf5} so far, in a second terminal, without
 touching the running scan (Section~\ref{sec:cli-convert}).
 \end{jtip}
@@ -416,13 +419,13 @@ project, or fetch a complete example from the official catalog:
 \begin{terminal}
 \begin{jcmd}
 # a fresh project with a ready-to-run card
-Jarvis2 project create MyScan
+Jarvis project create MyScan
 cd MyScan
-Jarvis2 run bin/quickstart_bridson_operas.yaml
+Jarvis run bin/quickstart_bridson_operas.yaml
 
 # or browse and fetch official examples
-Jarvis2 project list
-Jarvis2 project fetch Eggbox
+Jarvis project list
+Jarvis project fetch Eggbox
 \end{jcmd}
 \end{terminal}
 
@@ -435,9 +438,10 @@ share your own projects.
   \item The vocabulary behind what just happened --- projects, tokens, u-space, Samples,
         buckets --- is Chapter~\ref{ch:core-concepts}.
   \item To point the same skeleton at a \emph{real} external program, read the
-        calculator chapters (Chapters~\ref{ch:workflow-model}--\ref{ch:io-types}).
+        calculator chapters (Chapters~\ref{ch:workflow-model}
+        and~\ref{ch:calculators}).
   \item To choose a smarter sampler than \sampler{Random}, start at
         Chapter~\ref{ch:choosing-sampler}.
   \item To see \file{samples.csv} as a figure instead of a \code{pandas} table,
-        Chapter~\ref{ch:jarvisplot} covers \cli{Jarvis2 plot}.
+        Chapter~\ref{ch:jarvisplot} covers \cli{Jarvis plot}.
 \end{itemize}

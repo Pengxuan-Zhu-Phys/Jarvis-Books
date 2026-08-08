@@ -2,7 +2,7 @@
 \label{ch:cli}
 
 \newthought{The command line is where the design becomes visible.} \Jtwo\ deliberately
-exposes one executable, \cli{Jarvis2}, and asks you to name \emph{one intent} per
+exposes one executable, \cli{Jarvis}, and asks you to name \emph{one intent} per
 invocation --- and the intents are not an arbitrary menu. Three of them are graded by how
 much of your task card they are willing to execute, from reading it to running it; three
 more act on scans already running, and never touch a card at all. Learn that shape and the
@@ -17,17 +17,20 @@ Every invocation has the same shape:
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 <intent> <card>.yaml [flags]
+Jarvis <intent> <card>.yaml [flags]
 \end{jcmd}
 \end{terminal}
 
 The intent comes first because it is the decision you actually make; the card is the
-noun it acts on. \cli{Jarvis2 -h} prints the whole surface, and it does not print a flat
-list --- the commands arrive already sorted into the five groups you actually work in:
+noun it acts on. \cli{Jarvis -h} prints the whole surface, and it does not print a flat
+list --- the commands arrive already sorted into the five groups of
+Table~\ref{tab:cli-groups}, which are the groups you actually work in:
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.213\linewidth}p{0.532\linewidth}@{}}
     \toprule
     \textbf{Group} & \textbf{Commands} & \textbf{What the group is for} \\
     \midrule
@@ -48,21 +51,22 @@ list --- the commands arrive already sorted into the five groups you actually wo
       doors into the neighbouring tools \\
     \bottomrule
   \end{tabular}
-  \caption[The five command groups printed by \clih{Jarvis2 -h}.]{The five command
-  groups printed by \clih{Jarvis2 -h}. Within the first group the order is the order you
+  \endgroup
+  \caption[The five command groups printed by \clih{Jarvis -h}.]{The five command
+  groups printed by \clih{Jarvis -h}. Within the first group the order is the order you
   should use them in.}
   \label{tab:cli-groups}
 \end{table}
 
 Those group names are the CLI's own, not this book's, and they are worth trusting: when a
 command moves or appears, the help panel is where it shows up first. Two habits follow.
-Run \cli{Jarvis2 -h} when you have forgotten \emph{which} command, and
-\cli{Jarvis2 <command> -h} when you have forgotten \emph{which flag} --- the help text
+Run \cli{Jarvis -h} when you have forgotten \emph{which} command, and
+\cli{Jarvis <command> -h} when you have forgotten \emph{which flag} --- the help text
 says so itself, and every command accepts both \cli{-h} and \cli{--help}.
 
 \paragraph{The card never changes between intents.} This is the single most important
 consequence of the design, and it is worth stating as a rule: the file you hand to
-\cli{Jarvis2 validate} is byte-for-byte the file you hand to \cli{Jarvis2 run}. There is
+\cli{Jarvis validate} is byte-for-byte the file you hand to \cli{Jarvis run}. There is
 no ``test card'' and no debug variant to keep in sync. Gating a card in continuous
 integration therefore gates \emph{the card you will run}, and a card that survives
 \cli{check} needs no edit before production --- only more points.
@@ -72,12 +76,12 @@ than defaulting to some plausible action:
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2
+Jarvis
 \end{jcmd}
 \termsep
 \begin{jout}
 Provide a task YAML or a subcommand
-(run|check|validate|convert|monitor|plot|portal|operas|project). See Jarvis2 -h.
+(run|check|validate|convert|monitor|plot|portal|operas|project). See Jarvis -h.
 \end{jout}
 \end{terminal}
 
@@ -91,11 +95,13 @@ error, not a precedence puzzle to be resolved silently in your favour.
 The three commands in the \emph{Scan workflow} group run the same card at three depths.
 Almost every practical question about ``which command do I use'' is a question about
 which rung you are on --- which is why the help panel lists them in this order rather
-than alphabetically.
+than alphabetically. Table~\ref{tab:cli-ladder} is that ladder.
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.213\linewidth}p{0.532\linewidth}@{}}
     \toprule
     \textbf{Intent} & \textbf{Cost} & \textbf{What it starts, and what it proves} \\
     \midrule
@@ -111,7 +117,8 @@ than alphabetically.
       it produces physics. \\
     \bottomrule
   \end{tabular}
-  \caption{The three depths at which \clih{Jarvis2} will execute one card.}
+  \endgroup
+  \caption{The three depths at which \clih{Jarvis} will execute one card.}
   \label{tab:cli-ladder}
 \end{table}
 
@@ -132,16 +139,16 @@ broken path forty minutes into a scan, after a sampler has already spent your ev
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 validate scan.yaml
-Jarvis2 validate scan.yaml --strict   # also fail on warnings
-Jarvis2 validate scan.yaml --json     # machine-readable report
+Jarvis validate scan.yaml
+Jarvis validate scan.yaml --strict   # also fail on warnings
+Jarvis validate scan.yaml --json     # machine-readable report
 \end{jcmd}
 \end{terminal}
 
 \cli{validate} loads a card and checks it against the full \textsc{yaml} contract ---
 every block in Part~\ref{part:task-card}, plus the keys the chosen sampler declares for
-itself --- without starting Redis, a Worker, or an Archiver. \cli{Jarvis2 run} and
-\cli{Jarvis2 check} run this same gate before they do anything else, so \cli{validate}
+itself --- without starting Redis, a Worker, or an Archiver. \cli{Jarvis run} and
+\cli{Jarvis check} run this same gate before they do anything else, so \cli{validate}
 is not an extra safety net bolted on the side. It is the first thing a run does, made
 available on its own, for the moment \emph{before} you are willing to pay for a run.
 
@@ -149,7 +156,7 @@ A card that passes prints one line and exits \code{0}:
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 validate bin/Example_Dynesty_Operas_Quick.yaml
+Jarvis validate bin/Example_Dynesty_Operas_Quick.yaml
 \end{jcmd}
 \termsep
 \begin{jout}
@@ -225,8 +232,8 @@ key by key (Section~\ref{sec:nested-validation}).
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 check scan.yaml
-Jarvis2 check scan.yaml --strict --console-level DEBUG
+Jarvis check scan.yaml
+Jarvis check scan.yaml --strict --console-level DEBUG
 \end{jcmd}
 \end{terminal}
 
@@ -249,8 +256,8 @@ per-Sample output that follows.
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 run scan.yaml
-Jarvis2 run scan.yaml --resume    # take the checkpoint, no prompt
+Jarvis run scan.yaml
+Jarvis run scan.yaml --resume    # take the checkpoint, no prompt
 \end{jcmd}
 \end{terminal}
 
@@ -302,7 +309,7 @@ before Redis comes up:
 \begin{terminal}
 \begin{jout}
 a Jarvis scan named 'EggBox_Dynesty' is already running; inspect it with
-`Jarvis2 monitor R1` or `Jarvis2 ps R1` before starting another run
+`Jarvis monitor R1` or `Jarvis ps R1` before starting another run
 \end{jout}
 \end{terminal}
 
@@ -315,9 +322,9 @@ reference of the scan already holding the name so you can go and look at it
 
 Every managed process sets its own \textsc{os}-visible title, so \cli{ps} and \cli{top}
 show you a scan instead of a column of identical \code{python3} entries:
-\code{Jarvis2:<scan>} for the control process,
-\code{Jarvis2-\allowbreak{}Worker-\allowbreak{}N:<scan>},
-\code{Jarvis2-\allowbreak{}Archiver:<scan>}, \code{Jarvis2-\allowbreak{}FileOperation},
+\code{Jarvis:<scan>} for the control process,
+\code{Jarvis-\allowbreak{}Worker-\allowbreak{}N:<scan>},
+\code{Jarvis-\allowbreak{}Archiver:<scan>}, \code{Jarvis-\allowbreak{}FileOperation},
 and \code{Jarvis-\allowbreak{}Redis:<scan>}. Section~\ref{sec:cli-ps-kill} puts that to
 work.
 
@@ -348,8 +355,8 @@ from --- not the reverse. Section~\ref{sec:exit-codes} gives the mapping.
 
 Here is a habit worth forming, and a design decision worth noticing behind it: while a
 scan runs, everything you want to \emph{do} to it happens from a second terminal, and
-none of it disturbs the first. \cli{Jarvis2 monitor} reads one status snapshot.
-\cli{Jarvis2 ps} lists the processes. \cli{Jarvis2 convert} exports whatever data has
+none of it disturbs the first. \cli{Jarvis monitor} reads one status snapshot.
+\cli{Jarvis ps} lists the processes. \cli{Jarvis convert} exports whatever data has
 been flushed so far. All three are read-only with respect to the scan's state; you can
 run them whenever you like, as often as you like, and stop.
 
@@ -362,8 +369,8 @@ these commands need a \textsc{pid} or a socket.
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 monitor       # which scans are running?
-Jarvis2 monitor R1    # snapshot of that one
+Jarvis monitor       # which scans are running?
+Jarvis monitor R1    # snapshot of that one
 \end{jcmd}
 \end{terminal}
 
@@ -377,7 +384,7 @@ field by field; Section~\ref{sec:cli-ps-kill} explains the reference.
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 convert scan.yaml
+Jarvis convert scan.yaml
 \end{jcmd}
 \end{terminal}
 
@@ -413,11 +420,11 @@ absent. Exit code \code{0} if at least one file was converted or already up to d
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 gen-plot-yaml scan.yaml    # writes images/<scan>/plot.yaml, prints its path
-Jarvis2 plot images/<scan>/plot.yaml
+Jarvis gen-plot-yaml scan.yaml    # writes images/<scan>/plot.yaml, prints its path
+Jarvis plot images/<scan>/plot.yaml
 
 # or chain them: the generator prints the path it wrote
-Jarvis2 plot "$(Jarvis2 gen-plot-yaml scan.yaml)"
+Jarvis plot "$(Jarvis gen-plot-yaml scan.yaml)"
 \end{jcmd}
 \end{terminal}
 
@@ -458,7 +465,7 @@ content with that frame stripped.}
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 ps
+Jarvis ps
 \end{jcmd}
 \termsep
 \begin{jout}
@@ -470,9 +477,9 @@ Running Jarvis scan tasks (2)
   R2    NMSSM_02                 3   51002, 51009, 51015
 
 Choose a task by its REF (for example R1):
-  Jarvis2 monitor R1   view this task's live scan status
-  Jarvis2 ps R1        list its control, workers, archiver, Redis
-  Jarvis2 kill R1      terminate ALL processes belonging to this task
+  Jarvis monitor R1   view this task's live scan status
+  Jarvis ps R1        list its control, workers, archiver, Redis
+  Jarvis kill R1      terminate ALL processes belonging to this task
 \end{jout}
 \end{terminal}
 
@@ -491,7 +498,7 @@ plays rather than its raw title:
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 ps R1
+Jarvis ps R1
 \end{jcmd}
 \termsep
 \begin{jout}
@@ -535,9 +542,9 @@ Unknown running scan 'R9'; available: R1 (EggBox_Dynesty), R2 (NMSSM_02)
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 kill R1              # shows the card, then asks
-Jarvis2 kill R1 --yes        # no prompt (batch scripts, cleanup hooks)
-Jarvis2 kill R1 --no-force   # SIGTERM only; never escalate to SIGKILL
+Jarvis kill R1              # shows the card, then asks
+Jarvis kill R1 --yes        # no prompt (batch scripts, cleanup hooks)
+Jarvis kill R1 --no-force   # SIGTERM only; never escalate to SIGKILL
 \end{jcmd}
 \end{terminal}
 
@@ -548,7 +555,7 @@ tally and a verdict:
 
 \begin{terminal}
 \begin{jout}
-DANGER: Jarvis2 kill R1 will terminate all 4 processes above.
+DANGER: Jarvis kill R1 will terminate all 4 processes above.
 Kill 4 Jarvis process(es)? [y/N] y
 kill: SIGTERM=4 SIGKILL=0 gone=0 failed=0
 All matched Jarvis processes terminated.
@@ -568,7 +575,7 @@ Four details in that sequence are deliberate, and each one has bitten somebody:
         that is mid-transaction against it.
   \item \textbf{Without a terminal, it refuses}. Piped or run from \cli{cron}, where
         nobody can answer the prompt, it declines rather than guessing --- the message
-        names the flag it wants, \code{re-run with: Jarvis2 kill --yes}. Automation has
+        names the flag it wants, \code{re-run with: Jarvis kill --yes}. Automation has
         to say so explicitly.
   \item \textbf{Anything left alive is reported, not glossed over}. Processes it could
         not signal are listed by \textsc{pid} and the exit code is \code{1}, so a
@@ -589,11 +596,11 @@ interrupt --- only its remains.
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 portal man             # every registered file format
-Jarvis2 portal man slha        # one format's manual
-Jarvis2 portal io_task.yaml    # run a standalone Portal IO YAML
-Jarvis2 operas list            # every registered operator
-Jarvis2 operas info math.add   # one operator's signature and doc
+Jarvis portal man             # every registered file format
+Jarvis portal man slha        # one format's manual
+Jarvis portal io_task.yaml    # run a standalone Portal IO YAML
+Jarvis operas list            # every registered operator
+Jarvis operas info math.add   # one operator's signature and doc
 \end{jcmd}
 \end{terminal}
 
@@ -602,11 +609,11 @@ list to the neighbouring package's own \textsc{cli} (\cli{jportal} and \cli{jope
 respectively) and returns its exit code. Whatever those tools can do, this spelling can do,
 including their own \cli{-h}; nothing here has to be kept in sync as they grow. Missing
 \code{Jarvis-Operas} is reported as such (exit \code{2}) rather than as an unknown
-command. \cli{Jarvis2 portal man} prints what \Portal\ can currently read and write:
+command. \cli{Jarvis portal man} prints what \Portal\ can currently read and write:
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 portal man
+Jarvis portal man
 \end{jcmd}
 \termsep
 \begin{jout}
@@ -633,17 +640,17 @@ work. The rule is mechanical: when the first token is neither a known subcommand
 flag, \Jtwo\ treats it as a path and lets a trailing legacy flag pick the intent.
 
 \begin{itemize}
-  \item \cli{Jarvis2 <task>.yaml} routes to \cli{run}.
-  \item \cli{Jarvis2 <task>.yaml --resume} routes to \cli{run --resume}.
-  \item \cli{Jarvis2 <task>.yaml --check-modules} routes to \cli{check}.
-  \item \cli{Jarvis2 <task>.yaml --validate} routes to \cli{validate}.
-  \item \cli{Jarvis2 <task>.yaml --convert} routes to \cli{convert}.
-  \item \cli{Jarvis2 --monitor} routes to \cli{monitor} (\S\ref{sec:cli-ps-kill}).
-  \item \cli{Jarvis2 <scene>.yaml --plot} routes to \cli{plot}, with a deprecation
+  \item \cli{Jarvis <task>.yaml} routes to \cli{run}.
+  \item \cli{Jarvis <task>.yaml --resume} routes to \cli{run --resume}.
+  \item \cli{Jarvis <task>.yaml --check-modules} routes to \cli{check}.
+  \item \cli{Jarvis <task>.yaml --validate} routes to \cli{validate}.
+  \item \cli{Jarvis <task>.yaml --convert} routes to \cli{convert}.
+  \item \cli{Jarvis --monitor} routes to \cli{monitor} (\S\ref{sec:cli-ps-kill}).
+  \item \cli{Jarvis <scene>.yaml --plot} routes to \cli{plot}, with a deprecation
         warning.
 \end{itemize}
 
-That list is complete, and \cli{Jarvis2 -h} prints exactly these in their own
+That list is complete, and \cli{Jarvis -h} prints exactly these in their own
 \emph{Legacy options} panel, kept apart from the real options so the two are never
 confused for each other.
 
@@ -655,9 +662,14 @@ rather than resolved by precedence.
 \section{Exit codes}
 \label{sec:exit-codes}
 
+\clih{Jarvis} reports the outcome of every command through its exit status, listed in
+Table~\ref{tab:exit-codes}.
+
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Code} & \textbf{Meaning} \\
     \midrule
@@ -667,7 +679,8 @@ rather than resolved by precedence.
     130 & interrupted (Ctrl+C) \\
     \bottomrule
   \end{tabular}
-  \caption{\clih{Jarvis2} exit codes --- contract-stable for scripting.}
+  \endgroup
+  \caption{\clih{Jarvis} exit codes --- contract-stable for scripting.}
   \label{tab:exit-codes}
 \end{table}
 
@@ -687,9 +700,13 @@ code.
 \section{Environment variables}
 \label{sec:cli-env}
 
+Table~\ref{tab:cli-env} lists the environment variables the \textsc{cli} reads.
+
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Variable} & \textbf{Effect} \\
     \midrule
@@ -702,15 +719,16 @@ code.
     \code{JARVIS\_OFFICIAL\_LIBRARY\_TIMEOUT\_SEC} & catalog fetch timeout \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{Environment variables read by the CLI.}
   \label{tab:cli-env}
 \end{table}
 
 \begin{jtip}
 \textbf{The habit, in three lines.} Gate the card in \textsc{ci} with
-\cli{Jarvis2 validate --strict}; after every edit that touches a path, a program, or an
-expression, spend a minute on \cli{Jarvis2 check}; then \cli{Jarvis2 run --strict} once,
-and watch it from a second terminal with \cli{Jarvis2 monitor} followed by the reference
+\cli{Jarvis validate --strict}; after every edit that touches a path, a program, or an
+expression, spend a minute on \cli{Jarvis check}; then \cli{Jarvis run --strict} once,
+and watch it from a second terminal with \cli{Jarvis monitor} followed by the reference
 it hands you. Every rung you skip is one you will climb later, at the price of the rung
 above it.
 \end{jtip}

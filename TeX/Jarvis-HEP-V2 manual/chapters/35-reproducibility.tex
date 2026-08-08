@@ -9,7 +9,7 @@ assembles it into a discipline.
 \section{Determinism: what is guaranteed}
 \label{sec:determinism}
 
-With a fixed task card and a fixed \yamlkey{Seed}:
+With a fixed task card and a fixed \yamlkey{Bounds.Seed}:
 
 \begin{itemize}
   \item \textbf{The point set is deterministic --- for every fixed-set and
@@ -42,11 +42,14 @@ point) reproduces to its own tolerance, not bit-exactly. Record tool versions an
 seeds in the card --- \yamlkey{Dump} a seed derived from the parameters if the tool
 accepts one.
 
-\begin{jwarn}
-\yamlkey{Seed: 0} means \emph{unseeded} for \sampler{Random} and \sampler{Bridson} ---
-a different point set every launch. The single highest-value reproducibility habit is
-a nonzero \yamlkey{Seed} in every card you might ever re-run.
-\end{jwarn}
+\begin{jnote}
+There is no such thing as an unseeded run. \yamlkey{Bounds.Seed} defaults to \code{0},
+and \code{0} is seeded like any other value, so a card that never mentions a seed still
+produces the same point set every launch. What a seed buys you is therefore not
+reproducibility --- you already have that --- but \emph{independence}: give two runs of
+the same card different nonzero seeds when you want their points to be statistically
+distinct rather than identical.
+\end{jnote}
 
 \section{Identity: knowing what ran}
 \label{sec:identity}
@@ -67,7 +70,7 @@ Everything needed to re-run lives in the project, and the packer knows it
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 project pack . --repro
+Jarvis project pack . --repro
 \end{jcmd}
 \end{terminal}
 
@@ -95,14 +98,14 @@ not move.
 \label{sec:repro-workflow}
 
 \begin{enumerate}
-  \item \textbf{Card in version control}, nonzero \yamlkey{Seed}, explicit
+  \item \textbf{Card in version control}, explicit \yamlkey{Bounds.Seed}, explicit
         \yamlkey{run\_id}, tools pinned in \file{README.md}.
   \item \textbf{Run} --- resumable by construction; interruptions cost nothing.
   \item \textbf{Archive} \file{outputs/<scan>/} (or \cli{pack --repro} the whole
         project).
   \item \textbf{Publish} figures whose scenes live in the same project
         (Chapter~\ref{ch:jarvisplot}).
-  \item \textbf{Re-verify} on demand: fetch the pack, \cli{Jarvis2 check} against
+  \item \textbf{Re-verify} on demand: fetch the pack, \cli{Jarvis check} against
         known points, then re-run or \sampler{CSV}-replay the published set.
 \end{enumerate}
 

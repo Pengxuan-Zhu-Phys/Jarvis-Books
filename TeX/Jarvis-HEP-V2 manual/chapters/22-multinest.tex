@@ -29,6 +29,7 @@ Z = \int_0^1 L(X)\,dX,
 \]
 a single integral over the unit interval that nested sampling estimates numerically ---
 by literally constructing a decreasing sequence of $X$ values with known likelihoods.
+Figure~\ref{fig:nested-loop} is the loop that constructs them.
 
 \begin{marginfigure}
 \centering
@@ -261,7 +262,7 @@ Section~\ref{sec:nested-distributed} explains why there is no checkpoint
   \item \textbf{Run it:}
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 run scan.yaml
+Jarvis run scan.yaml
 \end{jcmd}
 \end{terminal}
 \end{enumerate}
@@ -271,11 +272,11 @@ The minimal working card:
 \begin{yamlwin}
 Sampling:
   Method: MultiNest
-  Seed: 21
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
   Bounds:
+    Seed: 21
     nlive: 100
     dlogz: 0.5
     run_nested:
@@ -287,19 +288,22 @@ Sampling:
 \subsection{The keys you set on every run}
 \label{sec:nested-bounds-meta}
 
+Table~\ref{tab:nested-meta} lists the keys you will set on essentially every
+nested-sampling card, whichever engine you chose.
+
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.213\linewidth}p{0.532\linewidth}@{}}
     \toprule
     \textbf{Key} & \textbf{Default} & \textbf{Meaning} \\
     \midrule
     \yamlkey{nlive} & \code{100} & live-point count $N$ (\S\ref{sec:nested-algorithm});
       the main knob on run cost and posterior resolution (minimum 2) \\
-    \yamlkey{Sampling.Seed} (alias \yamlkey{Bounds.rseed}) & \code{0} & \textsc{rng}
-      seed; fix it for a reproducible run --- \yamlkey{Seed} alone is enough, you
-      rarely need \yamlkey{Bounds.rseed} too \\
+    \yamlkey{Seed} (aliases \yamlkey{seed}, \yamlkey{rseed}) & \code{0} & \textsc{rng}
+      seed; fix it for a reproducible proposal sequence. Like every sampler setting it
+      goes in \yamlkey{Bounds}, not at the \yamlkey{Sampling} top level \\
     \yamlkey{dlogz} & \code{0.5} & evidence-change stopping threshold
       (\S\ref{sec:nested-dlogz}) \\
     \bottomrule
@@ -387,10 +391,13 @@ Bounds:
 
 \yamlkey{dlogz} sets how precisely the evidence must be pinned down before the run
 stops --- smaller values mean a longer run and a tighter uncertainty on $\log Z$.
+Table~\ref{tab:dlogz-guide} suggests a value for each kind of run.
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{\yamlkey{dlogz}} & \textbf{Use for} \\
     \midrule
@@ -401,6 +408,7 @@ stops --- smaller values mean a longer run and a tighter uncertainty on $\log Z$
       longer run \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{Choosing \yamlkey{dlogz}. Halving it roughly doubles the run's likelihood
   evaluations for a typical posterior.}
   \label{tab:dlogz-guide}
@@ -409,7 +417,7 @@ stops --- smaller values mean a longer run and a tighter uncertainty on $\log Z$
 \section{Validating your card}
 \label{sec:nested-validation}
 
-Before \cli{Jarvis2 run} or \cli{Jarvis2 check} ever touches Redis, the loaded card
+Before \cli{Jarvis run} or \cli{Jarvis check} ever touches Redis, the loaded card
 passes through a validation gate that rejects a malformed \yamlkey{Bounds} block
 immediately, with a precise, machine-readable diagnosis --- not a stack trace three
 minutes into a scan. A clean card prints one line and moves on:
@@ -440,17 +448,20 @@ on success and \code{2} on any error:
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 validate scan.yaml
-Jarvis2 validate scan.yaml --strict   # also fail on warnings
-Jarvis2 validate scan.yaml --json     # machine-readable report for tooling
+Jarvis validate scan.yaml
+Jarvis validate scan.yaml --strict   # also fail on warnings
+Jarvis validate scan.yaml --json     # machine-readable report for tooling
 \end{jcmd}
 \end{terminal}
+
+Table~\ref{tab:nested-validation-codes} lists the findings a nested-sampling card is
+most likely to trigger, with the fix for each.
 
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.213\linewidth}p{0.532\linewidth}@{}}
     \toprule
     \textbf{Code} & \textbf{Fires on} & \textbf{Fix} \\
     \midrule
@@ -490,7 +501,7 @@ Jarvis2 validate scan.yaml --json     # machine-readable report for tooling
 Every error is a hard stop --- there is no partial validation pass for
 \yamlkey{Bounds}. Warnings (dead keys such as \yamlkey{Runtime.Subprocess}, an
 unrecognised \yamlkey{Operas} \yamlkey{call\_mode}) still let the card run; pass
-\cli{--strict} to \cli{Jarvis2 validate} to treat those as errors too before you
+\cli{--strict} to \cli{Jarvis validate} to treat those as errors too before you
 commit a card to a long production run.
 \end{jnote}
 
@@ -598,9 +609,13 @@ MultiNest Progress ->
 \end{jout}
 \end{terminal}
 
+Table~\ref{tab:nested-progress-fields} reads that block field by field.
+
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Field} & \textbf{Meaning} \\
     \midrule
@@ -620,6 +635,7 @@ MultiNest Progress ->
       threshold; the run stops once this drops below it \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{Progress-block fields, in the order they print.}
   \label{tab:nested-progress-fields}
 \end{table}
@@ -680,13 +696,13 @@ rejected before one lands inside the bound.
 \label{sec:nested-outputs}
 
 Alongside the normal output tree (Chapter~\ref{ch:outputs}), a nested run writes two
-extra files under \file{DATABASE/}:
+extra files under \file{DATABASE/}, listed in Table~\ref{tab:nested-outputs}:
 
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.24\linewidth}p{0.20\linewidth}p{0.50\linewidth}@{}}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.213\linewidth}p{0.532\linewidth}@{}}
     \toprule
     \textbf{File} & \textbf{Rows} & \textbf{Contains} \\
     \midrule
@@ -761,10 +777,13 @@ chapter and covers only what changes.
 that shrinks through the likelihood until its own evidence estimate has converged ---
 the only method here that hands you $\log Z$ alongside the posterior, at the cost of no
 mid-run checkpoint and \textsc{uuid}s that are not seed-deterministic.
+Table~\ref{tab:multinest-summary} gathers it.
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Field} & \textbf{\sampler{MultiNest}} \\
     \midrule
@@ -774,12 +793,13 @@ mid-run checkpoint and \textsc{uuid}s that are not seed-deterministic.
     Dimensions & any \\
     Required keys & none strictly; set \yamlkey{Bounds.nlive} \\
     u$\to$x mapping & yes \\
-    \yamlkey{Seed} role & \code{numpy} generator seed (proposal sequence only) \\
+    \yamlkey{Bounds.Seed} role & \code{numpy} generator seed (proposals only) \\
     \textsc{uuid}s & fresh per proposal, \textbf{not} seed-deterministic \\
     Mid-run resume & no --- use \code{dynesty}'s own \yamlkey{checkpoint\_file} \\
     Extra output & \file{multinest\_result.csv}, \file{sampler\_summary.json} \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{\sampler{MultiNest} at a glance.}
   \label{tab:multinest-summary}
 \end{table}

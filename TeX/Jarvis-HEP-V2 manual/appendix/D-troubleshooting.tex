@@ -47,8 +47,8 @@ The symptoms below are the ones that survive a clean validation.
 \begin{description}[style=nextline, leftmargin=1.2em]
   \item[A setting is silently ignored]
         You are in the lenient half of validation --- malformed values coerce to
-        defaults, malformed list entries drop (Section~\ref{sec:validation}). Diff
-        against the key index in Section~\ref{app:yaml-index}.
+        defaults, malformed list entries drop (Section~\ref{sec:validation}). Check the key
+        against its own chapter's table (Section~\ref{sec:part2-map} says which).
   \item[Fewer samples than requested]
         A \yamlkey{selection} cut: rejected candidates consume budget for every
         fixed-set method (Section~\ref{sec:selection}).
@@ -70,7 +70,7 @@ The symptoms below are the ones that survive a clean validation.
         (Section~\ref{sec:perf-pools}).
   \item[Unknown IO type listing available formats]
         The installed \Portal\ does not expose that format --- upgrade it, and check
-        \cli{Jarvis2 portal man} (Chapter~\ref{ch:io-types}).
+        \cli{Jarvis portal man} (Section~\ref{sec:portal-cli}).
   \item[Second Worker fails during a clone-shadow install]
         Non-idempotent \yamlkey{installation} commands re-running on a populated pack
         (Section~\ref{sec:clone-shadow}).
@@ -109,7 +109,7 @@ The symptoms below are the ones that survive a clean validation.
   \item[A Sample's artifacts are ``missing'']
         Its bucket was packed --- look inside \file{SAMPLE/<bucket>.tar.gz}
         (Section~\ref{sec:sample-outputs}); records in the database carry the paths.
-  \item[\cli{Jarvis2 plot} exits 2]
+  \item[\cli{Jarvis plot} exits 2]
         The \code{plot} extra is not installed, or you passed a scan card instead of a
         \JPlot\ scene (Chapter~\ref{ch:jarvisplot}).
 \end{description}

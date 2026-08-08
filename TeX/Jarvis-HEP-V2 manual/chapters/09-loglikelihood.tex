@@ -9,26 +9,25 @@ when evaluation fails.
 \section{Where likelihood terms live}
 \label{sec:likelihood-blocks}
 
-Two equivalent homes, one precedence rule:
+One home: \yamlkey{Sampling.LogLikelihood} (alias \yamlkey{loglikelihood}), a list of
+named expressions.
 
 \begin{yamlwin}
-Likelihood:                      # preferred, top level
-  expressions:
+Sampling:
+  LogLikelihood:
     - name: LogL_Z
       expression: LogGauss(z, 1.0, 0.1)
     - name: LogL_mass
       expression: -0.5 * ((mh - 125.25) / 0.17)**2
 \end{yamlwin}
 
-\begin{yamlwin}
-Sampling:                        # accepted alias, lower precedence
-  LogLikelihood:
-    - name: LogL_Z
-      expression: z
-\end{yamlwin}
+It sits inside \yamlkey{Sampling} for a reason: the score is what a sampler steers on, so
+the likelihood belongs to the same block that chooses how the space gets explored ---
+Section~\ref{sec:sampling-loglikelihood} places it among the other decisions that block
+asks you for. A \yamlkey{Likelihood} block at the top level of the card is not a \Jtwo\
+interface and is rejected on load, with a message pointing here.
 
-\yamlkey{Likelihood.expressions} wins when both are present --- first non-empty list
-wins; they are \emph{never merged}. Each entry:
+Each entry:
 
 \begin{keylist}
   \item[name] \opt, default \code{LogL}. The term's observable name; results are added
@@ -36,6 +35,82 @@ wins; they are \emph{never merged}. Each entry:
   \item[expression] \req. An expression in the shared language of
         Chapter~\ref{ch:expressions}, evaluated over the observables.
 \end{keylist}
+
+\section{Writing the physics down}
+\label{sec:likelihood-physics}
+
+The mechanics above are easy; deciding \emph{what to write} is the actual work. Almost
+every constraint you want to impose falls into one of four shapes, and it is worth being
+able to recognise which one you are holding before reaching for a formula.
+
+\subsection*{A measurement with a symmetric error}
+
+The common case: an experiment reports $\hat{x} \pm \sigma$, and your model predicts
+\code{x}. The Gaussian log-kernel is the whole term.
+
+\begin{yamlwin}
+- {name: LogL_mh, expression: "LogGauss(mh, 125.25, 0.17)"}
+\end{yamlwin}
+
+Use the \emph{total} uncertainty here --- experimental and theoretical added in
+quadrature. A prediction from a one-loop calculation carries a theory error that is
+frequently larger than the measurement's, and omitting it makes your allowed region
+narrower than your physics can justify. If the theory error is itself a parameter you
+would rather fit than guess, that is what \yamlkey{Sampling.Nuisance} is for
+(Section~\ref{sec:nuisance}).
+
+\subsection*{An asymmetric error}
+
+When the reported interval is $\hat{x}\,^{+\sigma_+}_{-\sigma_-}$, pick the side by the
+sign of the residual. The shared language has no ternary, but \code{Heaviside} does the
+job, and writing the two halves as named terms keeps it readable:
+
+\begin{yamlwin}
+- {name: d_bsg,  expression: "BR_bsg - 3.32e-4"}
+- {name: LogL_bsg,
+   expression: "-0.5 * d_bsg**2 / (Heaviside(d_bsg) * 0.25e-4**2
+                + Heaviside(-d_bsg) * 0.33e-4**2)"}
+\end{yamlwin}
+
+\subsection*{A one-sided exclusion limit}
+
+An upper limit is not a measurement, and forcing it into a Gaussian is a common way to
+get a wrong answer. What you usually want is a term that is flat where the model is
+allowed and falls off where it is excluded. If the limit is a single number, a step is
+enough:
+
+\begin{yamlwin}
+- {name: LogL_limit,
+   expression: "-1e6 * Heaviside(sigma_SI - 1.2e-46)"}
+\end{yamlwin}
+
+But most real limits are a \emph{curve} --- an exclusion as a function of mass, read off
+a published figure. That is not something to hard-code into an expression, and
+Section~\ref{sec:likelihood-operas} is the mechanism for it.
+
+\subsection*{Combining terms}
+
+Independent constraints add, which is what the automatic sum gives you. Two cases need a
+deliberate choice instead:
+
+\begin{itemize}
+  \item \textbf{Correlated measurements.} A set of observables with a covariance matrix
+        is one term, not $n$ terms: $\chi^2 = r^{\mathsf{T}} C^{-1} r$. Summing the
+        diagonal pieces separately double-counts the shared systematic.
+        \code{stat.chi2\_cov} (Section~\ref{sec:likelihood-operas}) computes it.
+  \item \textbf{Alternative hypotheses.} When two channels are interpretations of the
+        same signal rather than independent evidence, you want the better of the two, not
+        their sum --- which is exactly the case for naming a term \code{LogL} yourself
+        and writing \code{Max(...)} (next section).
+\end{itemize}
+
+\begin{jwarn}
+Keep every term a \emph{log}-likelihood. Mixing a $\chi^2$ into the sum by accident
+flips the sign of that constraint --- the scan will then walk uphill into the region the
+measurement excludes, and nothing in the machinery will warn you, because a sum of
+numbers is a valid sum of numbers. If a term comes from a $\chi^2$, write
+\code{-0.5 * chi2}.
+\end{jwarn}
 
 \section{How \code{LogL} is formed}
 \label{sec:logl-semantics}
@@ -47,8 +122,8 @@ the next term runs --- so later terms can reference earlier ones by name. Then:
   \item If some term is literally named \code{LogL}, that term \textbf{is} the total ---
         no summing. Use this when you want full control:
 \begin{yamlwin}
-Likelihood:
-  expressions:
+Sampling:
+  LogLikelihood:
     - name: LogL_a
       expression: LogGauss(obs_a, 5.1, 0.4)
     - name: LogL_b
@@ -60,7 +135,7 @@ Likelihood:
         independent measurement terms add.
 \end{itemize}
 
-When neither likelihood block exists, the execution plan simply carries no likelihood
+When the block is absent, the execution plan simply carries no likelihood
 step and \code{LogL} is absent from the records --- legitimate for pure mapping scans
 where you only want observables.
 
@@ -72,6 +147,81 @@ $-\tfrac{1}{2}\big(\tfrac{x-\mu}{\sigma}\big)^2$ without the constant term;
 unnormalised kernel $e^{-\frac{1}{2}((x-\mu)/\sigma)^2}$ (not a log!). See
 Chapter~\ref{ch:expressions}.
 \end{jnote}
+
+\section{Physics functions you can call directly}
+\label{sec:likelihood-operas}
+
+The built-in catalog (Chapter~\ref{ch:expressions}) is deliberately generic --- logs,
+trigonometry, \code{Gauss}, \code{Heaviside}. It contains no physics, because physics
+does not belong in a language.
+
+The physics lives in \Operas, and it reaches your likelihood the same way any other
+function does: \textbf{a qualified name, callable directly inside an
+\yamlkey{expression}}. There is no import, no declaration block, nothing to add to the
+card. If the namespace is installed, the name works.
+
+\begin{yamlwin}
+Sampling:
+  LogLikelihood:
+    # a published exclusion curve, interpolated at this point's mass
+    - name: LogL_dd
+      expression: "-1e6 * Heaviside(sigma_SI
+                   - dmddxn.LZSI2024(m_chi))"
+    # a correlated set, as one chi-square term
+    - name: LogL_ew
+      expression: "-0.5 * stat.chi2_cov(residual, cov)"
+\end{yamlwin}
+
+This is the extension point for everything the manual cannot enumerate --- your
+collaboration's private limit curves, a likelihood from a paper, an interface to an
+external code. Table~\ref{tab:operas-namespaces} lists the namespaces that ship today:
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.167\linewidth}p{0.833\linewidth}@{}}
+    \toprule
+    \textbf{Namespace} & \textbf{What it provides} \\
+    \midrule
+    \code{stat}    & statistical kernels --- notably \code{chi2\_cov(residual, cov)} for
+      a correlated set \\
+    \code{dmddxn}  & dark-matter--nucleon direct-detection 90\,\% \textsc{c.l.} upper
+      limits, one function per published curve --- \code{LZSI2024},
+      \code{XENONnTSI2025}, \code{PandaXSI2024}, the \textsc{sd} proton set, and more \\
+    \code{dmddxe}  & the same for dark-matter--electron scattering \\
+    \code{HTs}     & \textsc{higgstools} --- \textsc{higgsbounds} exclusions and
+      \textsc{higgssignals} fits (optional install) \\
+    \code{cmb}     & \textsc{cmb} models and cosmological likelihoods \\
+    \code{interp}, \code{interp1} & general interpolation, including curves you register
+      yourself from a data file \\
+    \code{helper}  & \textsc{hep} scan helper functions \\
+    \code{math}    & numeric helpers beyond the built-in catalog \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\Operas\ namespaces callable from any likelihood expression. Contents grow
+  between releases --- ask the installation rather than this table.}
+  \label{tab:operas-namespaces}
+\end{table}
+
+Because the set is installation-dependent, the authoritative answer is always the
+command line rather than a printed list:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis operas list               # every name, grouped by namespace
+Jarvis operas info stat.chi2_cov # signature, arguments, examples
+\end{jcmd}
+\end{terminal}
+
+\begin{jtip}
+Registering your own exclusion curve is the highest-value thing most users do with
+\Operas: a two-column data file becomes \code{yourns.YourLimit(mass)}, usable in every
+card you ever write, with the interpolation handled for you.
+Chapter~\ref{ch:jarvis-operas} covers registration, persistence, and how Workers
+discover what you registered.
+\end{jtip}
 
 \section{Failure semantics}
 \label{sec:likelihood-failure}

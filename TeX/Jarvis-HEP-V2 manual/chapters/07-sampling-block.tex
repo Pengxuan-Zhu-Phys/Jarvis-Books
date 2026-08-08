@@ -1,28 +1,133 @@
 \chapter{The Sampling Block}
 \label{ch:sampling-block}
 
-\newthought{\yamlkey{Sampling} chooses the brain of the scan.} It names the sampling
-method, declares the variables that define u-space, and carries a few keys every method
-shares: the seed, an optional \yamlkey{selection} cut, and an alias spot for the
-likelihood. This chapter covers the shared surface; each method's own keys are detailed in
-Part~\ref{part:samplers}.
+\newthought{\yamlkey{Sampling} is where you describe the scan itself.} Everywhere else in
+the card you are describing machinery --- which programs run, how files are parsed, how
+many Workers there are. Here you describe the actual scientific question, and the block's
+shape follows directly from what asking that question requires.
 
-\section{Choosing a method}
+Before any scan can start, somebody has to answer four things:
+
+\begin{description}[leftmargin=1.6em]
+  \item[Where do I look?] The parameter space --- which quantities vary, over what
+        ranges, on what scale. That is \yamlkey{Variables}.
+  \item[How do I move through it?] Uniform draws, an exhaustive grid, blue-noise
+        packing, a contour chase, a nested-sampling run. That is \yamlkey{Method}.
+  \item[How good is a point once I have it?] The score that says whether a set of
+        parameter values agrees with your data. That is \yamlkey{LogLikelihood}.
+  \item[Anything I should skip?] Regions that are unphysical, or points whose
+        calculation fell over. That is \yamlkey{selection} and \yamlkey{on\_failure}.
+\end{description}
+
+Those four answers \emph{are} the top level of the block --- there is nothing else up
+there, and nothing on the list you could sensibly leave to a default:
+
+\begin{yamlwin}
+Sampling:
+  Method: Bridson                     # how to move
+  Variables:                          # where to look
+    - name: mh
+      distribution:
+        type: Flat
+        parameters: {min: 110.0, max: 140.0, length: 1.0}
+    - name: tanb
+      distribution:
+        type: Log
+        parameters: {min: 1.0, max: 60.0, length: 1.0}
+  LogLikelihood:                      # how good is a point
+    - {name: LogL_mh, expression: "LogGauss(mh, 125.25, 0.17)"}
+  selection: "tanb > 2.0"             # what to skip
+  Bounds:                             # settings only Bridson understands
+    Radius: 0.35
+    MaxAttempt: 30
+    Seed: 42
+\end{yamlwin}
+
+\yamlkey{Bounds} is the one key that is not an answer to any of the four questions, and
+that is exactly why it is a separate storey. A radius means nothing to \sampler{Grid}; a
+live-point budget means nothing to \sampler{Random}. Those numbers belong to one method
+rather than to the scan, so they get their own drawer (Section~\ref{sec:bounds}).
+
+The payoff of that split is worth seeing before the details: it means \textbf{changing
+how you scan does not disturb what you are scanning}. Swap \yamlkey{Method: Bridson} for
+\yamlkey{Method: Dynesty}, replace the three lines of \yamlkey{Bounds} underneath it, and
+your parameter space, your likelihood, and your cut are all still there, untouched and
+still comparable. The scientific question survives a change of technique.
+
+The top-level keys are all ones \Jtwo\ checks, so a misspelling among them stops the load
+instead of being silently ignored. Whether a misspelling \emph{inside} \yamlkey{Bounds}
+is caught depends on the method, and Section~\ref{sec:bounds} says exactly which ones
+protect you.
+
+This chapter walks the four questions in order, then \yamlkey{Bounds}. Each method's own
+keys are detailed in Part~\ref{part:samplers}.
+
+\section{\yamlkey{Variables}: where to look}
+\label{sec:sampling-variables}
+
+\yamlkey{Variables} is a list, one entry per quantity you want to vary. Each entry gives
+the parameter a \yamlkey{name} --- the name your calculators, expressions, and output
+columns will all use for it --- and a \yamlkey{distribution} saying what range it covers
+and how the sampler should space points across it.
+
+\begin{yamlwin}
+Sampling:
+  Variables:
+    - name: mh
+      description: "Higgs mass"     # optional, for your own notes
+      distribution:
+        type: Flat                  # even spacing over [min, max]
+        parameters: {min: 110.0, max: 140.0, length: 1.0}
+    - name: tanb
+      distribution:
+        type: Log                   # even spacing in log10
+        parameters: {min: 1.0, max: 60.0, length: 1.0}
+\end{yamlwin}
+
+The choice of \yamlkey{type} is a scientific statement, not a formatting one: declaring
+\yamlkey{Log} for a quantity you think of logarithmically means the sampler spends its
+budget evenly across decades instead of piling almost every point into the top decade.
+Getting this right costs one word and is usually worth more than any amount of sampler
+tuning.
+
+Two \yamlkey{parameters} entries are required only by particular methods ---
+\yamlkey{num} by \sampler{Grid}, \yamlkey{length} by \sampler{Bridson} --- and they are
+described with those methods. The full distribution catalog, the required list of
+\yamlkey{parameters} for each \yamlkey{type}, and the rules on names live in
+Chapter~\ref{ch:variables}.
+
+An empty or missing \yamlkey{Variables} list is an error for every method that generates
+its own points. \sampler{CSV} is the exception: it reads physical points from a file, so
+its columns \emph{are} the parameters and this key is not consulted at all.
+
+\section{\yamlkey{Method}: how to move through it}
 \label{sec:method}
 
 \begin{yamlwin}
 Sampling:
-  Method: Bridson        # Bridson | Random | Grid | CSV | AdaptiveBridson
-                          # | Dynesty | MultiNest
+  Method: Bridson    # Bridson | Random | Grid | CSV
+                     # | AdaptiveBridson | Dynesty | MultiNest
 \end{yamlwin}
 
-Seven methods have a dedicated chapter and are the focus of this book (list below); an
-unrecognised value raises a clear \code{NotImplementedError} naming the offending
-string. Ten more --- the \textsc{mcmc} family --- are also implemented and registered,
-just without a closed \textsc{yaml} contract or chapter of their own yet;
-Chapter~\ref{ch:choosing-sampler} covers what is confirmed about them. Alternatively,
+Seven methods have a dedicated chapter and are the focus of this book (list below). Ten
+more --- the \textsc{mcmc} family --- are implemented and selectable, just without a
+closed \textsc{yaml} contract or chapter of their own yet; Chapter~\ref{ch:choosing-sampler}
+covers what is confirmed about them. Alternatively,
 \yamlkey{Sampling.mode: check\_modules} replaces \yamlkey{Method} resolution and runs
 the workflow smoke path of Chapter~\ref{ch:check-modules}.
+
+A name \Jtwo\ does not implement fails validation before anything starts, and the message
+lists every name it does implement --- so you never need to guess the spelling:
+
+\begin{terminal}
+\begin{jout}
+[error] JV2-MTH-003  Sampling.Method
+    'Bridsonn' is not implemented in Jarvis-HEP V2. Available:
+    AM, AMMCMC, AdaptiveBridson, Bridson, CSV, DEMCMC, DRAM,
+    Dynesty, Ensemble, EnsembleMCMC, Grid, MCMC, MultiNest, PT,
+    PTEnsemble, PTMCMC, Random
+\end{jout}
+\end{terminal}
 
 \begin{description}[leftmargin=1.6em]
   \item[\sampler{Random}] fixed set --- uniform i.i.d.\ draws in u-space
@@ -47,35 +152,71 @@ nested methods react to results toward an evidence estimate
 (Chapter~\ref{ch:choosing-sampler}). New methods land in this list as they ship ---
 check here first for the current, authoritative set.
 
-\section{Keys common to every method}
-\label{sec:common-keys}
+\section{\yamlkey{LogLikelihood}: how good is a point}
+\label{sec:sampling-loglikelihood}
+
+Your workflow turns a set of parameter values into observables --- a mass, a cross
+section, a relic density. \yamlkey{LogLikelihood} is where you say what those observables
+are \emph{worth}: a list of named expressions, each computing one log-likelihood
+contribution from the observables the workflow produced.
+
+\begin{yamlwin}
+Sampling:
+  LogLikelihood:                      # alias: loglikelihood
+    - name: LogL_mh
+      expression: "LogGauss(mh, 125.25, 0.17)"
+    - name: LogL_relic
+      expression: "LogGauss(Omega_h2, 0.120, 0.001)"
+\end{yamlwin}
 
 \begin{keylist}
-  \item[Variables] \req\ for \sampler{Bridson}, \sampler{Random}, \sampler{Grid}, and
-        \sampler{AdaptiveBridson} (an empty list is an error); ignored by \sampler{CSV},
-        which carries its own column list. Schema and distribution catalog in
-        Chapter~\ref{ch:variables}.
-  \item[Seed] \opt, integer, default \code{0}; alias \yamlkey{seed}. Seeds the method's
-        random stream; \code{0} means \emph{unseeded} for \sampler{Random} and
-        \sampler{Bridson}. Sample \textsc{uuid}s are derived deterministically from the
-        seed and the point index, which is what makes resume and replay stable
-        (Chapter~\ref{ch:reproducibility}).
-  \item[selection] \opt. A boolean expression over the \emph{physical} parameters; a
-        point failing the cut is dropped before submission. See below for the budget
-        semantics.
-  \item[LogLikelihood] \opt. A list of likelihood terms --- the same schema as
-        \yamlkey{Likelihood.\allowbreak{}expressions}, at lower precedence
-        (Chapter~\ref{ch:loglikelihood}).
+  \item[name] \opt, default \code{LogL}. The term's name. It becomes an observable in its
+        own right --- it is written to the output records as a column, and later terms in
+        the list can refer to it by name.
+  \item[expression] \req. An expression in the shared language of
+        Chapter~\ref{ch:expressions}, evaluated over the observables.
 \end{keylist}
 
-\section{\yamlkey{selection} semantics}
+Terms are summed into a total called \code{LogL}, which is the number every sampler
+actually reads. Two consequences you should know while writing the block, both covered
+properly in Chapter~\ref{ch:loglikelihood}: terms evaluate \emph{in order}, so a later
+term may use an earlier one's result; and if you name a term \code{LogL} yourself, that
+term \emph{becomes} the total instead of being added to it --- which is how you write a
+likelihood that is not a plain sum.
+
+\subsection*{Why it lives here and not at the top of the card}
+
+The likelihood is not a separate stage of the run; it is the sampler's feedback signal.
+\sampler{Dynesty} decides which region to refine from \code{LogL}, an \textsc{mcmc} chain
+accepts or rejects a step from \code{LogL}, and \sampler{AdaptiveBridson} chases a
+contour defined over the same observables. Putting the score in the same block as the
+method that consumes it keeps that relationship visible --- and it means one block holds
+everything you would need to compare on if you re-ran the same physics with a different
+sampler.
+
+\begin{jnote}
+The block is optional. Leave it out and the run simply carries no likelihood step:
+\code{LogL} is absent from the records and you get a pure map of observables over the
+parameter space. That is a legitimate and common way to use \Jtwo\ --- but note that the
+methods which \emph{steer} on results (the nested and \textsc{mcmc} families) have
+nothing to steer on without it, so pair a likelihood-free card with a fixed-set method.
+\end{jnote}
+
+\begin{jwarn}
+A likelihood block at the \emph{top level} of the card --- \yamlkey{Likelihood:} beside
+\yamlkey{Sampling} and \yamlkey{Operas} --- is not a \Jtwo\ interface and stops the load.
+\yamlkey{Sampling.LogLikelihood} is the one place likelihood terms live.
+\end{jwarn}
+
+\section{\yamlkey{selection} and \yamlkey{on\_failure}: what to skip}
 \label{sec:selection}
 
 \begin{yamlwin}
 Sampling:
   Method: Random
-  "Point number": 500
   selection: "x + y < 1.5"
+  Bounds:
+    "Point number": 500
 \end{yamlwin}
 
 The expression uses the shared language of Chapter~\ref{ch:expressions}, evaluated per
@@ -83,8 +224,8 @@ candidate over the physical parameter values. Its interaction with the sampling 
 the same for all fixed-set methods, and is worth stating plainly:
 
 \begin{jwarn}
-Fixed-set methods generate their point set \emph{once} --- \yamlkey{"Point number"}
-draws, the full grid, or the Bridson disk set. A candidate rejected by
+Fixed-set methods generate their point set \emph{once} ---
+\yamlkey{Bounds."Point number"} draws, the full grid, or the Bridson disk set. A candidate rejected by
 \yamlkey{selection} \textbf{consumes its slot}: there is no redraw, no retry, no top-up.
 A restrictive cut therefore yields \emph{fewer accepted samples than the nominal budget}.
 If you need $N$ accepted points inside a cut of acceptance $\varepsilon$, budget
@@ -97,37 +238,274 @@ way; dropped points are simply never scheduled, and never counted as failures.
 Each distinct selection expression is compiled once per process and cached; per-candidate
 evaluation is a single numerical call, so even million-point sets filter quickly.
 
-\section{Per-method keys at a glance}
+\subsection*{\yamlkey{on\_failure}: when a point never produced a score}
+
+\yamlkey{selection} skips points you decided not to want. \yamlkey{on\_failure} covers the
+other case: a point you \emph{did} want, whose likelihood never evaluated --- a calculator
+crashed, timed out, or returned something the expression could not use.
+
+\begin{keylist}
+  \item[reject] the default. Treat the point as infinitely bad and carry on. The scan
+        completes; the failure is recorded and visible in the logs.
+  \item[halt] stop the whole scan at the first such point.
+\end{keylist}
+
+Use \code{halt} while you are still commissioning a workflow, when a failure almost
+certainly means your setup is wrong and a thousand more failures will not tell you
+anything new. Switch to \code{reject} for production, where a handful of pathological
+parameter points is expected and should not cost you the run.
+
+Only the methods that \emph{steer} on results consult it --- an \textsc{mcmc} chain has to
+know what to do when the score it needs did not arrive. Fixed-set methods never read it,
+because their point set was decided before any result came back.
+
+\section{The top level in full}
+\label{sec:common-keys}
+
+The four questions account for the keys you will write on almost every card. For
+reference, here is the complete top level --- if a sampler setting is not on this list, it
+belongs in \yamlkey{Bounds}.
+
+\begin{keylist}
+  \item[Method] \req\ (unless \yamlkey{mode: check\_modules}); alias \yamlkey{method}.
+        Section~\ref{sec:method}.
+  \item[Variables] \req\ for \sampler{Bridson}, \sampler{Random}, \sampler{Grid}, and
+        \sampler{AdaptiveBridson} (an empty list is an error); ignored by \sampler{CSV},
+        which names its columns in \yamlkey{Bounds}.
+        Section~\ref{sec:sampling-variables}; distribution catalog in
+        Chapter~\ref{ch:variables}.
+  \item[Mapper] \opt. Derive further parameters from the sampling variables with
+        expressions, when the coordinates you want to sample are not the ones the
+        workflow needs. Section~\ref{sec:mapper}.
+  \item[LogLikelihood] \opt, alias \yamlkey{loglikelihood}. The list of likelihood terms
+        that score each point. Section~\ref{sec:sampling-loglikelihood}; the likelihood
+        itself in Chapter~\ref{ch:loglikelihood}.
+  \item[selection] \opt. A boolean expression over the \emph{physical} parameters; a
+        point failing the cut is dropped before submission.
+        Section~\ref{sec:selection}.
+  \item[on\_failure] \opt, \code{reject} (default) or \code{halt}. What to do with a
+        Sample whose likelihood did not evaluate; \yamlkey{Bounds.on\_failure} overrides
+        it. Section~\ref{sec:selection}.
+  \item[Bounds] The method's own settings (Section~\ref{sec:bounds}). Required by
+        \sampler{Bridson}, \sampler{Random}, \sampler{CSV}, and
+        \sampler{AdaptiveBridson}; optional for everything else.
+  \item[Nuisance] \opt. Profile a nuisance parameter inside each Sample
+        (Section~\ref{sec:nuisance}).
+\end{keylist}
+
+\begin{jnote}
+\yamlkey{Seed} is \emph{not} on this list. It used to sit at the top level, and it now
+lives in \yamlkey{Bounds} with the rest of a method's settings --- see
+Section~\ref{sec:bounds}, which also shows the error you get if you write it in the old
+place.
+\end{jnote}
+
+\section{\yamlkey{Bounds}: where a method's own settings live}
+\label{sec:bounds}
+
+Every sampler needs numbers that mean nothing to the others. A radius is meaningless to
+\sampler{Grid}; a live-point count is meaningless to \sampler{Random}; \code{nlive: 400}
+next to \code{Radius: 0.35} would just be two methods' settings in one drawer, and only
+one of them would ever be read. \yamlkey{Bounds} is that drawer, one per card, holding
+whichever method you actually named:
+
+\begin{yamlwin}
+Sampling:
+  Method: Random
+  Bounds:
+    "Point number": 500
+    Seed: 11
+\end{yamlwin}
+
+Keeping them here is what makes a method swap a two-line edit: \yamlkey{Method} and the
+block underneath it are adjacent, and everything above them --- the parameter space, the
+likelihood, the cut --- is untouched.
+
+\subsection*{The settings that used to live at the top level}
+
+\yamlkey{Radius}, \yamlkey{MaxAttempt}, \yamlkey{MaxWorker}, \yamlkey{"Point number"},
+\yamlkey{Seed}, the \yamlkey{CSV} sub-block, and the \yamlkey{AdaptiveBridson} sub-block
+were once written directly under \yamlkey{Sampling}. They are read from \yamlkey{Bounds}
+only. A card written the old way does not run half-configured: validation names the key,
+names where it goes now, and shows you the replacement:
+
+\begin{terminal}
+\begin{jout}
+[error] JV2-MTH-001  Sampling.Radius
+    Sampling.Radius is not a V2 setting; place it under
+    Sampling.Bounds.Radius
+    hint: Method-specific sampler settings belong exclusively
+          under Sampling.Bounds.
+    example:
+      Bounds:
+        Radius: 0.1
+        MaxAttempt: 30
+\end{jout}
+\end{terminal}
+
+The two sub-blocks flatten rather than move. There is no
+\yamlkey{Bounds.AdaptiveBridson} and no \yamlkey{Bounds.CSV}: an
+\sampler{AdaptiveBridson} card writes \yamlkey{target\_expression} directly in
+\yamlkey{Bounds}, and a \sampler{CSV} card writes \yamlkey{path} directly in
+\yamlkey{Bounds}.
+
+\subsection*{\yamlkey{Bounds.Seed}}
+
+\yamlkey{Seed} (alias \yamlkey{seed}; the nested engines also accept \yamlkey{rseed})
+is the one \yamlkey{Bounds} key nearly every method understands, which is why it appears
+in this chapter rather than in seven others. It is an integer, it defaults to \code{0},
+and \code{0} is a real seed like any other --- the stream is seeded with it, so two runs
+of the same card produce the same points whether you wrote \code{Seed: 0} or nothing at
+all. Sample \textsc{uuid}s are derived from the seed and the point index, which is what
+makes resume and replay stable (Chapter~\ref{ch:reproducibility}).
+
+\subsection*{Which methods check what you write inside}
+
+\begin{keylist}
+  \item[Checked, strictly] \sampler{Random}, \sampler{Grid}, \sampler{Bridson},
+        \sampler{CSV}, \sampler{AdaptiveBridson}. Each has a closed list of accepted
+        keys, so \code{Radius: 0.1} under \sampler{Random}, or \code{Radus: 0.1} under
+        \sampler{Bridson}, is an error you are told about before the scan starts.
+  \item[Passed through] \sampler{Dynesty}, \sampler{MultiNest}, and the \textsc{mcmc}
+        family. Their \yamlkey{Bounds} is largely a set of arguments for the engine
+        underneath, whose vocabulary is not \Jtwo's to police; the keys \Jtwo\ does
+        understand are checked, the rest travel as written. A typo there is yours to
+        catch. Chapters~\ref{ch:multinest} and~\ref{ch:dynesty} list what is understood.
+\end{keylist}
+
+If you are new to the system, note that this is the good direction to be surprised in:
+the four methods you are most likely to start with are the four that will not let a
+mistyped key through.
+
+
+\section{\yamlkey{Nuisance}: profiling a parameter inside each Sample}
+\label{sec:nuisance}
+
+Some parameters are not ones you want to scan over. A luminosity scale, a form-factor
+normalisation, a theory error --- you want the \emph{best} value of it for each physics
+point, not a dimension of u-space spent on it. \yamlkey{Nuisance} does that: for every
+Sample, it searches one extra parameter over a range and keeps the score at its optimum.
+
+\begin{yamlwin}
+Sampling:
+  Nuisance:
+    Method: Profile1D
+    Variables:
+      - name: z
+        distribution:
+          type: Flat
+          parameters: {min: -3.0, max: 3.0}
+    LogLikelihood:
+      - {name: nuis_pull, expression: "-0.5*z**2"}
+    PassCondition:
+      - {name: in_band, expression: "mh > 122 and mh < 128"}
+    TargetMode: min
+    MaxAttempt: 50
+    re_run_physics: true
+\end{yamlwin}
+
+\begin{keylist}
+  \item[Method] \opt, default \code{Profile1D}. One method ships, and it is a
+        golden-section search over a single parameter.
+  \item[Variables] \req. Only the \emph{first} entry is used, and only its
+        \yamlkey{name} and \yamlkey{parameters.min}/\yamlkey{max} --- they set the search
+        interval. The distribution \yamlkey{type} is not consulted.
+  \item[LogLikelihood] \opt, alias \yamlkey{loglikelihood}. Named expressions summed into
+        the score being optimised. This is where a Gaussian pull on the nuisance parameter
+        goes.
+  \item[PassCondition] \opt, alias \yamlkey{pass\_condition}. Named boolean expressions;
+        a probe that fails any of them is not eligible to be the optimum.
+  \item[TargetMode] \opt, alias \yamlkey{target\_mode}, default \code{min}. Whether the
+        search minimises or maximises (\code{max}) the score.
+  \item[MaxAttempt] \opt, alias \yamlkey{max\_attempt}, default \code{50}. The probe
+        budget per Sample.
+  \item[re\_run\_physics] \opt, alias \yamlkey{rerun\_physics}, default \code{true}.
+        Whether each probe re-runs the calculators and operas with the new nuisance value.
+        Leave it true when the nuisance parameter feeds your physics programs; set it
+        false when the nuisance appears only in expressions, which makes each probe
+        almost free.
+\end{keylist}
+
+\begin{jwarn}
+The cost multiplies. With \yamlkey{re\_run\_physics: true} --- the default --- a Sample
+runs its whole workflow once \emph{per probe}, so a scan of $N$ points with
+\yamlkey{MaxAttempt: 50} can dispatch up to $50N$ calculator runs. Set
+\yamlkey{re\_run\_physics: false} whenever the nuisance parameter never reaches a
+calculator, and reduce \yamlkey{MaxAttempt} before reaching for more Workers.
+\end{jwarn}
+
+\section{Per-method \yamlkey{Bounds} keys at a glance}
 \label{sec:per-method-glance}
 
-The keys that live directly in \yamlkey{Sampling} but belong to one method:
+Table~\ref{tab:per-method-keys} lists what each method requires in \yamlkey{Bounds}
+before it will start:
 
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.20\linewidth}p{0.09\linewidth}p{0.20\linewidth}p{0.45\linewidth}@{}}
+  \begin{tabular}{@{}p{0.223\linewidth}p{0.085\linewidth}p{0.223\linewidth}p{0.469\linewidth}@{}}
     \toprule
-    \textbf{Key} & \textbf{Req.} & \textbf{Method} & \textbf{Meaning} \\
+    \textbf{\yamlkey{Bounds} key} & \textbf{Req.} & \textbf{Method} & \textbf{Meaning} \\
     \midrule
     \yamlkey{Radius}      & \req & \sampler{Bridson} & minimum u-space distance \\
     \yamlkey{MaxAttempt}  & \req & \sampler{Bridson} & candidates per active point \\
     \yamlkey{MaxWorker}   &      & \sampler{Bridson} & max in-flight proposals \\
     \yamlkey{"Point number"} & \req & \sampler{Random} & sample count \\
-    \yamlkey{CSV}         & \req & \sampler{CSV}     & file spec sub-block \\
-    \yamlkey{AdaptiveBridson} & \req & \sampler{AdaptiveBridson} & method sub-block \\
+    \yamlkey{path}        & \req & \sampler{CSV}     & file to replay \\
+    \yamlkey{target\_\allowbreak{}expression} & \req & \sampler{AdaptiveBridson} & quantity to contour \\
+    \yamlkey{target\_value} & \req & \sampler{AdaptiveBridson} & the level to trace \\
+    \yamlkey{Seed}        &      & all of the above  & random stream (alias \yamlkey{seed}) \\
+    \midrule
+    \multicolumn{4}{@{}l}{\emph{Declared with the variable, not in \yamlkey{Bounds}:}} \\
     \yamlkey{Variables[].\allowbreak{}parameters.\allowbreak{}num} & \req & \sampler{Grid} & points per dimension \\
     \yamlkey{Variables[].\allowbreak{}parameters.\allowbreak{}length} & \req & \sampler{Bridson} & u-space box edge \\
     \bottomrule
   \end{tabular}
   \endgroup
-  \caption{Method-specific \yamlkey{Sampling} keys; full detail in
+  \caption{Required \yamlkey{Sampling.Bounds} keys per method; full detail in
   Part~\ref{part:samplers}.}
   \label{tab:per-method-keys}
 \end{table}
 
-Missing required keys raise at sampler startup --- mostly as raw \code{KeyError}s or
-\code{ValueError}s naming the key, before any Worker starts.
+\sampler{Grid} is the one method with no required \yamlkey{Bounds} at all --- its point
+set is fully determined by the \yamlkey{num} you give each variable, so the block is
+optional and holds only \yamlkey{Seed}.
+
+A required key that is missing, or present with the wrong kind of value, is caught by
+validation before anything starts --- each with its own code, so the failure names both
+the method that wanted the key and the key itself (Table~\ref{tab:mth-codes}):
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.255\linewidth}p{0.49\linewidth}@{}}
+    \toprule
+    \textbf{Code} & \textbf{\yamlkey{Bounds} key} & \textbf{Raised when} \\
+    \midrule
+    \code{JV2-MTH-001} & any retired key &
+      a sampler setting was left at the \yamlkey{Sampling} top level \\
+    \code{JV2-MTH-010} / \code{011} & \yamlkey{Radius} &
+      \sampler{Bridson}: missing / not a positive number \\
+    \code{JV2-MTH-012} / \code{013} & \yamlkey{MaxAttempt} &
+      \sampler{Bridson}: missing / not an integer $\geq 1$ \\
+    \code{JV2-MTH-020} / \code{021} & \yamlkey{"Point number"} &
+      \sampler{Random}: missing / not an integer $\geq 1$ \\
+    \code{JV2-MTH-030} / \code{031} & \yamlkey{path} &
+      \sampler{CSV}: \yamlkey{Bounds} missing / path missing \\
+    \code{JV2-MTH-040} & --- &
+      \sampler{AdaptiveBridson}: \yamlkey{Bounds} missing entirely \\
+    \code{JV2-MTH-041} / \code{042} & \yamlkey{target\_expression},
+      \yamlkey{target\_value} & \sampler{AdaptiveBridson}: missing \\
+    \code{JV2-BND-000} & --- &
+      \yamlkey{Bounds} is not a mapping (a list or a bare scalar) \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Per-method required-key diagnostics.}
+  \label{tab:mth-codes}
+\end{table}
 
 \section{How samples reach the Workers}
 \label{sec:submission}
@@ -140,8 +518,8 @@ decides the next one. Workers do not know or care which method proposed the task
 everything method-specific stays in the control process.
 
 \begin{jtip}
-Start every new card as \sampler{Random} with a small \yamlkey{"Point number"} and your
-real workflow. It exercises the same execution path as any other method, so you can debug
+Start every new card as \sampler{Random} with a small \yamlkey{Bounds."Point number"} and
+your real workflow. It exercises the same execution path as any other method, so you can debug
 calculators and likelihood cheaply, then switch \yamlkey{Method} when the physics is
 right. Chapter~\ref{ch:choosing-sampler} gives the decision guide.
 \end{jtip}

@@ -59,8 +59,8 @@ Run the same card again:
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 run scan.yaml            # prompts when a checkpoint exists
-Jarvis2 run scan.yaml --resume   # accepts it non-interactively
+Jarvis run scan.yaml            # prompts when a checkpoint exists
+Jarvis run scan.yaml --resume   # accepts it non-interactively
 \end{jcmd}
 \end{terminal}
 
@@ -96,7 +96,7 @@ level, with no operator action:
 \end{itemize}
 
 \begin{jtip}
-For long scans on shared machines, make \cli{Jarvis2 run scan.yaml --resume} the
+For long scans on shared machines, make \cli{Jarvis run scan.yaml --resume} the
 \emph{only} way you launch: first invocation starts fresh (no checkpoint exists),
 every later invocation continues. Your batch-system retry hook is then a one-liner.
 \end{jtip}

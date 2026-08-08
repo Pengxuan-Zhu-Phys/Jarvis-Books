@@ -3,8 +3,9 @@
 
 \newthought{Replay physical points, not u-space draws.} \sampler{CSV} reads rows from a
 file and submits each as a Sample directly --- there is no u-space and no
-\yamlkey{Mapper} step (\yamlkey{Mapper} auto-derives to \yamlkey{type: none}; each
-row's values travel with the task exactly as written). It is the second half of
+\yamlkey{Mapper} step (each row's values travel with the task exactly as written; a
+\yamlkey{Sampling.Mapper} on a \sampler{CSV} card is rejected at load time as
+\code{JV2-MAP-010}). It is the second half of
 \Jtwo's iterative pattern: scan broadly with a cheap method, select offline, then
 replay the survivors through a heavier workflow under their original identity.
 
@@ -14,7 +15,7 @@ replay the survivors through a heavier workflow under their original identity.
 \begin{yamlwin}
 Sampling:
   Method: CSV
-  CSV:
+  Bounds:
     path: "&J/data/points.csv"   # REQUIRED
     variables: [m0, m12, tanb]   # default: all non-uuid columns
     uuid_column: uuid            # default "uuid"
@@ -22,8 +23,14 @@ Sampling:
     encoding: utf-8
 \end{yamlwin}
 
+The file spec goes in \yamlkey{Bounds} like any other method's settings, and
+\sampler{CSV} accepts it strictly --- these five keys and nothing else
+(Section~\ref{sec:bounds}). \yamlkey{Sampling.Variables} is not read by this method: the
+columns \emph{are} the parameters.
+
 \begin{keylist}
-  \item[path] \req\ (\code{ValueError} if absent). \marker{\&J/}, absolute, or relative
+  \item[Bounds.path] \req\ (\code{JV2-MTH-030} if \yamlkey{Bounds} is absent,
+        \code{031} if the path is). \marker{\&J/}, absolute, or relative
         to the task card.
   \item[variables] \opt\ list --- the column subset to use as parameters; default every
         column except the \textsc{uuid} column. Any name not found in the file's header
@@ -57,7 +64,7 @@ unread row rather than re-reading the file from the top.
 
 \paragraph{The replay loop.} Export a filtered subset of a previous run's
 \file{samples.\allowbreak{}csv}, keeping the \code{uuid} column, and point a new card's
-\yamlkey{CSV.\allowbreak{}path} at it:
+\yamlkey{Bounds.\allowbreak{}path} at it:
 
 \begin{terminal}
 \begin{jcmd}
@@ -97,24 +104,27 @@ scans make joining the cheap pass and the expensive pass a one-line \code{merge}
 
 \sampler{CSV} is not a generator --- it is the replay half of the map-then-refine
 pattern, submitting rows a file already contains under their own identity, with no
-u-space or \yamlkey{Mapper} involved at all.
+u-space or \yamlkey{Mapper} involved at all. Table~\ref{tab:csv-summary} sums it up.
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Field} & \textbf{\sampler{CSV}} \\
     \midrule
     Kind & fixed set \\
     Point count & file rows \\
     Dimensions & any \\
-    Required keys & \yamlkey{CSV.path} \\
+    Required keys & \yamlkey{Bounds.path} \\
     u$\to$x mapping & none --- physical rows travel as-is \\
     \yamlkey{Seed} role & --- \\
     \yamlkey{selection} & consumes rows, no top-up \\
     Extra output & --- \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{\sampler{CSV} at a glance.}
   \label{tab:csv-summary}
 \end{table}

@@ -4,7 +4,7 @@
 \newthought{Figures are a plugin concern too.} \JPlot\ is the \textsc{yaml}-driven
 plotting engine of the \Jarvis\ family: you describe a figure --- data sources, layers,
 axes, styling --- in a \emph{scene} file, and the engine renders it. \Jtwo\ bridges it
-as \cli{Jarvis2 plot}, so upgrading \JPlot\ brings new figure types without a runtime
+as \cli{Jarvis plot}, so upgrading \JPlot\ brings new figure types without a runtime
 release. This chapter covers the bridge and the scan-output hooks; the scene language
 itself is \JPlot's own manual.
 
@@ -15,15 +15,15 @@ itself is \JPlot's own manual.
 \begin{jcmd}
 python3 -m pip install -e '.[distributed,plot]'   # the plot extra
 
-Jarvis2 plot scenes/money_plot.yaml               # render a scene
-Jarvis2 plot scenes/money_plot.yaml               # re-render after edits
+Jarvis plot scenes/money_plot.yaml               # render a scene
+Jarvis plot scenes/money_plot.yaml               # re-render after edits
 \end{jcmd}
 \end{terminal}
 
 The bridge is deliberately thin: it imports the installed engine, hands over the scene
 path, and maps the result to exit codes --- \code{0} rendered, \code{1} plot failure,
 \code{2} usage or missing package (with the \code{pip install} hint). The legacy
-spelling \cli{Jarvis2 <scene>.yaml --plot} still routes here with a deprecation
+spelling \cli{Jarvis <scene>.yaml --plot} still routes here with a deprecation
 warning.
 
 \begin{jwarn}
@@ -61,9 +61,9 @@ and treat figures as build artifacts:
 
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 run bin/scan.yaml           # produce outputs/scan-01/...
-Jarvis2 plot scenes/overview.yaml   # scatter + LogL colormap
-Jarvis2 plot scenes/contour.yaml    # levelset overlay
+Jarvis run bin/scan.yaml           # produce outputs/scan-01/...
+Jarvis plot scenes/overview.yaml   # scatter + LogL colormap
+Jarvis plot scenes/contour.yaml    # levelset overlay
 \end{jcmd}
 \end{terminal}
 

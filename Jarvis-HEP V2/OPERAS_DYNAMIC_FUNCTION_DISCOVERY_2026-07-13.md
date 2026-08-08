@@ -27,11 +27,14 @@ There is no V2-only `Operas.Functions` block. Register external functions in Jar
 refer to them by their registered full name:
 
 ```yaml
-Likelihood:
-  expressions:
+Sampling:
+  LogLikelihood:
     - name: LogL
       expression: user.external_loglike(x, y)
 ```
+
+> Updated 2026-08-04: this example originally used a top-level `Likelihood:` block, which the
+> V2 schema rejects (`JV2-SCH-001`). Likelihood terms live under `Sampling.LogLikelihood`.
 
 The same `namespace.function(...)` syntax is available in Operas input expressions,
 Calculator/Portal Dump expressions, `Sampling.selection`, and AdaptiveLevelSet targets.

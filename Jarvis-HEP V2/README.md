@@ -29,6 +29,10 @@ Docs/
 ├── DESIGN_CLUSTER_EXECUTION_2.0.md ← D14: remote worker pools, SLURM, broker auth/AOF
 ├── DESIGN_RESULTS_ANALYSIS_2.0.md  ← D15 (todo): warm-start cache, Jarvis2 analyze, Portal formats
 ├── DESIGN_CALCULATOR_MODES_2.0.md  ← D20: 多模式 Calculator（modes 展开为兄弟模块）
+├── DESIGN_RESUME_2.0.md            ← D21: 断点续跑（HDF5 uuid 是唯一完成真相；心跳 checkpoint）
+├── DESIGN_SAMPLING_MAPPER_2.0.md   ← D22 (设计): `Sampling.Mapper` 表达式映射（x=cos(t), y=sin(t)）
+│   （D23 的设计文档在 **Jarvis-Operas 仓**：`agent_maintenance/DESIGN_NAMESPACE_CONSTANTS_CN.md`
+│    — 命名空间常量 `pdg.m_Z`（无括号），待架构签字）
 ├── DESIGN_LIBDEPS_2.0.md           ← D18: LibDeps 装一次的共享依赖（V1 对齐）
 ├── V1_MIGRATION_STATUS_2026-07-31.md ← 迁移状态 + 未迁移功能清单（实测，非文档转抄）
 ├── CODE_REVIEW_2026-07-23.md       ← latest code review: 1 high + 3 medium findings → D13.11–13
@@ -40,6 +44,7 @@ Docs/
 │   └── README.md                   ← "我想……" index; start here as a user
 ├── DESIGN_SAMPLE_COORDINATION_2.0.md ← **accepted**: uuid key; task=u_coords; feedback=logL; stage opt-in
 ├── DESIGN_SAMPLE_PROGRESS_MONITOR.md ← monitor stage-on-heartbeat (aligned with coordination design)
+├── DESIGN_YAML_MAN_2.0.md          ← D24 (设计): `Jarvis man` — YAML 写法手册中心（英文输出；human + coding agent）
 ├── YAML_REFERENCE_2.0.md           ← as-built task-YAML reference (every key, defaults, gaps)
 ├── YAML-Example/                   ← public YAML recipes (per method)
 │   └── ADAPTIVE_BRIDSON.md         ← AdaptiveBridson: minimal + full YAML recipes

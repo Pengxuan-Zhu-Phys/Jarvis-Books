@@ -3,7 +3,7 @@
 
 Complete, minimal cards for the recurring shapes. All run as-is (the opera-based ones
 need nothing beyond the core install); swap the toy operators for your physics. More
-worked projects: \cli{Jarvis2 project list} (Chapter~\ref{ch:project-cli}).
+worked projects: \cli{Jarvis project list} (Chapter~\ref{ch:project-cli}).
 
 \section{Random + opera (the smoke card)}
 
@@ -13,8 +13,9 @@ EnvReqs:
   V2: {workers: 2}
 Sampling:
   Method: Random
-  "Point number": 100
-  Seed: 7
+  Bounds:
+    "Point number": 100
+    Seed: 7
   Variables:
     - {name: x, distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}}
     - {name: y, distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}}
@@ -41,14 +42,16 @@ LibDeps:
     - {name: eggboxlk, source: "${LibDeps:EggBoxSafe}/eggbox"}
 Sampling:
   Method: Bridson
-  Radius: 0.05
-  MaxAttempt: 30
-  Seed: 42
+  Bounds:
+    Radius: 0.05
+    MaxAttempt: 30
+    Seed: 42
   Variables:
     - {name: x, distribution: {type: Flat,
          parameters: {min: 0.0, max: 1.0, length: 1.0}}}
     - {name: y, distribution: {type: Flat,
          parameters: {min: 0.0, max: 1.0, length: 1.0}}}
+  LogLikelihood: [{name: LogL, expression: z}]
 Calculators:
   Pools: {EggBox: 4}
   Modules:
@@ -71,8 +74,6 @@ Calculators:
             type: JSON
             save: true
             variables: [{name: z, entry: z}]
-Likelihood:
-  expressions: [{name: LogL, expression: z}]
 \end{yamlwin}
 
 \section{AdaptiveBridson (contour tracing)}
@@ -83,15 +84,15 @@ EnvReqs:
   V2: {workers: 2, batch_size: 8}
 Sampling:
   Method: AdaptiveBridson
-  Seed: 7
   Variables:
     - {name: x, distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}}
     - {name: y, distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}}
-  AdaptiveBridson:
+  Bounds:
     target_expression: "r2"
     target_value: 0.04            # circle of radius 0.2 about (0.5, 0.5)
     outer_half_width: 0.05        # discovery band |f-T| <= w_outer
     min_radius: 0.01              # u-space resolution floor
+    Seed: 7
 Operas:
   Modules:
     - name: Circle
@@ -111,17 +112,16 @@ EnvReqs:
   V2: {workers: 4}
 Sampling:
   Method: CSV
-  CSV:
+  Bounds:
     path: "&J/data/survivors.csv"   # exported from a previous scan, uuid kept
     variables: [x, y]
+  LogLikelihood: [{name: LogL, expression: z}]
 Operas:
   Modules:
     - name: EggBox
       operator: jarvishep2.testing.eggbox.eggbox2d_numpy
       input:  [{name: x, expression: x}, {name: y, expression: y}]
       output: [{name: z, entry: z}]
-Likelihood:
-  expressions: [{name: LogL, expression: z}]
 \end{yamlwin}
 
 Replayed points keep their original \textsc{uuid}s
@@ -141,9 +141,7 @@ Operas:
       operator: jarvishep2.testing.eggbox.eggbox2d_numpy
       input:  [{name: x, expression: x}, {name: y, expression: y}]
       output: [{name: z, entry: z}]
-Likelihood:
-  expressions: [{name: LogL, expression: z}]
 \end{yamlwin}
 
-Run with \cli{Jarvis2 check gallery-check.yaml}; command output is mirrored to the
+Run with \cli{Jarvis check gallery-check.yaml}; command output is mirrored to the
 terminal (Chapter~\ref{ch:check-modules}).

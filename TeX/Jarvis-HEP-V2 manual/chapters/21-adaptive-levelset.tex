@@ -27,27 +27,33 @@ below.
 \begin{yamlwin}
 Sampling:
   Method: AdaptiveBridson
-  Seed: 7
   Variables:                        # REQUIRED: 2 to 5 entries
     - name: x
       distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
     - name: y
       distribution: { type: Flat, parameters: { min: 0.0, max: 1.0 } }
 
-  AdaptiveBridson:                  # alias: adaptive_bridson
-    target_expression: "r2"          # REQUIRED: shared-language expression
-    target_value: 0.04               # REQUIRED: the level T
+  Bounds:
+    target_expression: "r2"         # REQUIRED: shared-language expression
+    target_value: 0.04              # REQUIRED: the level T
+    Seed: 7
     # Optional public tuning (defaults are fine for most cards):
-    # outer_half_width: 0.02         # discovery band |f-T| <= w_outer
-    # min_radius: 0.005              # u-space resolution floor
+    # outer_half_width: 0.02        # discovery band |f-T| <= w_outer
+    # min_radius: 0.005             # u-space resolution floor
 \end{yamlwin}
 
+Every key in this chapter's tables goes directly in \yamlkey{Bounds} --- there is no
+nested block underneath it, and \sampler{AdaptiveBridson} accepts the block strictly, so
+a mistyped tuning key is reported before the scan starts rather than silently taking its
+default (Section~\ref{sec:bounds}).
+
 \begin{keylist}
-  \item[target\_expression] \req. A shared-language expression
+  \item[target\_expression] \req\ (\code{JV2-MTH-041}). A shared-language expression
         (Chapter~\ref{ch:expressions}) evaluated in the control process over the
         observables your workflow \emph{returns} --- likelihood terms included. Its
         value is $f(u)$.
-  \item[target\_value] \req. The level $T$ you are tracing: $f(u) = T$.
+  \item[target\_value] \req\ (\code{JV2-MTH-042}). The level $T$ you are tracing:
+        $f(u) = T$.
   \item[outer\_half\_width] \opt, default \code{0.02}. The \emph{discovery} band ---
         any evaluated point with $\lvert f - T\rvert \le w_{\mathrm{outer}}$ is worth
         keeping around as context; only its inner half (below) actually drives
@@ -216,9 +222,16 @@ rebuilds active endpoints from the new, finer geometry. If $r_g$ is already at
 \yamlkey{min\_radius} and the band is still not thin, the tracer stops anyway --- it
 never invents resolution finer than the floor you configured.
 
+Convergence is not the only way a run ends. Table~\ref{tab:als-stops} lists the hard
+stops, which are checked regardless of how the band is doing --- a run that ends on one
+of these reports it in \code{stop\_reason}, so you can always tell a converged trace from
+a truncated one.
+
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Condition} & \textbf{\code{stop\_reason}} \\
     \midrule
@@ -229,6 +242,7 @@ never invents resolution finer than the floor you configured.
     local windows saturated, no candidates left & \code{no\_refinement\_candidates} \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{Hard safety stops, independent of convergence.}
   \label{tab:als-stops}
 \end{table}
@@ -262,7 +276,7 @@ tracking, and densify timing are \code{DEBUG} (Chapter~\ref{ch:logging}).
 \label{sec:als-outputs}
 
 Beyond the normal archive (\file{DATABASE/\allowbreak{}samples.\allowbreak{}hdf5},
-plus \file{samples.\allowbreak{}csv} via \cli{Jarvis2 convert},
+plus \file{samples.\allowbreak{}csv} via \cli{Jarvis convert},
 Section~\ref{sec:cli-convert}), the tracer writes
 \file{<task\_result\_dir>/\allowbreak{}levelset.\allowbreak{}json} --- algorithm id
 \code{outer\_core\_root\_correction\_bridson}, dimension, target and band values, the
@@ -273,11 +287,14 @@ cloud with slice projections for $d \ge 4$. The stock \JPlot\ scenes overlay
 \yamlkey{save: true} calculator artifacts still land under \file{SAMPLE/} exactly as for
 any other method (Chapter~\ref{ch:calculators}).
 
+Both what the tracer emphasises in that file and how it builds its geometry depend on the
+dimension; Table~\ref{tab:als-dimpolicy} collects that policy.
+
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.10\linewidth}p{0.14\linewidth}p{0.20\linewidth}p{0.20\linewidth}p{0.32\linewidth}@{}}
+  \begin{tabular}{@{}p{0.104\linewidth}p{0.146\linewidth}p{0.208\linewidth}p{0.208\linewidth}p{0.334\linewidth}@{}}
     \toprule
     $d$ & Gen-0 & Neighbor graph & Densify engine & Output emphasis \\
     \midrule
@@ -296,12 +313,14 @@ any other method (Chapter~\ref{ch:calculators}).
 \section{Full key reference}
 \label{sec:als-keys}
 
-\begin{fullwidth}
+Table~\ref{tab:als-keys} is the complete \yamlkey{Sampling.Bounds} surface for this
+method.
+
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.21\linewidth}p{0.10\linewidth}p{0.12\linewidth}p{0.53\linewidth}@{}}
+  \begin{tabular}{@{}p{0.219\linewidth}p{0.104\linewidth}p{0.125\linewidth}p{0.552\linewidth}@{}}
     \toprule
     \textbf{Key} & \textbf{Req.} & \textbf{Default} & \textbf{Notes} \\
     \midrule
@@ -326,6 +345,8 @@ any other method (Chapter~\ref{ch:calculators}).
     \yamlkey{neighbor\_graph} & & \code{auto} & \code{auto} $\to$ Delaunay ($d\le3$) /
       \textsc{k}nn ($d\ge4$); \code{delaunay}/\code{knn} force it \\
     \yamlkey{knn\_k} & & $4d$ & degree when the graph is \textsc{k}nn \\
+    \yamlkey{Seed} & & \code{0} & alias \yamlkey{seed}; seeds every generation's draws \\
+    \yamlkey{MaxWorker} & & workers & caps in-flight proposals \\
     \multicolumn{4}{@{}l}{\emph{Advanced / legacy (rarely needed on new cards)}} \\
     \yamlkey{core\_half\_width} & & $w_{\mathrm{outer}}/8$ & densify-center half-width;
       overrides the derived value \\
@@ -351,12 +372,11 @@ any other method (Chapter~\ref{ch:calculators}).
     \bottomrule
   \end{tabular}
   \endgroup
-  \caption{\yamlkey{Sampling.AdaptiveBridson} keys. \yamlkey{contour\_precision} (an
+  \caption{\yamlkey{Sampling.Bounds} keys. \yamlkey{contour\_precision} (an
   older name for \yamlkey{threshold}) remains readable on legacy cards and checkpoints
   (Section~\ref{sec:als-legacy}).}
   \label{tab:als-keys}
 \end{table}
-\end{fullwidth}
 
 \begin{jwarn}
 \yamlkey{target\_expression} is compiled in the control process over the observables
@@ -420,10 +440,13 @@ derives \yamlkey{threshold} automatically) instead of touching these directly.
 \sampler{AdaptiveBridson} is the only method here that reacts to results generation by
 generation, spending its budget on a target surface instead of the whole space --- the
 right choice for a contour or exclusion edge, never a general-purpose posterior sampler.
+Table~\ref{tab:als-summary} is the short form.
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Field} & \textbf{\sampler{AdaptiveBridson}} \\
     \midrule
@@ -438,6 +461,7 @@ right choice for a contour or exclusion edge, never a general-purpose posterior 
     Extra output & \file{levelset.json} \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{\sampler{AdaptiveBridson} at a glance.}
   \label{tab:als-summary}
 \end{table}

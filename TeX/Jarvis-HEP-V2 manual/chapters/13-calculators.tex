@@ -1,12 +1,13 @@
-\chapter{Calculators}
+\chapter{Calculators \& File I/O}
 \label{ch:calculators}
 
 \newthought{Calculators are the external programs} --- spectrum generators, event
 generators, analysis tools --- that \Jtwo\ exists to orchestrate. Each entry under
 \yamlkey{Calculators.Modules} declares one program: where it lives, how to isolate it,
 what environment it needs, and the \emph{write input $\rightarrow$ run commands
-$\rightarrow$ read output} cycle every Sample drives it through. This is the longest
-block in a real card and the longest chapter in this part.
+$\rightarrow$ read output} cycle every Sample drives it through, including the file
+formats that cycle reads and writes. This is the longest block in a real card and the
+longest chapter in this part.
 
 \section{The execution model}
 \label{sec:calc-model}
@@ -22,7 +23,7 @@ Sample the Worker handles reuses them. Per run, the cycle is fixed:
   \item \textbf{Prepare the runtime.} Shadow install (first time a Worker sees this
         pack) or a symlink into the Sample directory.
   \item \textbf{Write inputs} --- each \yamlkey{execution.input} spec, through \Portal\
-        (Chapter~\ref{ch:io-types}).
+        (Section~\ref{sec:input-spec}).
   \item \textbf{Run commands} --- each \yamlkey{execution.commands} entry, sequentially,
         under the module's timeout.
   \item \textbf{Read outputs} --- each \yamlkey{execution.output} spec; captured
@@ -57,12 +58,13 @@ run more Workers than any single tool could survive.
 \section{\yamlkey{Modules[]}: the per-module keys}
 \label{sec:calc-module-keys}
 
-\begin{fullwidth}
+Every entry in the list is described by the keys of Table~\ref{tab:calc-module-keys}.
+
 \begin{table}[ht]
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.18\linewidth}p{0.10\linewidth}p{0.18\linewidth}p{0.50\linewidth}@{}}
+  \begin{tabular}{@{}p{0.188\linewidth}p{0.104\linewidth}p{0.188\linewidth}p{0.52\linewidth}@{}}
     \toprule
     \textbf{Key} & \textbf{Req.} & \textbf{Default} & \textbf{Meaning} \\
     \midrule
@@ -84,7 +86,6 @@ run more Workers than any single tool could survive.
   \caption{\yamlkey{Calculators.Modules[]} keys.}
   \label{tab:calc-module-keys}
 \end{table}
-\end{fullwidth}
 
 \section{Isolation: safe tools vs \yamlkey{clone\_shadow}}
 \label{sec:clone-shadow}
@@ -184,9 +185,158 @@ execution:
   \item[output] File specs read \emph{after} the commands finish.
 \end{keylist}
 
-The \yamlkey{input}/\yamlkey{output} spec format --- \yamlkey{type}, the \yamlkey{Dump}
-action, \yamlkey{entry} paths, and the \yamlkey{save} flag for keeping copies under
-\file{SAMPLE/} --- is the subject of Chapter~\ref{ch:io-types}.
+Both lists share one spec format, and that format is the subject of the rest of this
+chapter. Notice what a spec does \emph{not} say: nothing about how a \code{JSON} or an
+\code{SLHA} file is actually parsed. A spec names a \yamlkey{type} and the reading and
+writing are delegated to the \Portal\ package --- which is why upgrading \Portal\ adds
+formats without a runtime release.
+
+\section{The division of labour}
+\label{sec:io-ownership}
+
+\begin{itemize}
+  \item \textbf{\Jtwo\ owns the semantics}: the spec syntax, token resolution in
+        \yamlkey{path}, expression evaluation in \yamlkey{Dump} variables, and the
+        \yamlkey{save} policy that copies files into \file{SAMPLE/}.
+  \item \textbf{\Portal\ owns the formats}: how a \code{JSON} or \code{SLHA} file is
+        actually serialized and parsed --- \emph{variable read/write only}, no file
+        management.
+\end{itemize}
+
+\begin{jwarn}
+An unknown or empty \yamlkey{type} is a \textbf{hard failure} that lists the formats
+your installed \Portal\ registers --- never a silent skip. If a format you expect is
+missing from that list, upgrade \Portal.
+\end{jwarn}
+
+\section{The format catalog}
+\label{sec:format-catalog}
+
+Table~\ref{tab:portal-formats} lists the \yamlkey{type} values \Portal\ understands
+today.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
+    \toprule
+    \textbf{type} & \textbf{Format} \\
+    \midrule
+    \code{JSON}    & \textsc{json} documents; dotted \yamlkey{entry} paths navigate nesting \\
+    \code{CSV} / \code{TSV} & delimited tables \\
+    \code{DAT}     & whitespace-separated numeric files \\
+    \code{Wolfram} & Mathematica expression files \\
+    \code{SLHA} / \code{xSLHA} & \textsc{susy} Les Houches Accord (and extended) spectrum files \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Formats exposed by the current \Portal\ V2 surface. Third-party packages can
+  register more through the \code{jarvishep.io} entry point; the authoritative list is
+  \cli{Jarvis portal man}.}
+  \label{tab:portal-formats}
+\end{table}
+
+\section{\yamlkey{input[]}: writing calculator input}
+\label{sec:input-spec}
+
+\begin{yamlwin}
+input:
+  - name: lha_in
+    path: "@Sdir/LesHouches.in"
+    type: SLHA
+    save: true                    # keep a copy under SAMPLE/
+    actions:
+      - type: Dump
+        variables:
+          - name: m0
+            expression: m0            # computed (here: verbatim by expression)
+          - name: tanb
+            expression: "10 * tb_u"   # any shared-language expression
+          - name: sign_mu             # no expression -> copy observable verbatim
+\end{yamlwin}
+
+\begin{keylist}
+  \item[name] The spec's label (used in logs and generated observable names).
+  \item[path] Where to write; per-Sample tokens resolve here, and \token{@Sdir}
+        materializes the Sample directory.
+  \item[type] The \Portal\ format.
+  \item[actions] Today exactly one action type exists: \yamlkey{Dump} writes the listed
+        variables into the file. Each entry writes \yamlkey{name} either from an
+        \yamlkey{expression} (shared language, Chapter~\ref{ch:expressions}) or, with no
+        expression, verbatim from the observable of the same name --- a missing
+        observable becomes the literal string \code{MISSING\_VALUE}, which is your cue
+        in the produced file.
+\end{keylist}
+
+If the target file already exists, \yamlkey{Dump} \emph{merges} into it rather than
+replacing it --- useful for layering computed values onto a template your commands
+copied into place first.
+
+\section{\yamlkey{output[]}: reading calculator output}
+\label{sec:output-spec}
+
+\begin{yamlwin}
+output:
+  - name: spectrum
+    path: "@Sdir/SPheno.spc"
+    type: SLHA
+    save: true
+    variables:
+      - name: mh
+        entry: "MASS.25"          # dotted path into the parsed structure
+      - name: mstop1
+        entry: "MASS.1000006"
+\end{yamlwin}
+
+Each \yamlkey{variables} entry maps \yamlkey{name} from \yamlkey{entry} --- a dotted
+path into the parsed file, defaulting to the name itself. A missing entry captures
+\code{None} rather than failing, so downstream expressions see a null value they can be
+written to tolerate (or fail on, loudly --- Section~\ref{sec:likelihood-failure}).
+
+\section{The \yamlkey{save} policy}
+\label{sec:save-policy}
+
+By default nothing a calculator writes or reads is kept --- working files vanish with
+the working directory. The \yamlkey{save} flag on a spec keeps a copy under the Sample's
+directory, handled by a dedicated per-Worker file-operation process so Workers never
+block on slow storage:
+
+\begin{itemize}
+  \item \textbf{input specs}: copied into \file{SAMPLE/<bucket>/<uuid>/} only when
+        \yamlkey{save: true}.
+  \item \textbf{output specs}: \yamlkey{save: true} copies into the Sample directory
+        proper; without it, outputs that must survive the working directory go to the
+        Sample's hidden \file{.temp/} area instead.
+  \item Saved files keep their basename; a name that would collide across modules is
+        disambiguated as \code{basename@Module}.
+  \item When a spec is saved, the file's final path is also added to the observables,
+        so the database records where each kept artifact lives.
+\end{itemize}
+
+\begin{jtip}
+Save what you would need to re-analyse a point without re-running it --- the spectrum
+file, the event-level summary --- and nothing else. At $10^6$ samples, every saved file
+is a million files; buckets keep the filesystem sane
+(Section~\ref{sec:sample-directory}), but nothing keeps the disk big.
+\end{jtip}
+
+\section{Portal from the command line}
+\label{sec:portal-cli}
+
+The \Portal\ registry is inspectable and drivable without a scan:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis portal man            # list every registered format
+Jarvis portal man slha       # one format's manual
+Jarvis portal path/to/io.yaml   # run a standalone Portal IO YAML
+\end{jcmd}
+\end{terminal}
+
+The same commands exist as the standalone \cli{jportal} tool. Running a small
+\textsc{io yaml} against a real output file of your calculator is the fastest way to get
+\yamlkey{entry} paths right before wiring them into a scan card.
 
 \section{Failure and diagnostics}
 \label{sec:calc-failure}

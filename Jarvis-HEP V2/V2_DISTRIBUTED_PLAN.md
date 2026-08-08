@@ -264,6 +264,29 @@ Parallelism note: D11.1 has no dependency on parked D8 (Agent JSON can consume `
 later). D9.4/D9.6 may proceed without D8. Agent-side M4.5 (Jarvis-Agent repo) stays blocked
 on parked D8.
 
+### D24 — `Jarvis man` YAML manual center
+
+**Design**: [`DESIGN_YAML_MAN_2.0.md`](DESIGN_YAML_MAN_2.0.md) (2026-08-08; §15 five decisions locked).
+**Invariant K1**: man only renders surfaces `validate` can reject typos for; MCMC family
+(tier C) is marked `x-jarvis-status: unstable` and not silently documented as complete.
+
+| WP | Title | Priority | Depends | Status |
+|---|---|---|---|---|
+| D24.1 | `man.py` skeleton + `client` `man` subcommand + domain/path syntax (A1–A5) | HIGH | — | **done** (2026-08-09) |
+| D24.2 | L0/L2 catalog accessors + Distributor capability table; `man sampler` (A6 structure) | HIGH | D24.1 | **done** (2026-08-09) |
+| D24.3 | L3 English `description` inline + lint (ASCII) + tier-A five methods (A6, A14) | HIGH | D24.1 | **done** (2026-08-09) — ASCII lint + tier A; more prose can accumulate later |
+| D24.4 | Tier B: Dynesty/MultiNest Bounds into schema + consistency (A7) | MEDIUM | D24.2 | **done** (2026-08-09) — `common#/nestedBounds` |
+| D24.5 | Tier C: `x-jarvis-status: unstable` + warning render (A6) | MEDIUM | D24.2 | **done** (2026-08-09) |
+| D24.6 | `distribution` 10 param sets into `common.json` (A8) | HIGH | D24.3 | **done** (2026-08-09) |
+| D24.7 | `man calculator` topics + `--type` IO field tables (A9, A10) | HIGH | D24.3 | **done** (2026-08-09) — IO schema prose + FakeFmt honesty |
+| D24.8 | `man operas` + `man tokens` | MEDIUM | D24.3 | **done** (2026-08-09) |
+| D24.9 | `man example` + `quickstart_calculator.yaml` + gates (A11) | MEDIUM | D24.1 | **done** (2026-08-09) |
+| D24.10 | code→path index + `--code` + executable validate hints (A12, A13) | MEDIUM | D24.2 | **done** (2026-08-09) — `man_codes.py` + issue() auto-hint |
+| D24.11 | `--json` contract freeze + agent e2e + wheel gate (A15, A17) | MEDIUM | D24.10 | **partial** — JSON contract tests landed; wheel/cold-start e2e optional polish |
+
+**Minimal usable slice**: D24.1 + D24.2 + D24.3 + D24.6 + D24.7.
+**Do not touch**: `mcmc_sampler.py` numerical paths, V1, Operas D22.8 / D23.14 fixes.
+
 ---
 
 ## 4. Work Packages

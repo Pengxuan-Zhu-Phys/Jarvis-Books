@@ -11,7 +11,7 @@ in a single \textsc{yaml} \emph{task card}.
 The manual is written to be read in two ways. Read Part~\ref{part:getting-started} front to
 back once: it installs the software, runs a first scan, and builds the vocabulary the rest
 of the book leans on. After that, treat the book as a reference --- every \textsc{yaml} key,
-every \cli{Jarvis2} subcommand, and every output file has a home chapter, and the
+every \cli{Jarvis} subcommand, and every output file has a home chapter, and the
 appendices provide flat lookup tables that point back into the prose.
 
 \section{Who this book is for}
@@ -29,17 +29,19 @@ Part~\ref{part:backends}, but the built-in examples run without any of them.
         (including the Redis service it depends on), a ten-minute quick start, and the core
         concepts: projects, tokens, u-space, and the Sample lifecycle.
   \item[Part~\ref{part:task-card}: The Task Card] A field-by-field reference for the
-        \textsc{yaml} task card: how it is loaded, the runtime settings under
-        \yamlkey{EnvReqs.V2}, the \yamlkey{Sampling} block, variables and distributions,
-        the likelihood, and the shared expression language.
+        \textsc{yaml} task card: how it is loaded, the shared expression language every
+        \yamlkey{expression:} field speaks, the \yamlkey{Sampling} block, variables and
+        distributions, the likelihood, and the runtime settings under
+        \yamlkey{EnvReqs.V2}.
   \item[Part~\ref{part:backends}: Workflow Backends] How a parameter point becomes
-        observables: the layered workflow model, external \yamlkey{Calculators}, file
-        formats through \Portal, in-process \yamlkey{Operas}, and the \yamlkey{LibDeps}
-        tool registry.
+        observables: the command system that turns a card into processes, the layered
+        workflow model, external \yamlkey{Calculators} together with the file formats
+        they exchange through \Portal, in-process \yamlkey{Operas}, and the
+        \yamlkey{LibDeps} tool registry.
   \item[Part~\ref{part:samplers}: Samplers] The five sampling methods --- \sampler{Random},
         \sampler{Grid}, \sampler{CSV}, \sampler{Bridson}, and the feedback-driven
         \sampler{AdaptiveBridson} --- plus the \cli{check} smoke path.
-  \item[Part~\ref{part:running}: Running, Monitoring \& Outputs] The \cli{Jarvis2} command
+  \item[Part~\ref{part:running}: Running, Monitoring \& Outputs] The \cli{Jarvis} command
         line, project tools and the official example catalog, checkpoint/resume, the output
         tree, live monitoring, the run summary, and logging.
   \item[Part~\ref{part:advanced}: Advanced \& Performance] The distributed runtime in
@@ -56,13 +58,13 @@ Part~\ref{part:backends}, but the built-in examples run without any of them.
         type it:
 \begin{terminal}
 \begin{jcmd}
-Jarvis2 run task.yaml
+Jarvis run task.yaml
 \end{jcmd}
 \end{terminal}
-  \item A short command mentioned mid-sentence uses \cli{Jarvis2 -{}-help} instead.
+  \item A short command mentioned mid-sentence uses \cli{Jarvis -{}-help} instead.
   \item \token{@SampleID}, \marker{\&J/} --- runtime tokens and path markers, coloured
         like a \textsc{yaml} value (Chapter~\ref{ch:core-concepts}; full table in
-        Appendix~\ref{app:markers-tokens}).
+        Chapter~\ref{ch:command-system}).
   \item \sampler{Bridson} --- a sampler method name.
   \item \req\ / \opt\ --- whether omitting a key raises an error or silently applies a
         default.

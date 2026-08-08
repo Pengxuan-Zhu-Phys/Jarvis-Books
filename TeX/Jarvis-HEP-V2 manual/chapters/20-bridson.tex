@@ -14,9 +14,10 @@ space you intend to interpolate, plot, or train a surrogate on.
 \begin{yamlwin}
 Sampling:
   Method: Bridson
-  Radius: 0.35            # REQUIRED: min u-space distance between points
-  MaxAttempt: 30          # REQUIRED: candidates per active point (k)
-  Seed: 42
+  Bounds:
+    Radius: 0.35          # REQUIRED: min u-space distance apart
+    MaxAttempt: 30        # REQUIRED: candidates per active point (k)
+    Seed: 42
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0, length: 1.0}}
@@ -24,16 +25,25 @@ Sampling:
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0, length: 1.0}}
 \end{yamlwin}
 
+The sampler's three knobs live in \yamlkey{Bounds}, which \sampler{Bridson} accepts
+strictly --- only these four keys and \yamlkey{Seed} are allowed, so a typo is reported
+rather than ignored (Section~\ref{sec:bounds}). The fourth number, \yamlkey{length}, is a
+property of each variable and stays with the variable.
+
 \begin{keylist}
-  \item[Radius] \req\ (\code{KeyError} if absent). The minimum distance between any two
-        accepted points, \emph{in u-space}. This is the resolution dial: the expected
-        point count scales like $(\mathrm{length}/\mathrm{Radius})^d$.
-  \item[MaxAttempt] \req. Bridson's $k$ --- candidate darts thrown around each active
-        point before it retires. $30$ is the standard literature value; it bounds the
-        \emph{placement} algorithm only and has nothing to do with \yamlkey{selection}
-        retries.
-  \item[MaxWorker] \opt, default \yamlkey{EnvReqs.V2.workers}. Caps in-flight proposals
-        during submission.
+  \item[Bounds.Radius] \req\ (\code{JV2-MTH-010} if absent, \code{011} if not positive).
+        The minimum distance between any two accepted points, \emph{in u-space}. This is
+        the resolution dial: the expected point count scales like
+        $(\mathrm{length}/\mathrm{Radius})^d$.
+  \item[Bounds.MaxAttempt] \req\ (\code{JV2-MTH-012} / \code{013}). Bridson's $k$ ---
+        candidate darts thrown around each active point before it retires. $30$ is the
+        standard literature value; it bounds the \emph{placement} algorithm only and has
+        nothing to do with \yamlkey{selection} retries.
+  \item[Bounds.MaxWorker] \opt, default \yamlkey{EnvReqs.V2.workers}. Caps in-flight
+        proposals during submission.
+  \item[Bounds.Seed] \opt, integer, default \code{0}; alias \yamlkey{seed}. Seeds the
+        disk-packing draws. The generator is always seeded, \code{0} included, so an
+        unchanged card packs the same point set on every run.
   \item[parameters.length] \req\ \emph{per variable} (\code{KeyError} if absent): the
         u-space box edge for that dimension. With \code{length: 1.0} everywhere the
         domain is the unit cube; a larger \yamlkey{length} stretches that dimension's
@@ -48,7 +58,7 @@ generation the count is reported in the logs before submission starts
   \footnotesize
   \begingroup
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{@{}p{0.22\linewidth}>{\raggedleft\arraybackslash}p{0.24\linewidth}>{\raggedleft\arraybackslash}p{0.24\linewidth}>{\raggedleft\arraybackslash}p{0.24\linewidth}@{}}
+  \begin{tabular}{@{}p{0.234\linewidth}>{\raggedleft\arraybackslash}p{0.255\linewidth}>{\raggedleft\arraybackslash}p{0.255\linewidth}>{\raggedleft\arraybackslash}p{0.256\linewidth}@{}}
     \toprule
     \yamlkey{Radius} & $d=2$ & $d=3$ & $d=4$ \\
     \midrule
@@ -113,24 +123,29 @@ workflow (Chapter~\ref{ch:csv-sampler}).
 
 \sampler{Bridson} is the default once you are past debugging: blue-noise coverage with
 no axis artifacts and no combinatorial blow-up, at the cost of an emergent (not dialed)
-point count and a $d \lesssim 4$ practical ceiling.
+point count and a $d \lesssim 4$ practical ceiling. Table~\ref{tab:bridson-summary} puts
+that trade-off in one view.
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Field} & \textbf{\sampler{Bridson}} \\
     \midrule
     Kind & fixed set \\
-    Point count & emergent from \yamlkey{Radius} \\
+    Point count & emergent from \yamlkey{Bounds.Radius} \\
     Dimensions & $2$--$\sim$$4$ \\
-    Required keys & \yamlkey{Radius}, \yamlkey{MaxAttempt}, \yamlkey{length} per var \\
+    Required keys & \yamlkey{Bounds.Radius}, \yamlkey{Bounds.MaxAttempt},
+      \yamlkey{length} per var \\
     u$\to$x mapping & yes \\
-    \yamlkey{Seed} role & disk generation (\code{0} = unseeded) \\
+    \yamlkey{Seed} role & disk generation (always seeded; \code{0} is a seed) \\
     \yamlkey{selection} & consumes slots, no top-up \\
     Extra output & --- \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{\sampler{Bridson} at a glance.}
   \label{tab:bridson-summary}
 \end{table}

@@ -13,8 +13,9 @@ archiving) without any sampler-specific behavior to reason about.
 \begin{yamlwin}
 Sampling:
   Method: Random
-  "Point number": 500          # REQUIRED -- note the space in the key
-  Seed: 11
+  Bounds:
+    "Point number": 500        # REQUIRED -- note the space in the key
+    Seed: 11
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
@@ -22,15 +23,20 @@ Sampling:
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
 \end{yamlwin}
 
+Both keys go in \yamlkey{Bounds}, which \sampler{Random} accepts strictly: nothing else
+belongs there, so a stray \yamlkey{Radius} or a mistyped \yamlkey{Seed} is reported
+rather than ignored (Section~\ref{sec:bounds}).
+
 \begin{keylist}
-  \item["Point number"] \req\ (\code{ValueError} if absent); alias
+  \item[Bounds."Point number"] \req\ (\code{JV2-MTH-020} if absent); alias
         \yamlkey{point\_number}. The number of draw \emph{attempts} --- the
         \emph{nominal} budget. A \yamlkey{selection} cut only reduces how many of those
         attempts are accepted; it does not top the budget back up
         (Section~\ref{sec:selection}).
-  \item[Seed] \code{0} (the default) means unseeded --- a fresh \textsc{numpy} stream
-        every run, so identical cards produce different points on different launches.
-        Set it to any nonzero integer for anything you may want to resume or reproduce.
+  \item[Bounds.Seed] \opt, integer, default \code{0}; alias \yamlkey{seed}. The stream is
+        always seeded, and \code{0} is an ordinary seed value --- so a card with no
+        \yamlkey{Seed} at all still draws the same points every run. Give distinct
+        nonzero seeds to runs you want to be statistically independent of each other.
 \end{keylist}
 
 When to use it: first contact with a new space, workflow debugging, an unbiased
@@ -42,7 +48,7 @@ sample count to be exactly what you asked for rather than emergent.
 
 Draws happen lazily, one at a time, in the control process: each call to the sampler's
 internal \code{propose\_next} draws a fresh u-space vector from
-\code{numpy.random}, seeded once at startup if \yamlkey{Seed} is nonzero. A drawn point
+\code{numpy.random}, seeded once at startup from \yamlkey{Bounds.Seed}. A drawn point
 that fails \yamlkey{selection} is discarded and the loop draws again --- but the attempt
 still counts against \yamlkey{"Point number"}, which is why a tight cut yields fewer
 \emph{accepted} samples than the nominal budget (the same accounting rule as every
@@ -85,23 +91,27 @@ identical sample.
 \sampler{Random} is the fixed-set baseline: a nominal draw budget, no geometry to
 configure, resume that replays its exact random stream. Reach for it first on any new
 card, and keep it as the reference map to compare every other method against.
+Table~\ref{tab:random-summary} is the one-screen version.
 
 \begin{table}[ht]
   \footnotesize
-  \begin{tabular}{@{}p{0.32\linewidth}p{0.62\linewidth}@{}}
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
     \toprule
     \textbf{Field} & \textbf{\sampler{Random}} \\
     \midrule
     Kind & fixed set \\
-    Point count & \yamlkey{"Point number"} (nominal draw attempts) \\
+    Point count & \yamlkey{Bounds."Point number"} (nominal attempts) \\
     Dimensions & any \\
-    Required keys & \yamlkey{"Point number"} \\
+    Required keys & \yamlkey{Bounds."Point number"} \\
     u$\to$x mapping & yes \\
-    \yamlkey{Seed} role & draw stream (\code{0} = unseeded) \\
+    \yamlkey{Seed} role & draw stream (always seeded; \code{0} is a seed) \\
     \yamlkey{selection} & consumes attempts, no top-up \\
     Extra output & --- \\
     \bottomrule
   \end{tabular}
+  \endgroup
   \caption{\sampler{Random} at a glance.}
   \label{tab:random-summary}
 \end{table}

@@ -123,7 +123,7 @@ at all), while failure replays the \emph{entire} buffered trace into the file. Y
 full forensics exactly where you need them, at near-zero cost where you do not.
 \end{jnote}
 
-During \cli{Jarvis2 check} runs, the same rendered text is mirrored to the terminal
+During \cli{Jarvis check} runs, the same rendered text is mirrored to the terminal
 (Chapter~\ref{ch:check-modules}); production scans stay file-only.
 
 \section{The post-mortem recipe}
@@ -138,7 +138,7 @@ During \cli{Jarvis2 check} runs, the same rendered text is mirrored to the termi
         error.
   \item \textbf{Reproduce it} --- re-run the logged command in the logged \yamlkey{cwd},
         or replay just that point: a one-line \textsc{csv} with its parameters and
-        \cli{Jarvis2 run} a \sampler{CSV} card (Chapter~\ref{ch:csv-sampler}).
+        \cli{Jarvis run} a \sampler{CSV} card (Chapter~\ref{ch:csv-sampler}).
 \end{enumerate}
 
 If the bucket was already packed, the log is inside \file{<bucket>.tar.gz} under the
