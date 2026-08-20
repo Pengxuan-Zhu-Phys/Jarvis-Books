@@ -38,19 +38,30 @@ Table~\ref{tab:opera-keys} takes those keys one at a time.
     \toprule
     \textbf{Key} & \textbf{Req.} & \textbf{Default} & \textbf{Meaning} \\
     \midrule
-    \yamlkey{name} &      & \code{Operas<i>} & the step's name in the execution plan \\
+    \yamlkey{name} & \req & --- & the step's name in the execution plan \\
     \yamlkey{operator} & \req & --- & the callable (\S\ref{sec:opera-resolution}) \\
     \yamlkey{call\_mode} &      & \code{call} & \code{call} (sync) or \code{acall} (async) \\
-    \yamlkey{timeout\_sec} (alias \yamlkey{timeout}) & & none & seconds (\S\ref{sec:opera-failure}) \\
+    \yamlkey{timeout\_sec} & & none & seconds (\S\ref{sec:opera-failure}) \\
     \yamlkey{kwargs} &      & \code{\{\}} & static keyword arguments \\
     \yamlkey{input} &      & pass-through & what the operator receives (\S\ref{sec:opera-io}) \\
     \yamlkey{output} &      & \code{[]} & what is captured (\S\ref{sec:opera-io}) \\
+    \yamlkey{required\_modules} & & \code{[]} & dependencies $\rightarrow$ layers
+      (Ch.~\ref{ch:workflow-model}) \\
+    \yamlkey{selection} &      & always run & a condition deciding whether this step runs
+      for a given Sample \\
     \bottomrule
   \end{tabular}
   \endgroup
   \caption{\yamlkey{Operas.Modules[]} keys.}
   \label{tab:opera-keys}
 \end{table}
+
+\begin{jwarn}
+The timeout key is spelled \yamlkey{timeout\_sec} here and plain \yamlkey{timeout} on a
+calculator (Table~\ref{tab:calc-module-keys}). Neither block accepts the other's
+spelling: both are closed, so the wrong one is rejected by name at validation rather
+than silently ignored.
+\end{jwarn}
 
 \section{Operator resolution}
 \label{sec:opera-resolution}

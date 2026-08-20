@@ -114,10 +114,10 @@ The design draws a hard line between two kinds of file traffic:
         critical path. \yamlkey{save} copies are offloaded to the per-Worker
         file-operation process so even they do not stall execution
         (Section~\ref{sec:save-policy}).
-  \item[Layer 2 --- after the Sample.] Database rows, bucket packing, and any staging
-        moves belong to the Archiver, batched (\yamlkey{archiver.batch\_size}, flush
-        interval) and entirely off the Workers' path. By default the handoff is
-        \emph{direct}: products are already in their final bucket location, and only
+  \item[Layer 2 --- after the Sample.] Database rows and bucket packing belong to the
+        Archiver, batched (\yamlkey{archiver.batch\_size}, flush interval) and entirely
+        off the Workers' path. The handoff is \emph{direct}: a Sample's products are
+        already in their final bucket location by the time the Archiver sees it, so only
         records move.
 \end{description}
 

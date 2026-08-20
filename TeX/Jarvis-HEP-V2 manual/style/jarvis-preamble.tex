@@ -21,7 +21,15 @@
 
 % --- Misc ---------------------------------------------------------------------
 \usepackage{pmboxdraw}     % render block/box-drawing glyphs (the Jarvis -v banner) in pdfLaTeX
+\usepackage{textcomp}      % \textperthousand, and other symbols quoted verbatim from real output
 \usepackage{newunicodechar} % map the literal dot glyph U+2B24 (the banner icon) to a drawn circle
+% pdfLaTeX's kernel UTF-8 table does not include U+2030 (‰) by default -- unlike
+% the handful of General Punctuation characters already safe to quote verbatim
+% (see jarvis-listings.tex's `literate' tables), a raw ‰ byte sequence is a hard
+% "Invalid UTF-8 byte sequence" error before `literate' ever gets to substitute
+% it. This registers the character so it tokenizes at all; the `literate' entry
+% then still supplies the actual rendering inside jout/terminal listings.
+\newunicodechar{‰}{\textperthousand}
 \usepackage{varwidth}      % shrink-to-content box so the banner panel hugs its text (no empty margin)
 \usepackage{xspace}        % smart trailing space for text macros
 \usepackage{enumitem}      % tighter description/itemize lists
@@ -40,7 +48,7 @@
 % release.  \JversionNum names the release this particular build documents --
 % bump it (and rebuild) on every release; do not hard-code version numbers in
 % the prose, always use \Jversion so there is a single source of truth.
-\newcommand{\JversionNum}{2.0.0}
+\newcommand{\JversionNum}{2.0.3}
 \newcommand{\Jversion}{v\JversionNum\xspace}
 
 % --- Product / ecosystem names ------------------------------------------------

@@ -1,0 +1,578 @@
+\chapter{ToyMCMC: Independent-Chain Random-Walk MCMC}
+\label{ch:toymcmc}
+
+\newthought{This chapter is for anyone who wants a posterior-shaped point cloud} ---
+not the Bayesian evidence Chapters~\ref{ch:multinest}--\ref{ch:dynesty} compute, just
+the shape of the posterior itself, at a fraction of nested sampling's per-point
+bookkeeping. It is also the chapter that teaches the \textsc{mcmc} family's runtime:
+how \Jtwo\ drives many Markov chains through the distributed Worker fleet, using
+\sampler{ToyMCMC} --- the plain random-walk member of the family --- as the vehicle.
+Chapter~\ref{ch:ptmcmc} builds directly on everything here and covers only what
+parallel tempering adds. After this chapter you can explain what a Metropolis chain is
+actually doing, read its \textsc{yaml} block fluently, and recognise every line it
+prints while running.
+
+\section{What a Metropolis chain computes}
+\label{sec:mcmc-what}
+
+Nested sampling (Chapters~\ref{ch:multinest}--\ref{ch:dynesty}) shrinks a population
+through the likelihood to compute an integral. \textsc{mcmc} does something simpler:
+it constructs a random walk whose \emph{stationary distribution} --- the distribution
+its visited points converge to, given enough steps --- is exactly the (unnormalised)
+posterior. It never estimates the normalising evidence; it only needs the
+likelihood \emph{ratio} between two points, so the constant you would need for
+$\log Z$ cancels out and is never computed.
+
+\subsection{The algorithm: Metropolis--Hastings}
+\label{sec:mcmc-algorithm}
+
+Each chain holds one current position $u$ in the unit cube. One step is:
+
+\begin{enumerate}
+  \item \textbf{Propose.} Draw $u' = u + \delta$, where $\delta \sim
+        \mathcal{N}(0, \yamlkey{proposal\_scale}^2)$ componentwise --- a symmetric
+        random walk\cite{Metropolis:1953,Hastings:1970}. If $u'$ would land outside
+        $[0,1]^d$, redraw $\delta$ and try again; the step is never clipped to the
+        boundary, only redrawn until it lands inside.
+  \item \textbf{Evaluate.} Send $u'$ through the full declared pipeline
+        (Chapters~\ref{ch:calculators}--\ref{ch:loglikelihood}) to get its
+        log-likelihood $\log L'$.
+  \item \textbf{Accept or reject.} Let $\Delta = \beta\,(\log L' - \log L)$, with
+        $\beta = 1$ for \sampler{ToyMCMC} (temperature is always $1$; $\beta$ becomes
+        the inverse temperature once Chapter~\ref{ch:ptmcmc} introduces a ladder).
+        Accept ($u \leftarrow u'$) if $\Delta \geq 0$, or with probability
+        $e^{\Delta}$ otherwise; keep $u$ unchanged if rejected.
+  \item \textbf{Repeat} for \yamlkey{num\_iters} steps.
+\end{enumerate}
+
+A chain's very first proposal is always accepted (there is no previous likelihood to
+compare against yet); every later step follows the rule above. Why a rule this simple
+is enough to guarantee the chain's stationary distribution is the posterior is worth
+spelling out once.
+
+\subsection{Why the rule works: detailed balance}
+\label{sec:mcmc-detailed-balance}
+
+A Markov chain is fully described by a transition kernel $T(u \to u')$: the
+probability of moving to $u'$ given the chain currently sits at $u$. Under mild
+conditions --- the chain can reach anywhere from anywhere, and never cycles
+deterministically --- repeatedly applying $T$ from any starting point converges to a
+unique \emph{stationary distribution}: a distribution $\pi$ that, once reached, $T$
+leaves unchanged. This is the formal justification for treating a long enough
+chain's visited points as draws from $\pi$ --- it is the distribution a chain forgets
+its own starting point in favour of.
+
+Constructing a $T$ whose stationary distribution is a specific $\pi$ chosen in
+advance is generally hard to do directly. The standard shortcut is \emph{detailed
+balance} (or reversibility): a kernel satisfying $\pi(u)\,T(u \to u') = \pi(u')\,T(u'
+\to u)$ for every pair $u, u'$ is guaranteed to have $\pi$ as a stationary
+distribution. It is a sufficient, not necessary, condition, but the one nearly every
+practical MCMC method is actually built around, because checking it only ever
+requires reasoning about one pair of states at a time\cite{RobertCasella:2004}.
+
+Metropolis--Hastings builds a detailed-balanced $T$ from two pieces: a proposal
+density $q(u' \mid u)$, chosen freely (here, the Gaussian random walk in step~1
+above), and an acceptance probability $\alpha(u \to u') = \min\big(1,\ \pi(u')\,q(u
+\mid u')\,/\,[\pi(u)\,q(u' \mid u)]\big)$, derived by requiring the resulting kernel
+to satisfy detailed balance exactly\cite{Metropolis:1953,Hastings:1970}. Only the
+ratio $\pi(u')/\pi(u)$ survives inside $\alpha$ --- which is why an
+\emph{unnormalised} target is enough. The posterior here is $\pi(u) \propto L(u)$
+under the flat prior every \yamlkey{Bounds} block defines on $[0,1]^d$, so a
+Metropolis chain only ever compares two likelihoods and never needs the normalising
+evidence integral that Chapters~\ref{ch:multinest}--\ref{ch:dynesty} exist to
+compute.
+
+For a \emph{symmetric} proposal --- $q(u' \mid u) = q(u \mid u')$, true of the
+Gaussian random walk here, since moving from $u$ to $u'$ is exactly as likely, before
+either is evaluated, as the reverse move --- the proposal ratio is $1$ and $\alpha$
+collapses to $\min(1,\ \pi(u')/\pi(u))$: exactly step~3 of the algorithm above, with
+$q$ never appearing at all. This symmetric case is Metropolis, Rosenbluth,
+Rosenbluth, Teller \& Teller's original algorithm\cite{Metropolis:1953}; Hastings's
+contribution\cite{Hastings:1970} was generalising it to \emph{asymmetric} proposals.
+\sampler{ToyMCMC}'s proposal is symmetric by construction, which is the actual reason
+\S\ref{sec:mcmc-algorithm} never needed to mention $q$ at all.
+
+\begin{jtip}
+A random walk with too small a \yamlkey{proposal\_scale} accepts almost everything
+but barely moves; too large, and it rejects almost everything. For a random-walk
+Metropolis chain in high dimensions, the acceptance rate that maximises how fast the
+chain explores per unit of computation converges to $\approx 23.4\,\%$ as the number
+of parameters grows\cite{RobertsGelmanGilks:1997} --- in practice, most
+practitioners tune toward an acceptance rate somewhere around 20--40\,\%
+(\S\ref{sec:toymcmc-yaml}), neither extreme, and a useful first diagnostic when a run
+looks unhealthy.
+\end{jtip}
+
+\section{How the code implements it}
+\label{sec:toymcmc-code}
+
+\subsection{Class hierarchy: one engine, thin method subclasses}
+\label{sec:toymcmc-classes}
+
+\begin{quote}
+\sffamily\footnotesize
+\code{FeedbackSampler} $\;\to\;$ \code{MCMCBaseSampler} $\;\to\;$ \code{ToyMCMCSampler}
+\end{quote}
+
+\code{FeedbackSampler} is the same shared base nested sampling and
+\sampler{AdaptiveBridson} build on (Chapters~\ref{ch:multinest},
+\ref{ch:adaptive-levelset}) --- checkpointing and the notion of a barrier.
+\code{MCMCBaseSampler} adds everything generic to the whole \textsc{mcmc} family: the
+chain registry, the Redis transport (\S\ref{sec:mcmc-runtime}), deterministic
+\textsc{uuid}s, checkpoint export/import, and the accept/reject bookkeeping.
+\code{ToyMCMCSampler} itself is a thin subclass: it sets \code{method = "ToyMCMC"},
+normalises \yamlkey{proposal\_scale} into one value per chain, and attaches a progress
+observer --- nothing about the Markov-chain science lives here, because plain
+random-walk Metropolis \emph{is} what \code{MCMCBaseSampler} already implements by
+default.
+
+\begin{jnote}
+This is why \sampler{ToyMCMC} is the vehicle for this chapter rather than an
+afterthought: every other independent-chain method in the family
+(Section~\ref{sec:mcmc-family} in Chapter~\ref{ch:choosing-sampler}) is the same base
+class with a different chain engine substituted in --- learning \sampler{ToyMCMC}
+teaches the runtime every one of them uses.
+\end{jnote}
+
+\subsection{The chain engine}
+\label{sec:toymcmc-engine}
+
+Each chain owns one \code{MCMCChain} instance --- current parameter vector $u$,
+\yamlkey{proposal\_scale}, an iteration counter, and its own \code{numpy} random
+generator. Chain RNGs are never shared: one child \code{SeedSequence} is spawned per
+chain from the card's \yamlkey{Bounds.seed}, so a chain's trajectory depends only on
+\code{(seed, chain\_id)} --- never on how many Workers happened to be running or in
+what order their results arrived.
+
+Every proposed point gets a deterministic \textsc{uuid} minted from
+\code{(method, seed, chain\_id, step, stage)} through a \textsc{sha}-256 digest ---
+the same contract Chapter~\ref{ch:choosing-sampler}'s reproducibility tip promised for
+the whole fixed-set/adaptive/\textsc{mcmc} side of the book (unlike nested sampling,
+whose proposal \textsc{uuid}s are fresh every time). Fix \yamlkey{seed} and a
+\sampler{ToyMCMC} run is byte-for-byte re-proposable.
+
+\subsection{The runtime: async independent chains}
+\label{sec:mcmc-runtime}
+
+Chains that share no cross-chain move --- \sampler{ToyMCMC} among them --- run on
+\Jtwo's \emph{async independent-chain pipeline}, the base design every non-coupled
+\textsc{mcmc} method uses:
+
+\begin{enumerate}
+  \item \textbf{One shared task queue.} Every chain's proposal lands on the same
+        Redis list, \code{hep:task\_queue} --- Workers steal freely, exactly as for
+        any other method (Section~\ref{sec:redis-schema}).
+  \item \textbf{Per-chain feedback shards.} Results come back on
+        \code{hep:feedback:chain:\{id\}}, one list per chain, not the single shared
+        \code{hep:feedback} list other methods use --- so the control process can
+        wait for \emph{any} chain's next result without being blocked behind an
+        unrelated chain's slower one.
+  \item \textbf{One in-flight proposal per chain.} At most one outstanding evaluation
+        exists per chain at any time. The moment a chain's result comes back, it is
+        absorbed and that chain is immediately re-proposed --- there is no
+        cross-chain generation barrier, so a fast chain can run many steps ahead of a
+        slow one.
+\end{enumerate}
+
+\begin{jnote}
+This is the opposite scheduling shape from nested sampling
+(\S\ref{sec:nested-distributed}): there, one single decision (which point to retire
+next) gates the whole population. Here, $N$ independent decisions run fully in
+parallel, each gated only by its own chain's last result --- so
+\sampler{ToyMCMC} keeps scaling with more Workers for longer than a single-threaded
+nested-sampling control loop does.
+\end{jnote}
+
+\begin{jwarn}
+Chapter~\ref{ch:ptmcmc}'s \sampler{PTMCMC} does \emph{not} use this pipeline ---
+temperature exchange needs every replica to reach the same point at the same time, so
+coupled \textsc{mcmc} methods fall back to the classical generation-barrier path
+instead (\S\ref{sec:ptmcmc-runtime}). Run \cli{Jarvis man sampler.mcmc-runtime} for
+both pipelines side by side.
+\end{jwarn}
+
+Prefer \yamlkey{num\_chains} at least as large as \yamlkey{EnvReqs.V2.workers}
+(Chapter~\ref{ch:envreqs}) --- with fewer chains than Workers, some Workers have
+nothing to steal and idle. \Jtwo\ warns exactly this at startup when it detects the
+mismatch.
+
+\section{Configuring ToyMCMC}
+\label{sec:toymcmc-yaml}
+
+The minimal working card:
+
+\begin{yamlwin}
+Sampling:
+  Method: ToyMCMC
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
+    - name: y
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
+  Bounds:
+    num_chains: 4
+    num_iters: 2000
+    proposal_scale: 0.2
+    seed: 0
+  LogLikelihood:
+    - {name: LogL, expression: "..."}   # your physics
+\end{yamlwin}
+
+Table~\ref{tab:toymcmc-bounds} lists every \yamlkey{Bounds} key.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.229\linewidth}p{0.187\linewidth}p{0.584\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Default} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{num\_chains} & \req & how many independent chains run (prefer
+      $\geq$ \yamlkey{workers}, \S\ref{sec:mcmc-runtime}) \\
+    \yamlkey{num\_iters} & \req & Metropolis transitions per chain; the run submits
+      exactly \yamlkey{num\_chains}$\,\times\,$\yamlkey{num\_iters} proposals in total \\
+    \yamlkey{proposal\_scale} & \req & the random-walk step's standard deviation
+      (\S\ref{sec:mcmc-algorithm}) --- a scalar or a list \\
+    \yamlkey{seed} & \code{0} & master \textsc{rng} seed; drives every chain's own
+      child seed and every proposal's \textsc{uuid} \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\sampler{ToyMCMC} \yamlkey{Bounds} keys. \code{Jarvis man sampler.ToyMCMC}
+  is the live reference.}
+  \label{tab:toymcmc-bounds}
+\end{table}
+
+\begin{keylist}
+  \item[proposal\_scale] One positive number broadcasts to every chain; a one-element
+        list broadcasts the same way. A list of exactly \yamlkey{num\_chains} values
+        gives each chain its own step size --- useful once you know some regions of
+        the posterior need a smaller step than others, without running separate
+        cards.
+\end{keylist}
+
+\begin{jnote}
+Every sampler-specific setting lives under \yamlkey{Bounds}, never at the
+\yamlkey{Sampling} top level --- the same contract nested sampling and every other
+method share (Chapter~\ref{ch:choosing-sampler}).
+\end{jnote}
+
+\section{Validating your card}
+\label{sec:toymcmc-validation}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis validate scan.yaml
+\end{jcmd}
+\end{terminal}
+
+An empty \yamlkey{Bounds} block is rejected before anything runs. Each missing key is
+reported twice --- once by the schema, once by the method's own check --- so three
+omissions make six findings, and any report of two or more opens with a summary table
+before the detail:
+
+\begin{terminal}
+\begin{jout}
+Config validation failed (6 error(s), 0 warning(s)):
+
+Error summary (reference only):
++---+-------------+--------------------------------+------------------------+
+| # | Code        | YAML path                      | Problem                |
++---+-------------+--------------------------------+------------------------+
+| 1 | JV2-SCH-001 | \$.Sampling.Bounds              | 'num_chains' is a r... |
+| 2 | JV2-SCH-001 | \$.Sampling.Bounds              | 'num_iters' is a re... |
+| 3 | JV2-SCH-001 | \$.Sampling.Bounds              | 'proposal_scale' is... |
+| 4 | JV2-MTH-051 | Sampling.Bounds.num_chains     | ToyMCMC requires Sa... |
+| 5 | JV2-MTH-052 | Sampling.Bounds.num_iters      | ToyMCMC requires Sa... |
+| 6 | JV2-MTH-053 | Sampling.Bounds.proposal_scale | ToyMCMC requires Sa... |
++---+-------------+--------------------------------+------------------------+
+This table is only a quick reference. Please consult the Jarvis-HEP YAML settings
+documentation before editing the task card.
+
+Detailed diagnostics:
+  [error] JV2-SCH-001  \$.Sampling.Bounds
+          'num_chains' is a required property
+          hint: Run: Jarvis man yaml.Sampling.Bounds
+          suggestion: Add 'num_chains' at this location using the expected
+          YAML type.
+  ...
+  [error] JV2-MTH-051  Sampling.Bounds.num_chains
+          ToyMCMC requires Sampling.Bounds.num_chains (a positive integer)
+          hint: Run: Jarvis man sampler.ToyMCMC
+          suggestion: Set the ToyMCMC chain count and iteration count to
+          positive integers.
+          example:
+            Bounds:
+              num_chains: 4
+              num_iters: 2000
+\end{jout}
+\end{terminal}
+
+Table~\ref{tab:toymcmc-validation} lists the codes a \sampler{ToyMCMC} card is most
+likely to trigger.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.171\linewidth}p{0.297\linewidth}p{0.532\linewidth}@{}}
+    \toprule
+    \textbf{Code} & \textbf{Fires on} & \textbf{Fix} \\
+    \midrule
+    \code{JV2-MTH-050} & \yamlkey{Bounds} missing entirely & add \yamlkey{num\_chains},
+      \yamlkey{num\_iters}, \yamlkey{proposal\_scale} \\
+    \code{JV2-MTH-051} & \yamlkey{num\_chains} missing or $< 1$ & set a positive
+      integer \\
+    \code{JV2-MTH-052} & \yamlkey{num\_iters} missing or $< 1$ & set a positive
+      integer \\
+    \code{JV2-MTH-053} & \yamlkey{proposal\_scale} missing, non-positive, or the
+      wrong length & one positive number, or one per chain \\
+    \code{JV2-MTH-055} & \yamlkey{proposal\_scale} list length is neither $1$ nor
+      \yamlkey{num\_chains} & match the length or use a scalar \\
+    \code{JV2-MTH-056} & \yamlkey{seed} present but negative or non-integer & use a
+      non-negative integer \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{Validation codes a \sampler{ToyMCMC} card is most likely to hit. The other
+  methods' codes are in Appendix~\ref{app:troubleshooting}.}
+  \label{tab:toymcmc-validation}
+\end{table}
+
+\section{Reading the log}
+\label{sec:mcmc-log}
+
+Every excerpt below is a real \cli{Jarvis run} transcript against a two-parameter
+Gaussian bump, \yamlkey{num\_chains: 4}, \yamlkey{num\_iters: 50},
+\yamlkey{proposal\_scale: 0.2}. Everything lands in \file{sampler.log}, using the
+visual format of Section~\ref{sec:log-visual-format}.
+
+\subsection{At startup}
+\label{sec:toymcmc-log-startup}
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.Toymcmc
+	-> 08-13 00:14:39.833 - [WARNING] >>>
+Initializing the ToyMCMC Sampling
+
+·•· Jarvis-HEP.Sampler.Toymcmc
+	-> 08-13 00:14:39.834 - [INFO] >>>
+ToyMCMC Sampler configured: chains=4 iterations=50 total_transitions=200
+proposal_scale=0.2
+
+·•· Jarvis-HEP.Sampler.Toymcmc
+	-> 08-13 00:14:39.834 - [INFO] >>>
+ToyMCMC independent-chain pipeline: chains=4 iters=50 sharded_feedback=True
+\end{jout}
+\end{terminal}
+
+\code{total\_transitions} is \yamlkey{num\_chains}$\,\times\,$\yamlkey{num\_iters} ---
+the exact number of Metropolis steps (not accepted moves) the run will submit before
+it is done.
+
+\subsection{While it runs: the progress meter}
+\label{sec:toymcmc-log-progress}
+
+Every absorbed transition advances a per-mille progress meter, following the same
+convention as nested sampling's every-100th-iteration escalation
+(Section~\ref{sec:nested-log-progress}): an \code{[INFO]} line every $1/1000$ of the
+total, promoted to \code{[WARNING]} every whole percent so long runs stay visible in a
+busy log without scrolling:
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.Toymcmc
+	-> 08-13 00:14:40.279 - [WARNING] >>>
+10‰ of 2/200 ToyMCMC transitions completed in 00:00:00.445
+(chains=4 iterations=1/50)
+\end{jout}
+\end{terminal}
+
+\code{2/200} is transitions absorbed so far out of the total; \code{iterations=1/50}
+is the \emph{furthest-ahead} chain's own step count --- with async independent chains,
+different chains are rarely at exactly the same iteration.
+
+\subsection{At the end: the summary}
+\label{sec:toymcmc-log-summary}
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.Toymcmc
+	-> 08-13 00:14:40.655 - [INFO] >>>
+ToyMCMC diagnostics sampler_summary -> DATABASE/sampler_summary.json
+
+·•· Jarvis-HEP.Sampler.Toymcmc
+	-> 08-13 00:14:40.655 - [INFO] >>>
+ToyMCMC diagnostics chain_history -> DATABASE/chain_history.csv
+
+·•· Jarvis-HEP.Sampler.Toymcmc
+	-> 08-13 00:14:40.709 - [INFO] >>>
+ToyMCMC finished: proposed=200 accepted=60 accept_rate=0.3000 async=True
+\end{jout}
+\end{terminal}
+
+This run's $30\,\%$ acceptance rate is squarely in the healthy range
+(\S\ref{sec:mcmc-algorithm}'s tip) for a $0.2$ proposal scale on a unit-cube Gaussian
+bump.
+
+\section{What the run leaves behind}
+\label{sec:mcmc-outputs}
+
+Alongside the normal output tree (Chapter~\ref{ch:outputs}), every \textsc{mcmc}-family
+run writes two extra files under \file{DATABASE/}, in addition to the usual
+\file{samples.csv} / \file{samples.hdf5}:
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.745\linewidth}@{}}
+    \toprule
+    \textbf{File} & \textbf{Contains} \\
+    \midrule
+    \code{sampler\_summary.json} & one record: \yamlkey{accept\_rate},
+      \yamlkey{rhat\_logl}, \yamlkey{ess\_logl\_mean}, \yamlkey{failed\_samples}, and
+      a per-chain breakdown (\S\ref{sec:mcmc-diagnostics}) \\
+    \code{chain\_history.csv} & one row per absorbed transition: \yamlkey{chain\_id},
+      \yamlkey{step}, \yamlkey{accepted}, \yamlkey{weight}, \yamlkey{logl},
+      \yamlkey{temperature}, \yamlkey{state} \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\textsc{mcmc}-family diagnostics, additive to \code{samples.hdf5} /
+  \code{samples.csv}.}
+  \label{tab:mcmc-outputs}
+\end{table}
+
+\begin{jnote}
+\textbf{Every proposal is archived, accepted or not.} Unlike nested sampling, where
+\code{ncall} usually exceeds \code{niter} because rejected candidates are never kept
+(Section~\ref{sec:nested-outputs}), every \textsc{mcmc} proposal is a fully evaluated,
+fully archived Sample --- \code{total\_proposed} in \file{sampler\_summary.json}
+\emph{is} the row count in \file{samples.csv} for this scan. Rejection only decides
+which point the chain's \emph{next} proposal builds from; it never discards a
+computed point from the archive.
+\end{jnote}
+
+\yamlkey{chain\_id}, \yamlkey{step}, and \yamlkey{stage} are also stamped directly into
+every Sample's own observables, so they appear as ordinary columns in
+\file{samples.csv} / \file{samples.hdf5} alongside your physical parameters --- group
+by \yamlkey{chain\_id} to recover each chain's own trajectory from the plain archive,
+with no need to touch \file{chain\_history.csv} unless you want the accept/reject
+ledger specifically.
+
+\section{Resume}
+\label{sec:mcmc-resume}
+
+Unlike nested sampling, which checkpoints only once at the very end
+(\S\ref{sec:nested-distributed}), the \textsc{mcmc} family checkpoints
+\emph{during} the run --- time-cadenced, by default every $30$ seconds, at whichever
+feedback boundary the method's pipeline allows (a single absorbed transition for
+async independent chains; a full generation for the barrier-coupled family in
+Chapter~\ref{ch:ptmcmc}). An interrupted run leaves a real, resumable snapshot:
+
+\begin{terminal}[real transcript]
+\begin{jout}
+·•· Jarvis-HEP
+	-> 00:16:20.478 - [WARNING] >>>
+received SIGINT — initiating clean shutdown (Workers / Archiver / managed Redis)
+
+·•· Jarvis-HEP
+	-> 00:16:20.481 - [WARNING] >>>
+interrupt checkpoint written -> checkpoints/<scan>/ToyMCMC/state.pkl
+(resume: Jarvis run <task.yaml> --resume)
+\end{jout}
+\end{terminal}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis run scan.yaml --resume
+\end{jcmd}
+\end{terminal}
+
+\begin{terminal}[real transcript]
+\begin{jout}
+·•· Jarvis-HEP
+	-> 00:16:46.048 - [WARNING] >>>
+Resume DATABASE reconciliation found prefix=0, completed=4 failed=0, 4 legacy UUID(s)
+
+·•· Jarvis-HEP
+	-> 00:16:46.049 - [WARNING] >>>
+Resume checkpoint path -> checkpoints/<scan>/ToyMCMC/state.pkl (payload=yes)
+\end{jout}
+\end{terminal}
+
+\begin{jwarn}
+The checkpoint is validated against the \emph{current} card before it is trusted: if
+\yamlkey{num\_chains}, \yamlkey{num\_iters}, \yamlkey{proposal\_scale}, or
+\yamlkey{seed} changed since the checkpoint was written, resume refuses rather than
+silently continuing under a shape the summary no longer describes --- edit any of
+those and the run must restart clean.
+\end{jwarn}
+
+\section{Diagnostics: R-hat and effective sample size}
+\label{sec:mcmc-diagnostics}
+
+\file{sampler\_summary.json} carries two convergence diagnostics, computed on each
+chain's accepted log-likelihood trace (discarding the first half as burn-in):
+
+\begin{keylist}
+  \item[rhat\_logl] The Gelman--Rubin $\hat{R}$ statistic\cite{GelmanRubin:1992}:
+        compares between-chain and
+        within-chain variance of the log-likelihood trace. Values near $1.0$ suggest
+        the chains agree on where the posterior mass is; a real run of this chapter's
+        example card gave $\hat{R}=1.044$ across four chains.
+  \item[ess\_logl\_mean] Mean effective sample size across chains, from the
+        log-likelihood trace's autocorrelation time --- how many effectively
+        independent draws the accepted points represent, which is always smaller than
+        the raw accepted count for a correlated random walk.
+\end{keylist}
+
+\begin{jwarn}
+Both diagnostics run on the scalar log-likelihood trace only --- a cheap, convenient
+proxy, \textbf{not} a substitute for a proper per-parameter convergence check. Treat a
+value far from $1.0$ (or a small effective sample size relative to
+\yamlkey{num\_iters}) as a reason to look closer with a dedicated tool
+(\textsc{arviz}, \code{emcee}'s own diagnostics) before trusting the posterior shape.
+\end{jwarn}
+
+\section{Summary}
+\label{sec:toymcmc-summary}
+
+\sampler{ToyMCMC} is the family's reference method: independent Metropolis--Hastings
+chains on the async pipeline, with no evidence estimate and no cross-chain coupling.
+Table~\ref{tab:toymcmc-at-a-glance} gathers it.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{\sampler{ToyMCMC}} \\
+    \midrule
+    Kind & feedback (fixed budget: chains $\times$ iterations) \\
+    Pipeline & async independent chains (\S\ref{sec:mcmc-runtime}) \\
+    Point count & exactly \yamlkey{num\_chains}$\,\times\,$\yamlkey{num\_iters} \\
+    Dimensions & any \\
+    Required keys & \yamlkey{num\_chains}, \yamlkey{num\_iters},
+      \yamlkey{proposal\_scale} \\
+    u$\to$x mapping & yes \\
+    \yamlkey{Bounds.seed} role & every chain's RNG stream and every proposal's
+      \textsc{uuid} \\
+    \textsc{uuid}s & deterministic from \code{(seed, chain\_id, step, stage)} \\
+    Mid-run resume & yes --- time-cadenced, checkpoint validated against the card \\
+    Extra output & \file{sampler\_summary.json}, \file{chain\_history.csv} \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\sampler{ToyMCMC} at a glance.}
+  \label{tab:toymcmc-at-a-glance}
+\end{table}
+
+\begin{jtip}
+Ready for a posterior that might trap a single chain in one mode? Chapter~\ref{ch:ptmcmc}
+assumes everything in this chapter and covers only what parallel tempering adds.
+\end{jtip}

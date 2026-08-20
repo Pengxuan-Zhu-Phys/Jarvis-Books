@@ -26,7 +26,6 @@ project marker, the directory containing the task card becomes the project root 
 Chapter~\ref{ch:core-concepts} has the exact resolution rules.}
 
 \begin{yamlwin}
-project_name: quickstart
 Scan:
   name: quickstart
 
@@ -38,8 +37,8 @@ EnvReqs:
 Sampling:
   Method: Random
   Bounds:                     # this method's own settings
-    "Point number": 20        # note: the key contains a space
-    Seed: 7
+    point_number: 20
+    seed: 7
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
@@ -189,7 +188,7 @@ I actually need}, and \emph{what likelihood judges them}. For this example: \cod
 $z = 100 \pm 10$.
 \end{jtip}
 
-\begin{figure*}[ht]
+\begin{figure}[ht]
 \centering
 \includegraphics[width=0.7\linewidth]{figures/eggbox_vis.png}
 \caption[The eggbox landscape.]{$z(x,y) = (\sin x\cos y + 2)^5$ over the scan range ---
@@ -198,21 +197,21 @@ the repeating peaks and valleys are why the function (and this tutorial) is call
 band $z = 100 \pm 10$; \sampler{Bridson} covers the $(x,y)$ plane below, and every
 peak/valley the sampler lands on becomes one Sample.}
 \label{fig:eggbox-landscape}
-\end{figure*}
+\end{figure}
 
 \section{Building a black-box card, block by block}
 \label{sec:quickstart-card2}
 
-\paragraph{\yamlkey{Scan}: name and layout.}
+\paragraph{\yamlkey{Scan}: naming the run.}
 
 \begin{yamlwin}
 Scan:
   name: "EggBox_Bridson"
-  save_dir: "&J/outputs"
 \end{yamlwin}
 
-Same key as the first card's \yamlkey{Scan.name}; \yamlkey{save\_dir} just makes the
-output root explicit instead of relying on the default (Chapter~\ref{ch:task-yaml}).
+Same key as the first card's \yamlkey{Scan.name}, and the only one \yamlkey{Scan} takes
+--- everything else about where this scan's outputs, logs, and checkpoints live follows
+from it automatically (Chapter~\ref{ch:task-yaml}).
 
 \paragraph{\yamlkey{Sampling}: the scan geometry.}
 
@@ -220,8 +219,8 @@ output root explicit instead of relying on the default (Chapter~\ref{ch:task-yam
 Sampling:
   Method: "Bridson"
   Bounds:
-    Radius: 1
-    MaxAttempt: 30
+    radius: 1
+    max_attempt: 30
   Variables:
     - name: x
       description: "Variable X."
@@ -236,7 +235,7 @@ Sampling:
 \sampler{Bridson} instead of \sampler{Random} this time (Chapter~\ref{ch:bridson}) ---
 note that \yamlkey{Variables} and \yamlkey{LogLikelihood} did not move when the method
 changed; only \yamlkey{Method} and the \yamlkey{Bounds} block under it did.
-\yamlkey{Radius} and \yamlkey{MaxAttempt} are its two required \yamlkey{Bounds} keys, and every
+\yamlkey{radius} and \yamlkey{max\_attempt} are its two required \yamlkey{Bounds} keys, and every
 variable needs a \yamlkey{length} for the blue-noise geometry. \yamlkey{LogLikelihood}
 is the same shape as before, now scoring the observable this card's calculator will
 produce.
@@ -265,20 +264,19 @@ actually need to learn --- everything above just sets the stage.
 
 \begin{yamlwin}
 Calculators:
-  make_paraller: 4
-  path: "&J/calculators/runtime/program"
+  Pools:
+    EggBox: 4
   Modules:
     - name: EggBox
       clone_shadow: true
       source: "&J/deps/assets/inertial/EggBox"
       path: "&J/calculators/runtime/program/EggBox/@PackID"
       installation:
-        - "cp -r ${source}/* ${path}"
+        - "cp -r \${source}/* \${path}"
       initialization:
-        - "cp ${source}/input.json ${path}/input.json"
-        - "rm -f ${path}/output.json"
+        - "cp \${source}/input.json \${path}/input.json"
+        - "rm -f \${path}/output.json"
       execution:
-        path: "&J/calculators/runtime/program/EggBox/@PackID"
         commands:
           - "./eggbox.py"
         input:
@@ -303,22 +301,25 @@ Calculators:
 Field by field:
 
 \begin{itemize}
-  \item \yamlkey{make\_paraller} --- how many parallel calculator slots exist across
-        all Workers (the spelling is historical, Chapter~\ref{ch:calculators}).
+  \item \yamlkey{Calculators.Pools} --- global concurrency: at most \code{4} EggBox
+        executions run at once, across \emph{all} Workers combined (\S\ref{sec:pools}
+        in Chapter~\ref{ch:calculators}).
   \item \yamlkey{clone\_shadow: true} --- every concurrent Sample gets its own physical
         copy of the program directory, so two Samples never fight over the same
         \file{input.json}; \token{@PackID} is the slot identifier that makes each copy's
         path unique (Section~\ref{sec:clone-shadow}).
   \item \yamlkey{source} --- where the program template lives; \yamlkey{path} --- where
-        \Jtwo\ stages a working copy of it.
+        \Jtwo\ stages a working copy of it; every command below defaults to running from
+        this same directory, so neither \yamlkey{execution.path} nor a per-command
+        \yamlkey{cwd} needs to repeat it.
   \item \yamlkey{installation} --- runs \emph{once per pack}: stage the program
         (\code{cp -r \$\{source\}/* \$\{path\}}).
   \item \yamlkey{initialization} --- runs before every point: drop a fresh
         \file{input.\allowbreak{}json} template and clear any leftover
         \file{output.\allowbreak{}json} from the previous point.
-  \item \yamlkey{execution.commands} --- the actual shell command, run from
-        \yamlkey{execution.path}: exactly \code{./eggbox.py}, as if you had typed it
-        yourself.
+  \item \yamlkey{execution.commands} --- the actual shell command: exactly
+        \code{./eggbox.py}, as if you had typed it yourself from the pack directory
+        above.
   \item \yamlkey{execution.input} --- how to \emph{write} the input file: \yamlkey{type:
         JSON}, action \yamlkey{Dump}, and a \yamlkey{variables} list mapping the sampled
         \code{x}/\code{y} to the JSON fields the script expects, \code{xx}/\code{yy}

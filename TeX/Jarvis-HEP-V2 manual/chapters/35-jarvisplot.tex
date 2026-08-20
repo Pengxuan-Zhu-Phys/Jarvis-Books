@@ -11,10 +11,12 @@ itself is \JPlot's own manual.
 \section{Installing and invoking}
 \label{sec:plot-install}
 
+\JPlot\ is a core dependency of \Jtwo\ (Chapter~\ref{ch:installation}): a plain
+\code{pip install Jarvis-HEP} already gives you \cli{Jarvis plot}, nothing extra to ask
+for.
+
 \begin{terminal}
 \begin{jcmd}
-python3 -m pip install -e '.[distributed,plot]'   # the plot extra
-
 Jarvis plot scenes/money_plot.yaml               # render a scene
 Jarvis plot scenes/money_plot.yaml               # re-render after edits
 \end{jcmd}

@@ -81,10 +81,12 @@ Storage is the usual silent bottleneck on clusters:
   \item \textbf{Buckets} (default 200/dir, packed) exist precisely for network
         filesystems --- do not disable \yamlkey{pack} on \textsc{nas} scans that
         \yamlkey{save} files.
-  \item \yamlkey{cleanup.strategy: mv\_to\_staging} buffers Sample directories through
-        local scratch when final storage is remote and slow --- the move is cheap
-        metadata on the same filesystem, and the Archiver does the expensive hop off
-        the critical path.
+  \item \textbf{Point the output root at the fast filesystem} rather than trying to
+        buffer through one. Workers write each Sample's products straight to their final
+        location under \file{SAMPLE/} (Section~\ref{sec:sample-lifecycle}), so a remote
+        or slow output tree is paid for on the critical path and no task-card setting
+        moves that hop elsewhere. Run against local scratch and copy the finished output
+        directory afterwards.
   \item \textbf{Save less} (Section~\ref{sec:save-policy}): the cheapest byte is the
         one never written.
 \end{itemize}

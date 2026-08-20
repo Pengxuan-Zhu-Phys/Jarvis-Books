@@ -15,9 +15,9 @@ space you intend to interpolate, plot, or train a surrogate on.
 Sampling:
   Method: Bridson
   Bounds:
-    Radius: 0.35          # REQUIRED: min u-space distance apart
-    MaxAttempt: 30        # REQUIRED: candidates per active point (k)
-    Seed: 42
+    radius: 0.35          # REQUIRED: min u-space distance apart
+    max_attempt: 30       # REQUIRED: candidates per active point (k)
+    seed: 42
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0, length: 1.0}}
@@ -26,24 +26,24 @@ Sampling:
 \end{yamlwin}
 
 The sampler's three knobs live in \yamlkey{Bounds}, which \sampler{Bridson} accepts
-strictly --- only these four keys and \yamlkey{Seed} are allowed, so a typo is reported
-rather than ignored (Section~\ref{sec:bounds}). The fourth number, \yamlkey{length}, is a
-property of each variable and stays with the variable.
+strictly --- only these four keys are allowed, so a typo is reported rather than
+ignored (Section~\ref{sec:bounds}). The fourth number, \yamlkey{length}, is a property
+of each variable and stays with the variable.
 
 \begin{keylist}
-  \item[Bounds.Radius] \req\ (\code{JV2-MTH-010} if absent, \code{011} if not positive).
+  \item[Bounds.radius] \req\ (\code{JV2-MTH-010} if absent, \code{011} if not positive).
         The minimum distance between any two accepted points, \emph{in u-space}. This is
         the resolution dial: the expected point count scales like
-        $(\mathrm{length}/\mathrm{Radius})^d$.
-  \item[Bounds.MaxAttempt] \req\ (\code{JV2-MTH-012} / \code{013}). Bridson's $k$ ---
+        $(\mathrm{length}/\mathrm{radius})^d$.
+  \item[Bounds.max\_attempt] \req\ (\code{JV2-MTH-012} / \code{013}). Bridson's $k$ ---
         candidate darts thrown around each active point before it retires. $30$ is the
         standard literature value; it bounds the \emph{placement} algorithm only and has
         nothing to do with \yamlkey{selection} retries.
-  \item[Bounds.MaxWorker] \opt, default \yamlkey{EnvReqs.V2.workers}. Caps in-flight
+  \item[Bounds.max\_worker] \opt, default \yamlkey{EnvReqs.V2.workers}. Caps in-flight
         proposals during submission.
-  \item[Bounds.Seed] \opt, integer, default \code{0}; alias \yamlkey{seed}. Seeds the
-        disk-packing draws. The generator is always seeded, \code{0} included, so an
-        unchanged card packs the same point set on every run.
+  \item[Bounds.seed] \opt, integer, default \code{0}. Seeds the disk-packing draws. The
+        generator is always seeded, \code{0} included, so an unchanged card packs the
+        same point set on every run.
   \item[parameters.length] \req\ \emph{per variable} (\code{KeyError} if absent): the
         u-space box edge for that dimension. With \code{length: 1.0} everywhere the
         domain is the unit cube; a larger \yamlkey{length} stretches that dimension's
@@ -60,7 +60,7 @@ generation the count is reported in the logs before submission starts
   \setlength{\tabcolsep}{0pt}
   \begin{tabular}{@{}p{0.234\linewidth}>{\raggedleft\arraybackslash}p{0.255\linewidth}>{\raggedleft\arraybackslash}p{0.255\linewidth}>{\raggedleft\arraybackslash}p{0.256\linewidth}@{}}
     \toprule
-    \yamlkey{Radius} & $d=2$ & $d=3$ & $d=4$ \\
+    \yamlkey{radius} & $d=2$ & $d=3$ & $d=4$ \\
     \midrule
     0.35  & $\sim$10    & $\sim$30     & $\sim$80 \\
     0.10  & $\sim$130   & $\sim$1{,}500 & $\sim$18{,}000 \\
@@ -75,10 +75,10 @@ generation the count is reported in the logs before submission starts
 \end{table}
 
 \begin{jwarn}
-Both \yamlkey{Radius} and \yamlkey{length} are u-space quantities. Distances between
+Both \yamlkey{radius} and \yamlkey{length} are u-space quantities. Distances between
 \emph{physical} points depend on each variable's distribution --- a \code{Log} variable
 packs more physical resolution per unit of u near its lower bound. That is usually
-exactly what you want; just do not read \yamlkey{Radius} as GeV.
+exactly what you want; just do not read \yamlkey{radius} as GeV.
 \end{jwarn}
 
 \section{How it behaves in the runtime}
@@ -112,7 +112,7 @@ points are still well-spaced inside the allowed region.
 \end{itemize}
 
 \begin{jtip}
-Two-stage mapping works well: a coarse Bridson pass (\yamlkey{Radius} $\sim$0.1) to see
+Two-stage mapping works well: a coarse Bridson pass (\yamlkey{radius} $\sim$0.1) to see
 the landscape, then export the interesting region's points and refine --- either a finer
 Bridson scan with tightened variable bounds, or a \sampler{CSV} replay with the heavy
 workflow (Chapter~\ref{ch:csv-sampler}).
@@ -135,12 +135,12 @@ that trade-off in one view.
     \textbf{Field} & \textbf{\sampler{Bridson}} \\
     \midrule
     Kind & fixed set \\
-    Point count & emergent from \yamlkey{Bounds.Radius} \\
+    Point count & emergent from \yamlkey{Bounds.radius} \\
     Dimensions & $2$--$\sim$$4$ \\
-    Required keys & \yamlkey{Bounds.Radius}, \yamlkey{Bounds.MaxAttempt},
+    Required keys & \yamlkey{Bounds.radius}, \yamlkey{Bounds.max\_attempt},
       \yamlkey{length} per var \\
     u$\to$x mapping & yes \\
-    \yamlkey{Seed} role & disk generation (always seeded; \code{0} is a seed) \\
+    \yamlkey{seed} role & disk generation (always seeded; \code{0} is a seed) \\
     \yamlkey{selection} & consumes slots, no top-up \\
     Extra output & --- \\
     \bottomrule

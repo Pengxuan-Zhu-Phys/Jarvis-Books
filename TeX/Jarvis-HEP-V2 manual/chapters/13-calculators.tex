@@ -47,7 +47,8 @@ Calculators:
 Pools are global caps enforced through Redis: a Worker needing a slot blocks until one
 frees anywhere in the system (up to an internal 30\,s acquire timeout, after which the
 Sample fails). Values have floor 1. When a module has no pool entry, its per-module
-\yamlkey{make\_paraller} value (sic --- the historical spelling, default 1) is used.
+\yamlkey{make\_parallel} value (default 1) is used --- itself a legacy knob \cli{Jarvis
+man} now points away from, in favour of \yamlkey{Pools}.
 
 \begin{jtip}
 Give every expensive calculator an explicit pool sized to what the machine actually
@@ -75,7 +76,7 @@ Every entry in the list is described by the keys of Table~\ref{tab:calc-module-k
     \yamlkey{source}             &      & ---     & shadow: copy source; non-shadow: tool symlinked into the Sample dir \\
     \yamlkey{symlink\_name}      &      & module name & name of that symlink \\
     \yamlkey{timeout}            &      & none    & seconds; one deadline across \emph{all} execution commands \\
-    \yamlkey{make\_paraller}     &      & \code{1} & pool fallback (\S\ref{sec:pools}) \\
+    \yamlkey{make\_parallel}     &      & \code{1} & legacy pool fallback when no \yamlkey{Pools} entry exists (\S\ref{sec:pools}) \\
     \yamlkey{env\_setup}         &      & \code{[]} & environment scripts (\S\ref{sec:env-setup}) \\
     \yamlkey{installation}       &      & \code{[]} & shadow install commands, once per pack (\S\ref{sec:clone-shadow}) \\
     \yamlkey{initialization}     &      & \code{[]} & post-install commands, once per pack \\
@@ -108,11 +109,11 @@ copies}. Each concurrency slot --- each \emph{pack} --- owns a private directory
   source: "&J/External/MG5"          # copied per pack when no installation given
   path: "&J/packs/MG5-@PackID"       # each slot's private tree
   installation:
-    - cmd: "cp -r ${source}/* ${path}/"
-      cwd: "${path}"
+    - cmd: "cp -r \${source}/* \${path}/"
+      cwd: "\${path}"
   initialization:
     - cmd: "./bin/compile"
-      cwd: "${path}"
+      cwd: "\${path}"
 \end{yamlwin}
 
 Pack ids are \textbf{stable slots} (\code{001}\,\ldots\,\code{N}, one per pool slot)

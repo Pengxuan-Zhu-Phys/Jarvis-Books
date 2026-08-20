@@ -14,8 +14,8 @@ EnvReqs:
 Sampling:
   Method: Random
   Bounds:
-    "Point number": 100
-    Seed: 7
+    point_number: 100
+    seed: 7
   Variables:
     - {name: x, distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}}
     - {name: y, distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}}
@@ -39,13 +39,13 @@ LibDeps:
   path: "&J/External"
   Modules: [{name: EggBoxSafe}]
   registered_executables:
-    - {name: eggboxlk, source: "${LibDeps:EggBoxSafe}/eggbox"}
+    - {name: eggboxlk, source: "\${LibDeps:EggBoxSafe}/eggbox"}
 Sampling:
   Method: Bridson
   Bounds:
-    Radius: 0.05
-    MaxAttempt: 30
-    Seed: 42
+    radius: 0.05
+    max_attempt: 30
+    seed: 42
   Variables:
     - {name: x, distribution: {type: Flat,
          parameters: {min: 0.0, max: 1.0, length: 1.0}}}
@@ -92,7 +92,7 @@ Sampling:
     target_value: 0.04            # circle of radius 0.2 about (0.5, 0.5)
     outer_half_width: 0.05        # discovery band |f-T| <= w_outer
     min_radius: 0.01              # u-space resolution floor
-    Seed: 7
+    seed: 7
 Operas:
   Modules:
     - name: Circle
@@ -131,10 +131,21 @@ Replayed points keep their original \textsc{uuid}s
 
 \begin{yamlwin}
 Scan: {name: gallery-check}
+EnvReqs:
+  V2:
+    workers: 1
+    check_modules:
+      data: "&J/data/check_points.csv"  # optional; columns are u-space, one
+      n_samples: 10                     # per Variable (omit the file to draw
+                                        # n_samples points from Method instead)
 Sampling:
-  mode: check_modules
-  data: "&J/data/check_points.csv"  # optional; columns: uuid,x,y
-                                     # (omit to draw points from Method instead)
+  Method: Random
+  Bounds: {point_number: 10}
+  Variables:
+    - {name: x, distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}}
+    - {name: y, distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}}
+  LogLikelihood:
+    - {name: LogL, expression: "LogGauss(z, 100, 10)"}
 Operas:
   Modules:
     - name: EggBox
@@ -144,4 +155,6 @@ Operas:
 \end{yamlwin}
 
 Run with \cli{Jarvis check gallery-check.yaml}; command output is mirrored to the
-terminal (Chapter~\ref{ch:check-modules}).
+terminal (Chapter~\ref{ch:check-modules}). Nothing in the card selects the smoke path
+--- the command does --- so this is an ordinary, complete scan card, and
+\cli{Jarvis run} on the same file is the production scan.

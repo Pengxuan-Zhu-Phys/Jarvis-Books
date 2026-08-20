@@ -36,7 +36,7 @@ Sampling:
   Bounds:
     target_expression: "r2"         # REQUIRED: shared-language expression
     target_value: 0.04              # REQUIRED: the level T
-    Seed: 7
+    seed: 7
     # Optional public tuning (defaults are fine for most cards):
     # outer_half_width: 0.02        # discovery band |f-T| <= w_outer
     # min_radius: 0.005             # u-space resolution floor
@@ -345,8 +345,8 @@ method.
     \yamlkey{neighbor\_graph} & & \code{auto} & \code{auto} $\to$ Delaunay ($d\le3$) /
       \textsc{k}nn ($d\ge4$); \code{delaunay}/\code{knn} force it \\
     \yamlkey{knn\_k} & & $4d$ & degree when the graph is \textsc{k}nn \\
-    \yamlkey{Seed} & & \code{0} & alias \yamlkey{seed}; seeds every generation's draws \\
-    \yamlkey{MaxWorker} & & workers & caps in-flight proposals \\
+    \yamlkey{seed} & & \code{0} & seeds every generation's draws \\
+    \yamlkey{max\_worker} & & workers & caps in-flight proposals \\
     \multicolumn{4}{@{}l}{\emph{Advanced / legacy (rarely needed on new cards)}} \\
     \yamlkey{core\_half\_width} & & $w_{\mathrm{outer}}/8$ & densify-center half-width;
       overrides the derived value \\
@@ -456,7 +456,7 @@ Table~\ref{tab:als-summary} is the short form.
     Required keys & \yamlkey{target\_expression}, \yamlkey{target\_value} \\
     Public tuning & \yamlkey{outer\_half\_width}, \yamlkey{min\_radius} \\
     u$\to$x mapping & yes \\
-    \yamlkey{Seed} role & every generation's / fill pass's draws \\
+    \yamlkey{seed} role & every generation's / fill pass's draws \\
     \yamlkey{selection} & filters proposals before submission \\
     Extra output & \file{levelset.json} \\
     \bottomrule

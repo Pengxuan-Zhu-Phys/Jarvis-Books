@@ -266,7 +266,7 @@ Table~\ref{tab:dynesty-summary} states it field by field.
     Dimensions & any \\
     Required keys & none strictly; set \yamlkey{Bounds.nlive} \\
     u$\to$x mapping & yes \\
-    \yamlkey{Bounds.Seed} role & \code{numpy} generator seed (proposals only) \\
+    \yamlkey{Bounds.seed} role & \code{numpy} generator seed (proposals only) \\
     \textsc{uuid}s & fresh per proposal, \textbf{not} seed-deterministic \\
     Mid-run resume & no --- use \code{dynesty}'s own \yamlkey{checkpoint\_file} \\
     Extra output & \file{dynesty\_result.csv}, \file{sampler\_summary.json} \\

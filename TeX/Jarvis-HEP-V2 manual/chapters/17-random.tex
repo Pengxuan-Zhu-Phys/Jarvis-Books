@@ -14,8 +14,8 @@ archiving) without any sampler-specific behavior to reason about.
 Sampling:
   Method: Random
   Bounds:
-    "Point number": 500        # REQUIRED -- note the space in the key
-    Seed: 11
+    point_number: 500          # REQUIRED
+    seed: 11
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
@@ -24,19 +24,18 @@ Sampling:
 \end{yamlwin}
 
 Both keys go in \yamlkey{Bounds}, which \sampler{Random} accepts strictly: nothing else
-belongs there, so a stray \yamlkey{Radius} or a mistyped \yamlkey{Seed} is reported
+belongs there, so a stray \yamlkey{radius} or a mistyped \yamlkey{seed} is reported
 rather than ignored (Section~\ref{sec:bounds}).
 
 \begin{keylist}
-  \item[Bounds."Point number"] \req\ (\code{JV2-MTH-020} if absent); alias
-        \yamlkey{point\_number}. The number of draw \emph{attempts} --- the
-        \emph{nominal} budget. A \yamlkey{selection} cut only reduces how many of those
-        attempts are accepted; it does not top the budget back up
-        (Section~\ref{sec:selection}).
-  \item[Bounds.Seed] \opt, integer, default \code{0}; alias \yamlkey{seed}. The stream is
-        always seeded, and \code{0} is an ordinary seed value --- so a card with no
-        \yamlkey{Seed} at all still draws the same points every run. Give distinct
-        nonzero seeds to runs you want to be statistically independent of each other.
+  \item[Bounds.point\_number] \req\ (\code{JV2-MTH-020} if absent). The number of draw
+        \emph{attempts} --- the \emph{nominal} budget. A \yamlkey{selection} cut only
+        reduces how many of those attempts are accepted; it does not top the budget
+        back up (Section~\ref{sec:selection}).
+  \item[Bounds.seed] \opt, integer, default \code{0}. The stream is always seeded, and
+        \code{0} is an ordinary seed value --- so a card with no \yamlkey{seed} at all
+        still draws the same points every run. Give distinct nonzero seeds to runs you
+        want to be statistically independent of each other.
 \end{keylist}
 
 When to use it: first contact with a new space, workflow debugging, an unbiased
@@ -48,9 +47,9 @@ sample count to be exactly what you asked for rather than emergent.
 
 Draws happen lazily, one at a time, in the control process: each call to the sampler's
 internal \code{propose\_next} draws a fresh u-space vector from
-\code{numpy.random}, seeded once at startup from \yamlkey{Bounds.Seed}. A drawn point
+\code{numpy.random}, seeded once at startup from \yamlkey{Bounds.seed}. A drawn point
 that fails \yamlkey{selection} is discarded and the loop draws again --- but the attempt
-still counts against \yamlkey{"Point number"}, which is why a tight cut yields fewer
+still counts against \yamlkey{point\_number}, which is why a tight cut yields fewer
 \emph{accepted} samples than the nominal budget (the same accounting rule as every
 other fixed-set method, Section~\ref{sec:selection}).
 
@@ -60,10 +59,10 @@ and accepted points are submitted to Redis in the usual
 attempt/accept counters \emph{and} \textsc{numpy}'s own random-generator state, so a
 resumed run continues drawing from the exact same stream rather than restarting it ---
 the sequence of points after resume is identical to an uninterrupted run with the same
-\yamlkey{Seed} (Chapter~\ref{ch:checkpoint}).
+\yamlkey{seed} (Chapter~\ref{ch:checkpoint}).
 
 \begin{jtip}
-Because the draw stream is fully determined by \yamlkey{Seed}, two cards that differ
+Because the draw stream is fully determined by \yamlkey{seed}, two cards that differ
 only in \yamlkey{selection} or in the workflow draw the \emph{same} underlying u-space
 points --- useful when comparing how a likelihood or a cut reshapes an otherwise
 identical sample.
@@ -102,11 +101,11 @@ Table~\ref{tab:random-summary} is the one-screen version.
     \textbf{Field} & \textbf{\sampler{Random}} \\
     \midrule
     Kind & fixed set \\
-    Point count & \yamlkey{Bounds."Point number"} (nominal attempts) \\
+    Point count & \yamlkey{Bounds.point\_number} (nominal attempts) \\
     Dimensions & any \\
-    Required keys & \yamlkey{Bounds."Point number"} \\
+    Required keys & \yamlkey{Bounds.point\_number} \\
     u$\to$x mapping & yes \\
-    \yamlkey{Seed} role & draw stream (always seeded; \code{0} is a seed) \\
+    \yamlkey{seed} role & draw stream (always seeded; \code{0} is a seed) \\
     \yamlkey{selection} & consumes attempts, no top-up \\
     Extra output & --- \\
     \bottomrule

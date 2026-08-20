@@ -233,7 +233,7 @@ example still carries \yamlkey{Bounds.dynamic} after you switch
 
 Put together, one call --- \code{run\_adaptive()} --- does the whole run: build the
 \code{RedisEvaluationPool}, seed a \code{numpy} random generator from
-\yamlkey{rseed}, construct the (always static, for \sampler{MultiNest})
+\yamlkey{Bounds.seed}, construct the (always static, for \sampler{MultiNest})
 \code{NestedSampler}, call its \code{run\_nested(**kwargs)}, then export the results
 \textsc{csv} and diagnostics \textsc{json}, log the closing summary, and checkpoint
 once at that final barrier. That last point matters operationally ---
@@ -276,7 +276,7 @@ Sampling:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
   Bounds:
-    Seed: 21
+    seed: 21
     nlive: 100
     dlogz: 0.5
     run_nested:
@@ -301,9 +301,9 @@ nested-sampling card, whichever engine you chose.
     \midrule
     \yamlkey{nlive} & \code{100} & live-point count $N$ (\S\ref{sec:nested-algorithm});
       the main knob on run cost and posterior resolution (minimum 2) \\
-    \yamlkey{Seed} (aliases \yamlkey{seed}, \yamlkey{rseed}) & \code{0} & \textsc{rng}
-      seed; fix it for a reproducible proposal sequence. Like every sampler setting it
-      goes in \yamlkey{Bounds}, not at the \yamlkey{Sampling} top level \\
+    \yamlkey{seed} & \code{0} & \textsc{rng} seed; fix it for a reproducible proposal
+      sequence. Like every sampler setting it goes in \yamlkey{Bounds}, not at the
+      \yamlkey{Sampling} top level \\
     \yamlkey{dlogz} & \code{0.5} & evidence-change stopping threshold
       (\S\ref{sec:nested-dlogz}) \\
     \bottomrule
@@ -793,7 +793,7 @@ Table~\ref{tab:multinest-summary} gathers it.
     Dimensions & any \\
     Required keys & none strictly; set \yamlkey{Bounds.nlive} \\
     u$\to$x mapping & yes \\
-    \yamlkey{Bounds.Seed} role & \code{numpy} generator seed (proposals only) \\
+    \yamlkey{Bounds.seed} role & \code{numpy} generator seed (proposals only) \\
     \textsc{uuid}s & fresh per proposal, \textbf{not} seed-deterministic \\
     Mid-run resume & no --- use \code{dynesty}'s own \yamlkey{checkpoint\_file} \\
     Extra output & \file{multinest\_result.csv}, \file{sampler\_summary.json} \\

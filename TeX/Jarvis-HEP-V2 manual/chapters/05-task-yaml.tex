@@ -14,11 +14,14 @@ complete key table. Read this one first and you will know which of them to open,
 \label{sec:card-shape}
 
 A task card is one \textsc{yaml} document whose top level is a mapping. Exactly six keys
-are allowed there, all of them optional as far as the format is concerned:
+are allowed there, and not all of them are optional: \yamlkey{Scan}, \yamlkey{Sampling},
+and \yamlkey{EnvReqs} are required on every card, and at least one of
+\yamlkey{Calculators} or \yamlkey{Operas} must appear too --- a card that touches
+nothing is not a scan. \yamlkey{LibDeps} is the only block you may omit freely.
 
 \begin{terminal}[the whole top-level vocabulary]
 \begin{jout}
-Scan:         name the scan and say where its outputs go
+Scan:         name the run --- every output path follows from that name
 Sampling:     which method, which variables, which likelihood
 EnvReqs:      environment checks and the V2 runtime block
 LibDeps:      external tool paths and registered executables
@@ -29,16 +32,17 @@ Operas:       in-process operators to call per point
 
 A misspelling is not a silent no-op. \code{Calculater} is an error, reported before the
 scan can start, with the six legal names printed next to it. The leanest card that does
-useful work needs only two of the six --- a \yamlkey{Sampling} block and something to
+useful work needs four of the six --- the three required blocks plus something to
 evaluate, exactly as in the quick start:
 
 \begin{yamlwin}
 Scan:
   name: quickstart
+EnvReqs: {}
 Sampling:
   Method: Random
   Bounds:
-    "Point number": 20
+    point_number: 20
   Variables:
     - name: x
       distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
@@ -72,9 +76,9 @@ no, the card can tell you that in advance. One rule covers both cases:
 Two nearly identical mistakes show what that buys you.
 
 \paragraph{A key \Jtwo\ owns.} \yamlkey{Sampling} is its own, and so is the settings
-block of every sampler \Jtwo\ implements itself. Write \yamlkey{Bounds.Radus} on a
+block of every sampler \Jtwo\ implements itself. Write \yamlkey{Bounds.radus} on a
 \sampler{Bridson} card and validation stops you immediately with the correct spelling in
-hand. You never get to find out at minute forty of a scan that your \yamlkey{Radius} was
+hand. You never get to find out at minute forty of a scan that your \yamlkey{radius} was
 never read.
 
 \paragraph{A key that belongs to another program.} On a \sampler{Dynesty} card, the same
@@ -144,22 +148,25 @@ Error summary (reference only):
 +---+-------------+-----------------+------------------------+
 | # | Code        | YAML path       | Problem                |
 +---+-------------+-----------------+------------------------+
-| 1 | JV2-SCH-001 | $               | Additional properties  |
+| 1 | JV2-SCH-001 | \$               | Additional properties  |
 | 2 | JV2-MTH-003 | Sampling.Method | 'Bridsonn' is not ...  |
 +---+-------------+-----------------+------------------------+
+This table is only a quick reference. Please consult the Jarvis-HEP YAML settings
+documentation before editing the task card.
 
 Detailed diagnostics:
   [error] JV2-MTH-003  Sampling.Method
           'Bridsonn' is not implemented in Jarvis-HEP V2. Available: AM,
           AMMCMC, AdaptiveBridson, Bridson, CSV, DEMCMC, DRAM, Dynesty, ...
+          hint: Run: Jarvis man sampler
           suggestion: Choose an implemented Method, then provide its
           required Bounds configuration.
           example:
             Sampling:
               Method: Random
               Bounds:
-                Point number: 100
-                Seed: 0
+                point_number: 100
+                seed: 0
               Variables:
                 - name: x
                   distribution:
@@ -176,14 +183,17 @@ The three parts do different jobs, and the third is the one to read:
   \item[the summary table] One line per problem, for scanning. It is labelled
         \emph{reference only} because a truncated message is not enough to fix anything.
   \item[the detailed diagnostics] The real content: the \textbf{code}, the exact
-        \textsc{yaml} \textbf{path}, the message, and --- where the validator knows the
-        answer --- a \code{suggestion} in words and an \code{example} of correct
-        \textsc{yaml} you can paste.
+        \textsc{yaml} \textbf{path}, the message, a \code{hint} --- usually an
+        executable \cli{Jarvis man} command aimed at exactly this finding
+        (\S\ref{sec:cli-man}), occasionally a specific fix spelled out in words instead
+        --- and, where the validator knows the answer, a \code{suggestion} in words and
+        an \code{example} of correct \textsc{yaml} you can paste.
 \end{keylist}
 
 That last point is the part worth internalising. For a large class of mistakes you do not
 have to come back to this book at all: the validator names the key, tells you what to do,
-and prints the fix.
+prints the fix, and for most findings hands you the command that opens the fuller
+explanation (\S\ref{sec:cli-man}) too.
 
 \subsection{The code tells you which chapter to open}
 \label{sec:code-families}
@@ -235,39 +245,32 @@ an error, which is how you find settings you believe are taking effect and are n
 \label{sec:scan-block}
 
 \yamlkey{Scan} is the one top-level block that fits in this chapter, because the runtime
-reads exactly two keys from it.
+reads exactly one key from it.
 
 \begin{yamlwin}
 Scan:
   name: EggBox_Dynesty          # the scan's identity, everywhere
-  sample_directory:             # optional; full reference in Chapter 6
-    limit: 200
-    archive_samples: true
 \end{yamlwin}
 
 \begin{keylist}
-  \item[name] The scan's identity, and the only key most cards set. It becomes the output
+  \item[name] The scan's identity, and the only key this block has. It becomes the output
         directory \file{outputs/<name>/}, the log directory \file{logs/<name>/}, the
         checkpoint directory, the \code{<scan>} half of every process title
         (\S\ref{sec:cli-run}), and the name the runtime-control commands list
         (\S\ref{sec:cli-ps-kill}). Defaults to \code{default}, which is a poor name for
         anything you intend to keep.
-  \item[sample\_directory] The \file{SAMPLE/} bucket policy --- how many Samples per
-        bucket, how they are packed and pruned. The same map is also accepted under
-        \yamlkey{EnvReqs.V2}; when both are present \textbf{the one here wins}. Every key
-        is documented once, in Section~\ref{sec:sample-directory}.
 \end{keylist}
 
 Because \yamlkey{Scan.name} is what isolates one run from another, two scans may not
 share it while both are alive --- the second is refused at startup rather than allowed to
 write into the first one's directories (\S\ref{sec:cli-run}).
 
-\begin{jwarn}
-\yamlkey{Scan.save\_dir} is accepted by the schema and then ignored: the output root is
-always \file{<project-root>/outputs/<scan-name>}. A card that sets it validates cleanly
-and writes its results somewhere else than you asked. If you need outputs elsewhere, move
-or link the project directory (Section~\ref{sec:projects}).
-\end{jwarn}
+\begin{jnote}
+\Jtwo\ is built around the project (Section~\ref{sec:projects}), not a per-card output
+path, so \yamlkey{Scan} takes \emph{only} \yamlkey{name}. The V1 \yamlkey{save\_dir}
+escape hatch is gone --- writing it is now a load-time schema error
+(\code{JV2-SCH-001}), not a value that is silently accepted and ignored.
+\end{jnote}
 
 \section{Where to go from here}
 \label{sec:part2-map}
@@ -286,10 +289,10 @@ under, and go there.
     \textbf{Block} & \textbf{Chapter} & \textbf{What lives there} \\
     \midrule
     \yamlkey{Scan}    & here, \S\ref{sec:scan-block} &
-      the scan's name and its \file{SAMPLE/} bucket policy \\
+      the scan's name --- the whole block \\
     \yamlkey{EnvReqs} & Ch.~\ref{ch:envreqs} &
       environment checks, and the \yamlkey{V2} block: Workers, batching, the Archiver,
-      cleanup \\
+      the broker \\
     \yamlkey{Sampling} & Ch.~\ref{ch:sampling-block} &
       \yamlkey{Method} and the keys every method shares \\
     \ldots\yamlkey{Variables} & Ch.~\ref{ch:variables} &

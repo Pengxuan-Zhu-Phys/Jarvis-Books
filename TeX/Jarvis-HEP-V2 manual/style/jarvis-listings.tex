@@ -105,7 +105,9 @@
   literate=
     {±}{{$\pm$}}1
     {·}{{\textperiodcentered}}1
-    {•}{{\textbullet}}1,
+    {•}{{\textbullet}}1
+    {‰}{{\textperthousand}}1
+    {—}{{\textemdash}}1,
   % NOTE on box-drawing bytes (╭ │ ─ ━ ╰ …): the CLI renders its help and runtime
   % panels with Rich, and quoting those frames verbatim was tried and REVERTED.
   % pmboxdraw's glyphs do not advance exactly one monospace cell, so `literate'
@@ -208,7 +210,9 @@
   literate=
     {±}{{$\pm$}}1
     {·}{{\textperiodcentered}}1
-    {•}{{\textbullet}}1,
+    {•}{{\textbullet}}1
+    {‰}{{\textperthousand}}1
+    {—}{{\textemdash}}1,
   % NOTE on box-drawing bytes (╭ │ ─ ━ ╰ …): the CLI renders its help and runtime
   % panels with Rich, and quoting those frames verbatim was tried and REVERTED.
   % pmboxdraw's glyphs do not advance exactly one monospace cell, so `literate'
@@ -236,10 +240,20 @@
   xleftmargin=2.4em,
   breaklines=true, columns=fullflexible, keepspaces=true, showstringspaces=false, tabsize=2,
   aboveskip=0pt, belowskip=0pt,
+  % A raw `$' (e.g. inside a `${source}' token) already typesets literally here --
+  % no mathescape is set, so listings never treats it as a math shift. It only
+  % LOOKS broken in editors whose syntax highlighter doesn't know `yamlwin' is a
+  % verbatim listing and assumes bare `$' opens math mode. Card authors who want
+  % to dodge that false positive can type the escaped form `\$' instead (the
+  % ordinary LaTeX idiom most editors already recognise as literal) -- this
+  % `literate' pair strips the backslash back off at typeset time so `\${path}'
+  % and `${path}' render identically. Confirmed by an isolated standalone
+  % compile (bare text and inside a quoted jyaml string) before landing here.
   literate=
     {±}{{$\pm$}}1
     {·}{{\textperiodcentered}}1
-    {•}{{\textbullet}}1,
+    {•}{{\textbullet}}1
+    {\\\$}{{\$}}1,
   % NOTE on box-drawing bytes (╭ │ ─ ━ ╰ …): the CLI renders its help and runtime
   % panels with Rich, and quoting those frames verbatim was tried and REVERTED.
   % pmboxdraw's glyphs do not advance exactly one monospace cell, so `literate'

@@ -1,0 +1,120 @@
+\chapter{The check\_modules Smoke Path}
+\label{ch:check-modules}
+
+\newthought{Test the workflow before you buy the scan.} The smoke path runs your full
+calculator/opera/likelihood chain on a handful of points --- fixed from a \textsc{csv},
+or drawn fresh from your real \yamlkey{Sampling.Method} when no \textsc{csv} is
+configured --- with the per-sample command output mirrored to your terminal, so you can
+validate a card in minutes instead of discovering a broken \yamlkey{entry} path an hour
+into a real scan.
+
+\section{Invocation}
+\label{sec:check-invocation}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis check task.yaml
+\end{jcmd}
+\end{terminal}
+
+\textbf{The command is the whole switch.} There is no key in the task card that turns
+this mode on, and nothing to add or take out again before a production run: the card you
+smoke-test is byte-for-byte the card you later hand to \cli{Jarvis run}
+(\S\ref{sec:cli-shape}). What the card \emph{may} carry is a budget --- how many points,
+which \textsc{csv}, how long to wait --- and that lives under \yamlkey{EnvReqs.V2}, next
+to every other runtime setting.
+
+\section{Where the points come from}
+\label{sec:check-points-source}
+
+\begin{enumerate}
+  \item \textbf{A \textsc{csv}, if one exists.} \yamlkey{EnvReqs.V2.check\_modules.data}
+        names it, defaulting to
+        \marker{\&J/}\file{data/\allowbreak{}check\_modules\_points.csv}. This is the
+        only place in the card a check \textsc{csv} can be named --- and because
+        \yamlkey{EnvReqs.V2} is what a shared defaults file merges
+        (Section~\ref{sec:check-default-deps}), a whole project can point at one set of
+        smoke points without repeating it on every card.
+  \item \textbf{Otherwise, points drawn from your real sampler.} When that path names
+        no file that actually exists, \Jtwo\ falls back to drawing
+        \yamlkey{EnvReqs.V2.check\_modules.n\_samples} points (default \code{10}) from
+        your real \yamlkey{Sampling.Method} --- the same sampler your production scan
+        would use, including \sampler{Dynesty} and \sampler{MultiNest}.
+\end{enumerate}
+
+\begin{yamlwin}
+EnvReqs:
+  V2:
+    check_modules:
+      data: "&J/data/check_points.csv"   # optional override
+      n_samples: 10                      # sampler-fallback point count
+      timeout_sec: 120                   # deadline for smoke samples to archive
+\end{yamlwin}
+
+\yamlkey{timeout\_sec} is a deadline, not a fixed wait --- a card whose points finish
+sooner exits sooner. \cli{Jarvis check --timeout} overrides it for a single invocation
+(\S\ref{sec:cli-check}).
+
+Both routes end up at the same place: a small batch of \code{Sample}s runs through the
+identical execution plan a real scan uses, and the console shows everything.
+
+\begin{jnote}
+\textbf{A \textsc{csv}'s columns are \emph{u-space} coordinates, one per declared
+variable, in the order of \yamlkey{Sampling.Variables}} --- not physical parameter
+values. This is the same unit-cube language every sampler proposes in
+(Section~\ref{sec:uspace}); the Worker maps it to physical values exactly as it would
+for any other Sample. Write \code{0.5} to mean the middle of a variable's declared
+range, whatever that range is in physical units.
+\end{jnote}
+
+\begin{jwarn}
+\textbf{Your card is validated in full, \textsc{csv} or not.}
+\yamlkey{Sampling.Method} and \yamlkey{Sampling.Variables} are required of every card
+(Chapter~\ref{ch:sampling-block}), and \cli{check} runs the same gate \cli{run} does ---
+\yamlkey{Bounds}, distributions, everything in
+Chapters~\ref{ch:multinest}--\ref{ch:dynesty} included --- \emph{even when} a
+\textsc{csv} supplies the points and the sampler is never asked to propose anything. A
+card cannot be smoke-tested past a broken \yamlkey{Method}; fix it first
+(Section~\ref{sec:nested-validation}).
+\end{jwarn}
+
+Everything else in the card --- \yamlkey{Calculators}, \yamlkey{Operas},
+\yamlkey{Likelihood}, \yamlkey{LibDeps} --- is exercised exactly as in a real scan:
+same Workers, same execution plan, same archive path.
+
+\section{What you see}
+\label{sec:check-output}
+
+For each point, the console shows what a production scan writes only to the Sample's
+private log: the calculator banner, the resolved command line, the raw
+stdout/stderr of every external command, and the captured observables --- ending in the
+usual archive and a normal \file{DATABASE/} record. The mirroring uses the same
+rendered text as the file log, so what you debug is what production records.
+
+\section{The habit}
+\label{sec:check-habit}
+
+\begin{enumerate}
+  \item Keep \file{data/check\_modules\_points.csv} in the project: two or three points
+        whose expected observables you know --- a published benchmark, a point you
+        computed by hand, given as u-space coordinates for your declared
+        \yamlkey{Variables}. That is the default path, so a project that uses this name
+        needs no \yamlkey{check\_modules} block at all.
+  \item Run \cli{Jarvis check} after \emph{any} edit to \yamlkey{execution} blocks,
+        \yamlkey{Dump} variables, or \yamlkey{entry} paths.
+  \item Compare the captured observables against the known values before launching the
+        scan.
+\end{enumerate}
+
+\begin{jtip}
+The check points double as an integration test for tool upgrades: after rebuilding an
+external calculator, one \cli{Jarvis check} against known-good numbers tells you
+whether physics changed before any scan does.
+\end{jtip}
+
+\begin{jtip}
+No fixed points yet and just want a fast smoke of a \sampler{Dynesty} or
+\sampler{MultiNest} card? Skip the \textsc{csv} entirely --- \cli{Jarvis check} draws
+\code{n\_samples} real points from your \yamlkey{Bounds}/\yamlkey{Variables} and runs
+them through the full pipeline, no separate fixture to maintain.
+\end{jtip}

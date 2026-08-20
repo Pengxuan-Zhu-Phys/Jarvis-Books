@@ -1,0 +1,429 @@
+\chapter{PTMCMC: Parallel Tempering}
+\label{ch:ptmcmc}
+
+\newthought{This chapter assumes Chapter~\ref{ch:toymcmc}.} If you have not read it,
+do that first --- the Metropolis--Hastings step, the class hierarchy, deterministic
+\textsc{uuid}s, checkpointing, and the \textsc{mcmc}-family outputs are all identical
+here. This chapter covers exactly one thing: what changes when several Metropolis
+chains run at different temperatures and periodically swap, and how to configure and
+read that.
+
+\section{What parallel tempering adds}
+\label{sec:pt-what}
+
+A single random-walk chain (Chapter~\ref{ch:toymcmc}) can get stuck: if the posterior
+has two modes separated by a region of very low likelihood, the chain essentially
+never proposes a step through that region, and a chain that started in one mode may
+never discover the other.
+
+Parallel tempering\cite{EarlDeem:2005} runs \yamlkey{num\_chains} replicas of the
+\emph{same} chain in parallel, each at its own temperature $T_i$ (inverse temperature
+$\beta_i = 1/T_i$), and periodically lets adjacent-temperature replicas swap their
+current state:
+
+\begin{itemize}
+  \item The \textbf{cold} replica, $T=1$, sees the real posterior --- this is the one
+        whose points you actually want.
+  \item \textbf{Hot} replicas, $T>1$, see a flattened likelihood surface
+        ($L^{\beta}$ with $\beta<1$): low-likelihood barriers that trap the cold chain
+        are far easier to cross at high temperature.
+  \item An accepted \textbf{exchange} hands the hot replica's newly discovered region
+        one rung down the ladder, eventually reaching the cold replica --- without the
+        cold chain ever having to propose the crossing step itself.
+\end{itemize}
+
+\begin{jwarn}
+\textbf{Only the cold replica is your posterior.} \Jtwo\ archives every replica's
+every step, at every temperature (\S\ref{sec:ptmcmc-outputs}) --- but the hot replicas'
+points are draws from a deliberately flattened surface, not the posterior you asked
+for. Chain \textsc{ids} are assigned in ladder order and
+\yamlkey{temperature\_ladder[0]} is always the required cold value $1.0$
+(\S\ref{sec:ptmcmc-yaml}), so \textbf{\yamlkey{chain\_id} 0 is always the cold,
+posterior-valid replica} --- filter \file{samples.csv} to \yamlkey{chain\_id} \code{==
+0} before treating it as a posterior sample.
+\end{jwarn}
+
+\section{The exchange move}
+\label{sec:pt-algorithm}
+
+Every \yamlkey{exchange\_interval} draws, adjacent rungs on the ladder attempt a swap:
+
+\begin{enumerate}
+  \item \textbf{Pair adjacent rungs.} Only neighbouring temperatures are ever paired
+        --- $(T_0,T_1), (T_2,T_3), \ldots$ on one round, offset by one rung on the
+        next, so every adjacent pair gets a turn over time. The hottest and coldest
+        replicas are never paired directly.
+  \item \textbf{Accept or reject the swap.} With $\beta_i=1/T_i$, $\beta_j=1/T_j$ and
+        current log-likelihoods $\log L_i$, $\log L_j$, let
+        $\Delta = (\beta_i-\beta_j)(\log L_j-\log L_i)$. Accept (swap) if
+        $\Delta \geq 0$, or with probability $e^{\Delta}$ otherwise --- the same
+        Metropolis shape as an ordinary step, applied between chains instead of within
+        one.
+  \item \textbf{Swap state, not temperature.} An accepted exchange swaps the two
+        replicas' parameter vectors and log-likelihoods. \textbf{The temperature stays
+        with the ladder slot}, not with the configuration --- rung $i$ is always at
+        $T_i$; what moves between rungs is which configuration currently occupies
+        each one.
+\end{enumerate}
+
+\begin{jnote}
+This is the detail that trips people up: parallel tempering does \emph{not} mean
+"each chain's temperature changes over time." The ladder is fixed; configurations
+migrate along it. \yamlkey{chain\_id} \code{0} is permanently the cold rung for the
+whole run --- it never itself "becomes" a hot replica.
+\end{jnote}
+
+\section{Why the swap rule works: detailed balance on the extended ensemble}
+\label{sec:pt-detailed-balance}
+
+Chapter~\ref{ch:toymcmc}'s derivation (\S\ref{sec:mcmc-detailed-balance}) already
+covers why an ordinary Metropolis step leaves a target distribution invariant; the
+only change here is which target each replica's step leaves invariant. Replica $i$
+runs exactly that step against $\pi_i(u) \propto L(u)^{\beta_i}$ --- the general
+$\beta$ that step~3 there fixed at $1$ for \sampler{ToyMCMC} is now the rung's own
+$\beta_i$. Because $\log \pi_i(u) = \beta_i \log L(u) + \text{const}$, a hot
+replica's $\beta_i \ll 1$ compresses every log-likelihood difference by the same
+factor: a barrier between two modes, sharp at $\beta=1$, becomes shallow enough for
+an ordinary random walk to cross once $\beta_i$ is small enough --- the mechanism
+behind \S\ref{sec:pt-what}'s ``flattened likelihood surface.''
+
+Treat every replica together as a single chain on one joint space ---
+\yamlkey{num\_chains} copies of the unit cube, one per rung --- with joint target
+$\Pi(u_0, u_1, \ldots) = \prod_i \pi_i(u_i)$; replicas are independent under $\Pi$
+because each $\pi_i$ only involves its own coordinate. Every ordinary Metropolis step
+updates one replica's own coordinate using only that replica's own $\pi_i$
+(Chapter~\ref{ch:toymcmc}'s rule, run once per replica each generation), so by the
+previous paragraph it leaves that coordinate's $\pi_i$ invariant while leaving every
+other coordinate untouched --- which leaves the whole product $\Pi$ invariant too.
+The extended ensemble is where parallel tempering actually lives: $\Pi$, not any
+single $\pi_i$, is the distribution the combined algorithm is built to
+preserve\cite{EarlDeem:2005}.
+
+The exchange move is a second kernel on that same joint space: it proposes to swap
+coordinates $i$ and $j$ --- $(\ldots, u_i, \ldots, u_j, \ldots) \to (\ldots, u_j,
+\ldots, u_i, \ldots)$ --- leaving every other coordinate fixed. Swapping is its own
+inverse, so the proposal is symmetric and Chapter~\ref{ch:toymcmc}'s
+symmetric-proposal simplification applies again: accept with probability
+$\min(1,\ \Pi(\text{swapped})/\Pi(\text{current}))$. Every factor of $\Pi$ except
+$\pi_i$ and $\pi_j$ is identical on both sides of that ratio and cancels, leaving
+$\pi_i(u_j)\,\pi_j(u_i)\,/\,[\pi_i(u_i)\,\pi_j(u_j)] =
+L(u_j)^{\beta_i}L(u_i)^{\beta_j}\,/\,[L(u_i)^{\beta_i}L(u_j)^{\beta_j}]$, whose log is
+exactly $\Delta = (\beta_i-\beta_j)(\log L_j - \log L_i)$ ---
+\S\ref{sec:pt-algorithm}'s swap rule, not asserted this time but
+derived\cite{Geyer:1991,HukushimaNemoto:1996}.
+
+Ordinary steps and exchanges are two different kernels that each leave the same
+$\Pi$ invariant, so alternating between them --- exactly what
+\S\ref{sec:ptmcmc-runtime}'s generation loop does --- leaves it invariant too. That
+is the formal version of \S\ref{sec:pt-what}'s warning: the extended chain's
+stationary distribution is the product $\Pi$ over \emph{every} rung, and only its
+cold-replica marginal, $\pi_0(u) \propto L(u)$, is the posterior you asked for.
+
+\section{How the code implements it}
+\label{sec:ptmcmc-classes}
+
+\begin{quote}
+\sffamily\footnotesize
+\code{MCMCBaseSampler} $\;\to\;$ \code{PTMCMCBase} $\;\to\;$ \code{PTMCMCSampler}
+\end{quote}
+
+\code{PTMCMCBase} adds exactly the parallel-tempering knobs on top of
+Chapter~\ref{ch:toymcmc}'s base class: the temperature ladder, the exchange interval,
+adjacent-pair selection, and the extra checkpoint state
+(\S\ref{sec:ptmcmc-resume}). \code{PTMCMCSampler} itself is, once again, a thin
+subclass --- it normalises \yamlkey{proposal\_scale} and attaches the progress
+observer; the exchange science lives entirely in the shared base.
+
+\subsection{The runtime: barrier-coupled generations}
+\label{sec:ptmcmc-runtime}
+
+Parallel tempering cannot use Chapter~\ref{ch:toymcmc}'s async independent-chain
+pipeline (\S\ref{sec:mcmc-runtime}) --- an exchange needs every replica's
+log-likelihood \emph{at the same step}, so replicas cannot run ahead of each other
+independently. \sampler{PTMCMC} instead uses the classical generation-barrier path:
+
+\begin{enumerate}
+  \item Propose one step for \emph{every} replica; submit them all to the shared
+        \code{hep:feedback} queue (not the per-chain shards
+        Chapter~\ref{ch:toymcmc} uses).
+  \item Wait for the whole generation's results; absorb every replica's
+        accept/reject decision.
+  \item If \yamlkey{exchange\_interval} draws have passed since the last attempt,
+        attempt exchanges (\S\ref{sec:pt-algorithm}).
+  \item Checkpoint at this generation barrier; repeat.
+\end{enumerate}
+
+Every generation evaluates all \yamlkey{num\_chains} replicas, even though only the
+cold one is your posterior --- parallel tempering trades that extra compute for the
+ability to cross barriers a single chain cannot.
+
+\section{Configuring PTMCMC}
+\label{sec:ptmcmc-yaml}
+
+The minimal working card:
+
+\begin{yamlwin}
+Sampling:
+  Method: PTMCMC
+  Variables:
+    - name: x
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
+    - name: y
+      distribution: {type: Flat, parameters: {min: 0.0, max: 1.0}}
+  Bounds:
+    num_chains: 4
+    num_iters: 2000
+    proposal_scale: 0.2
+    temperature_ladder: [1.0, 2.0, 4.0, 8.0]
+    exchange_interval: 1
+    seed: 0
+  LogLikelihood:
+    - {name: LogL, expression: "..."}   # your physics
+\end{yamlwin}
+
+Table~\ref{tab:ptmcmc-bounds} lists the keys on top of
+Chapter~\ref{ch:toymcmc}'s \yamlkey{num\_chains} / \yamlkey{num\_iters} /
+\yamlkey{proposal\_scale} / \yamlkey{seed} (unchanged in meaning here).
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.161\linewidth}p{0.584\linewidth}@{}}
+    \toprule
+    \textbf{Key} & \textbf{Default} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{temperature\_ladder} & \req & one temperature per replica
+      (\S\ref{sec:pt-what}); length must equal \yamlkey{num\_chains}, strictly
+      increasing, first entry exactly $1.0$ \\
+    \yamlkey{exchange\_interval} & \code{1} & draws between exchange attempts
+      (\S\ref{sec:pt-algorithm}) \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\sampler{PTMCMC}'s own \yamlkey{Bounds} keys. \yamlkey{num\_chains} here
+  additionally requires $\geq 2$ (one cold, at least one hot). \code{Jarvis man
+  sampler.PTMCMC} is the live reference.}
+  \label{tab:ptmcmc-bounds}
+\end{table}
+
+\begin{jtip}
+A common starting ladder is geometric --- $T_i = r^{\,i}$ for some ratio $r$ between
+$1.5$ and $2$ --- which is exactly what \yamlkey{[1.0, 2.0, 4.0, 8.0]} above is. Watch
+the exchange acceptance rate once a run is going (\S\ref{sec:ptmcmc-log-progress}): if
+adjacent rungs almost never swap, they are too far apart on the ladder; if they almost
+always swap, the rungs are barely distinguishable and you are paying for replicas that
+add little.
+\end{jtip}
+
+\section{Validating your card}
+\label{sec:ptmcmc-validation}
+
+\begin{terminal}
+\begin{jout}
+Config validation failed (2 error(s), 0 warning(s)):
+
+Error summary (reference only):
++---+-------------+------------------------------------+-------------------------+
+| # | Code        | YAML path                          | Problem                 |
++---+-------------+------------------------------------+-------------------------+
+| 1 | JV2-SCH-001 | \$.Sampling.Bounds                  | 'temperature_ladder'... |
+| 2 | JV2-MTH-064 | Sampling.Bounds.temperature_ladder | PTMCMC requires Sam...  |
++---+-------------+------------------------------------+-------------------------+
+This table is only a quick reference. Please consult the Jarvis-HEP YAML settings
+documentation before editing the task card.
+
+Detailed diagnostics:
+  [error] JV2-SCH-001  \$.Sampling.Bounds
+          'temperature_ladder' is a required property
+          hint: Run: Jarvis man yaml.Sampling.Bounds
+          suggestion: Add 'temperature_ladder' at this location using the
+          expected YAML type.
+  [error] JV2-MTH-064  Sampling.Bounds.temperature_ladder
+          PTMCMC requires Sampling.Bounds.temperature_ladder (a strictly
+          increasing list starting at 1.0)
+          hint: Run: Jarvis man sampler.PTMCMC
+          suggestion: Set temperature_ladder to a strictly increasing list of
+          length num_chains starting at 1.0.
+          example:
+            Bounds:
+              num_chains: 4
+              temperature_ladder: [1.0, 2.0, 4.0, 8.0]
+\end{jout}
+\end{terminal}
+
+Table~\ref{tab:ptmcmc-validation} lists the \sampler{PTMCMC}-specific codes, on top of
+Chapter~\ref{ch:toymcmc}'s \code{JV2-MTH-05x} family for
+\yamlkey{num\_chains}/\yamlkey{num\_iters}/\yamlkey{proposal\_scale}.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.171\linewidth}p{0.297\linewidth}p{0.532\linewidth}@{}}
+    \toprule
+    \textbf{Code} & \textbf{Fires on} & \textbf{Fix} \\
+    \midrule
+    \code{JV2-MTH-060} & \yamlkey{Bounds} missing entirely & add all four required
+      keys \\
+    \code{JV2-MTH-061} & \yamlkey{num\_chains} missing or $< 2$ & \sampler{PTMCMC}
+      needs at least one hot replica \\
+    \code{JV2-MTH-064} & \yamlkey{temperature\_ladder} missing, wrong length, not
+      increasing, or not starting at $1.0$ & fix the ladder
+      (\S\ref{sec:ptmcmc-yaml}) \\
+    \code{JV2-MTH-066}--\code{071} & other malformed keys (\yamlkey{exchange\_interval},
+      \yamlkey{seed}, \ldots) & check against Table~\ref{tab:ptmcmc-bounds} \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\sampler{PTMCMC}-specific validation codes. The other methods' codes are
+  in Appendix~\ref{app:troubleshooting}.}
+  \label{tab:ptmcmc-validation}
+\end{table}
+
+\section{Reading the log}
+\label{sec:ptmcmc-log}
+
+Every excerpt below is a real \cli{Jarvis run} transcript against the same
+two-parameter Gaussian bump as Chapter~\ref{ch:toymcmc}, with
+\yamlkey{temperature\_ladder: [1.0, 2.0, 4.0, 8.0]}.
+
+\subsection{At startup}
+\label{sec:ptmcmc-log-startup}
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.Ptmcmc
+	-> 00:15:16.099 - [WARNING] >>>
+Initializing the PTMCMC Sampling
+
+·•· Jarvis-HEP.Sampler.Ptmcmc
+	-> 00:15:16.099 - [INFO] >>>
+PTMCMC Sampler configured: replicas=4 iterations=50 total_transitions=200
+proposal_scale=0.2 ladder=[1.0, 2.0, 4.0, 8.0] exchange_interval=1
+\end{jout}
+\end{terminal}
+
+Confirm \yamlkey{ladder} here matches your card exactly --- this is the resolved
+configuration actually driving the run, the same discipline as nested sampling's
+\code{run\_nested kwargs} line (Section~\ref{sec:nested-log-startup}).
+
+\subsection{While it runs: exchanges and the progress meter}
+\label{sec:ptmcmc-log-progress}
+
+Exchange attempts log immediately, before the progress line for that generation:
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.Ptmcmc
+	-> 00:15:16.542 - [INFO] >>>
+PTMCMC exchange: attempted=2 accepted=1
+
+·•· Jarvis-HEP.Sampler.Ptmcmc
+	-> 00:15:16.542 - [WARNING] >>>
+20‰ of 4/200 PTMCMC transitions completed in 00:00:00.442
+(replicas=4 iterations=1/50 swaps=1/2)
+\end{jout}
+\end{terminal}
+
+\code{swaps=1/2} in the progress line is the running total (accepted/attempted) since
+the run started --- by the end of this $200$-transition run it read
+\code{swaps=49/75}, a $65\,\%$ exchange acceptance rate across the whole ladder.
+
+\subsection{At the end: the summary}
+\label{sec:ptmcmc-log-summary}
+
+\begin{terminal}[sampler.log]
+\begin{jout}
+·•· Jarvis-HEP.Sampler.Ptmcmc
+	-> 00:15:16.970 - [INFO] >>>
+PTMCMC finished: proposed=200 accepted=121 accept_rate=0.6050 async=False
+\end{jout}
+\end{terminal}
+
+\code{async=False} is \Jtwo\ confirming this run used the barrier-coupled pipeline
+(\S\ref{sec:ptmcmc-runtime}), not Chapter~\ref{ch:toymcmc}'s async one. The overall
+\yamlkey{accept\_rate} here counts ordinary Metropolis steps across all four
+replicas --- hot replicas accept far more often than the cold one by design (this run:
+$30\,\%$, $48\,\%$, $78\,\%$, $86\,\%$ from coldest to hottest), which is exactly the
+flattened-surface behaviour \S\ref{sec:pt-what} describes, not a sign anything is
+wrong.
+
+\section{What the run leaves behind}
+\label{sec:ptmcmc-outputs}
+
+The same two files as Chapter~\ref{ch:toymcmc} (\S\ref{sec:mcmc-outputs}), with three
+extra fields in \file{DATABASE/sampler\_summary.json}:
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.255\linewidth}p{0.745\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{Meaning} \\
+    \midrule
+    \yamlkey{swap\_attempts} / \yamlkey{swap\_accepts} & running totals across the
+      whole run --- their ratio is the overall exchange acceptance rate
+      (\S\ref{sec:ptmcmc-yaml}'s tuning tip) \\
+    \yamlkey{temperature\_ladder} & the resolved ladder actually used, for the
+      record \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\sampler{PTMCMC}-only \code{sampler\_summary.json} fields.}
+  \label{tab:ptmcmc-summary-fields}
+\end{table}
+
+\yamlkey{chain\_id}'s \yamlkey{temperature} in \file{chain\_history.csv} (and each
+chain's entry in \yamlkey{sampler\_summary.json}'s \yamlkey{chains} list) is fixed to
+that \yamlkey{chain\_id}'s ladder slot for the whole run --- it is the
+\emph{configuration} that migrates between rungs on a swap, never the temperature
+label itself (\S\ref{sec:pt-algorithm}).
+
+\section{Resume}
+\label{sec:ptmcmc-resume}
+
+Everything in Chapter~\ref{ch:toymcmc}'s \S\ref{sec:mcmc-resume} applies --- the same
+\file{state.pkl}, the same \cli{Jarvis run scan.yaml --resume}, the same refusal on a
+changed card. \sampler{PTMCMC} checkpoints one generation barrier at a time (never
+mid-generation, unlike the async pipeline) and additionally restores
+\yamlkey{swap\_attempts}, \yamlkey{swap\_accepts}, the exchange pairing offset, and the
+resolved \yamlkey{temperature\_ladder} --- so a resumed run's exchange statistics keep
+accumulating from where the interrupted one left off, rather than restarting at zero.
+
+\section{Summary}
+\label{sec:ptmcmc-summary}
+
+\sampler{PTMCMC} is Chapter~\ref{ch:toymcmc}'s Metropolis chain, run at several
+temperatures with periodic exchanges --- the answer when a posterior might be
+multimodal enough to trap a single chain. Table~\ref{tab:ptmcmc-at-a-glance} gathers
+it.
+
+\begin{table}[ht]
+  \footnotesize
+  \begingroup
+  \setlength{\tabcolsep}{0pt}
+  \begin{tabular}{@{}p{0.34\linewidth}p{0.66\linewidth}@{}}
+    \toprule
+    \textbf{Field} & \textbf{\sampler{PTMCMC}} \\
+    \midrule
+    Kind & feedback (fixed budget: replicas $\times$ iterations) \\
+    Pipeline & barrier-coupled generations (\S\ref{sec:ptmcmc-runtime}) \\
+    Point count & exactly \yamlkey{num\_chains}$\,\times\,$\yamlkey{num\_iters}, only
+      \yamlkey{chain\_id 0} is posterior-valid \\
+    Dimensions & any \\
+    Required keys & \yamlkey{num\_chains} ($\geq 2$), \yamlkey{num\_iters},
+      \yamlkey{proposal\_scale}, \yamlkey{temperature\_ladder} \\
+    u$\to$x mapping & yes \\
+    \yamlkey{Bounds.seed} role & chain RNG streams and the exchange \textsc{rng} \\
+    \textsc{uuid}s & deterministic, as Chapter~\ref{ch:toymcmc} \\
+    Mid-run resume & yes --- one generation barrier at a time \\
+    Extra output & \file{sampler\_summary.json} (+ swap stats),
+      \file{chain\_history.csv} \\
+    \bottomrule
+  \end{tabular}
+  \endgroup
+  \caption{\sampler{PTMCMC} at a glance.}
+  \label{tab:ptmcmc-at-a-glance}
+\end{table}

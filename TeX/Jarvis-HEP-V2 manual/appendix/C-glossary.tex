@@ -41,7 +41,10 @@
   \item[opera] An in-process Python operator declared under \yamlkey{Operas.Modules}
         (Chapter~\ref{ch:operas}).
   \item[pack / PackID] A stable calculator concurrency slot (\code{001}\ldots\code{N})
-        and its persistent directory; \token{@PackID} in paths
+        a Worker holds from a \yamlkey{Calculators.Pools} entry; \token{@PackID} in
+        paths. Only a \yamlkey{clone\_shadow} module gives its pack a persistent
+        directory --- for the shared (default) case a pack is a logical slot only, and
+        the tool is symlinked straight into the Sample directory
         (Section~\ref{sec:clone-shadow}).
   \item[pool] A global concurrency cap for one calculator type, enforced through Redis
         across all Workers (Section~\ref{sec:pools}).

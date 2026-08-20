@@ -3,72 +3,121 @@
 
 \newthought{Seventeen methods, four families, one decision.} \Jtwo\ ships four
 \emph{simple} (fixed-set) samplers, one \emph{adaptive} contour tracer, ten
-\emph{\textsc{mcmc}} methods, and two \emph{nested sampling} methods. This short
+\emph{\textsc{mcmc}} methods, and two \emph{nested sampling} methods. Two of the ten
+\textsc{mcmc} methods --- \sampler{ToyMCMC} and \sampler{PTMCMC} --- have a full
+chapter each (Chapters~\ref{ch:toymcmc}--\ref{ch:ptmcmc}); the other eight are
+implemented but not yet closed for validation (\S\ref{sec:mcmc-family}). This short
 chapter is the decision guide across all four families; the chapters that follow are
 the per-method references for the families that have them.
 
-\section{Four families}
+\section{Sampler families and their chapters}
+\label{sec:sampler-chapter-index}
 \label{sec:fixed-vs-feedback}
 
 The structural split matters more than any individual method:
 
 \begin{description}[style=nextline, leftmargin=1.2em]
-  \item[Simple methods] decide \emph{every} point before the first result returns:
-        \yamlkey{"Point number"} random draws, the full grid, the replayed file, or the
+  \item[Simple methods] \mbox{}\\[-0.4\baselineskip]
+        \begin{itemize}
+          \item \sampler{Random} --- Chapter~\ref{ch:random}
+          \item \sampler{Grid} --- Chapter~\ref{ch:grid}
+          \item \sampler{CSV} --- Chapter~\ref{ch:csv-sampler}
+          \item \sampler{Bridson} --- Chapter~\ref{ch:bridson}
+        \end{itemize}
+        These methods decide \emph{every} point before the first result returns:
+        \yamlkey{point\_number} random draws, the full grid, the replayed file, or the
         blue-noise disk set (\sampler{Random}, \sampler{Grid}, \sampler{CSV},
-        \sampler{Bridson}; Chapters~\ref{ch:random}--\ref{ch:bridson}). Submission is
+        \sampler{Bridson}). Submission is
         embarrassingly parallel, resume is trivial (finished points are simply not
         re-proposed), and no point depends on any other.
-  \item[The adaptive method] reacts to results toward a fixed goal.
-        \sampler{AdaptiveBridson} submits a generation, waits for its observables at a
-        barrier, and concentrates the next generation where the target level set runs
-        (Chapter~\ref{ch:adaptive-levelset}). Fewer wasted evaluations, at the price of
-        barrier synchronisation.
-  \item[\textsc{mcmc} methods] explore a posterior by proposing one Metropolis step per
-        chain per generation, also at a barrier: plain \sampler{MCMC}, its adaptive
-        variants \sampler{AMMCMC}/\sampler{AM}/\sampler{DRAM}, and the ensemble/parallel-
-        tempering group \sampler{EnsembleMCMC} (alias \sampler{Ensemble}),
-        \sampler{DEMCMC}, \sampler{PTMCMC}, \sampler{PT}, \sampler{PTEnsemble}. They
-        give you a posterior-shaped point cloud with no evidence estimate, at a fraction
-        of nested sampling's per-point bookkeeping (Section~\ref{sec:mcmc-family}).
-  \item[Nested sampling methods] (\sampler{Dynesty}, \sampler{MultiNest}) also react to
-        results, but toward a different goal: they shrink a population of \emph{live
+        
+  \item[The adaptive method] \mbox{}\\[-0.4\baselineskip]
+        \begin{itemize}
+          \item \sampler{AdaptiveBridson} --- Chapter~\ref{ch:adaptive-levelset}
+        \end{itemize}
+        It reacts to results toward a fixed goal: one generation waits for its
+        observables at a barrier, then concentrates the next generation where the target
+        level set runs (the level-set algorithm and its full reference are in that
+        chapter). Fewer
+        wasted evaluations, at the price of barrier synchronisation.
+        
+  \item[\textsc{mcmc} methods] \mbox{}\\[-0.4\baselineskip]
+        \begin{itemize}
+          \item Stable and fully documented: \sampler{ToyMCMC} ---
+                Chapter~\ref{ch:toymcmc}; \sampler{PTMCMC} --- Chapter~\ref{ch:ptmcmc}.
+          \item No dedicated chapter yet: \sampler{MCMC}, \sampler{AMMCMC}/\sampler{AM},
+                \sampler{DRAM}, \sampler{EnsembleMCMC} (alias \sampler{Ensemble}),
+                \sampler{DEMCMC}, and \sampler{PTEnsemble}; see
+                Section~\ref{sec:mcmc-family}.
+        \end{itemize}
+        Together these methods explore a posterior by proposing a Metropolis step per
+        chain. Every member gives you a posterior-shaped point cloud with no evidence
+        estimate, at a
+        fraction of nested sampling's per-point bookkeeping.
+        
+  \item[Nested sampling methods] \mbox{}\\[-0.4\baselineskip]
+        \begin{itemize}
+          \item \sampler{MultiNest} --- Chapter~\ref{ch:multinest}
+          \item \sampler{Dynesty} --- Chapter~\ref{ch:dynesty}
+        \end{itemize}
+        These methods also react to results, but toward a different goal: they shrink a
+        population of \emph{live
         points} down through the likelihood, one point at a time, until the remaining
         volume can no longer change the answer. The by-product of that bookkeeping is
         the \textbf{Bayesian evidence} ($\log Z$) alongside ordinary posterior samples
-        --- something no other family here produces. Chapter~\ref{ch:multinest}
-        teaches the algorithm and covers \sampler{MultiNest} in full;
-        Chapter~\ref{ch:dynesty} covers \sampler{Dynesty}'s dynamic engine.
+        --- something no other family here produces.
 \end{description}
 
 \section{The \textsc{mcmc} family}
 \label{sec:mcmc-family}
 
-\begin{jwarn}
-The ten \textsc{mcmc} methods below are implemented and registered --- every one
-raises no \code{NotImplementedError} --- but, unlike the other three families, they do
-not yet have a dedicated chapter in this book: there is no closed \yamlkey{Bounds}
-validation gate or Simple/Full \textsc{yaml} template for them yet, the way
-Chapters~\ref{ch:multinest}--\ref{ch:dynesty} have for nested sampling. What follows is
-everything confirmed from the source; treat it as a map of what exists, not a
-complete reference.
-\end{jwarn}
-
-All ten share one implementation (a single class dispatched by \yamlkey{Sampling.Method}
-string) and one config block, \yamlkey{Sampling.Bounds} --- the \emph{same} top-level
-key nested sampling uses, but read differently: \yamlkey{Bounds.num\_chains} (alias
-\yamlkey{chains}) and \yamlkey{Bounds.num\_iters} (aliases \yamlkey{iterations},
-\yamlkey{steps}) set the chain count and iteration budget, \yamlkey{Bounds.proposal\_scale}
-sets the Metropolis step size, and \yamlkey{Bounds.on\_failure} governs points whose
-likelihood does not evaluate.
-Generation is chain-based: one generation advances every active chain by one step (or,
-for \sampler{DRAM}, one delayed-rejection stage), waits at the usual feedback barrier
-for the batch's observables, and decides the next step from there --- the same
-propose/barrier/absorb shape as \sampler{AdaptiveBridson}, just with Metropolis
-acceptance instead of level-set refinement.
+All ten \textsc{mcmc} methods share one base implementation and one config block,
+\yamlkey{Sampling.Bounds} --- the \emph{same} top-level key nested sampling uses, but
+read differently. Two of them are stable, closed for validation, and fully
+documented:
 
 \begin{description}[style=nextline, leftmargin=1.2em]
-  \item[\sampler{MCMC}] Plain Metropolis --- fixed proposal scale, no adaptation.
+  \item[\sampler{ToyMCMC}] Plain random-walk Metropolis, independent chains
+        (Chapter~\ref{ch:toymcmc}) --- the family's reference method and the vehicle
+        for its shared runtime.
+  \item[\sampler{PTMCMC}] Parallel tempering on top of \sampler{ToyMCMC}
+        (Chapter~\ref{ch:ptmcmc}): several temperature rungs run in parallel and
+        periodically swap states, so hot replicas cross barriers that would trap a
+        single cold chain.
+\end{description}
+
+\begin{jwarn}
+The other eight \textsc{mcmc} methods below are implemented and registered --- every
+one raises no \code{NotImplementedError} --- but, unlike \sampler{ToyMCMC} /
+\sampler{PTMCMC} and the other three families, they do not yet have a dedicated
+chapter: there is no closed \yamlkey{Bounds} validation gate or Simple/Full
+\textsc{yaml} template for them yet. What follows is everything confirmed from the
+source; treat it as a map of what exists, not a complete reference. The runtime
+agrees with this warning: \cli{Jarvis man sampler} does not list these eight at all,
+and \cli{Jarvis man sampler --full} marks every one of them \code{status: unstable}
+for exactly this reason (Section~\ref{sec:cli-man}) --- \code{Jarvis validate} does
+not yet reject an unknown key under their \yamlkey{Bounds}.
+\end{jwarn}
+
+These eight read the same chain-count/iteration-budget/proposal-scale keys
+Chapter~\ref{ch:toymcmc} documents --- \yamlkey{Bounds.num\_chains} (alias
+\yamlkey{chains}) and \yamlkey{Bounds.num\_iters} (aliases \yamlkey{iterations},
+\yamlkey{steps}) set the chain count and iteration budget, \yamlkey{Bounds.proposal\_scale}
+sets the Metropolis step size --- plus \yamlkey{Bounds.on\_failure} governing points
+whose likelihood does not evaluate. Because their \yamlkey{Bounds} zone is not closed
+yet, these alias spellings actually work at runtime; the same spellings are rejected
+outright under \sampler{ToyMCMC}/\sampler{PTMCMC}'s closed zone
+(Chapter~\ref{ch:toymcmc}), which only recognises the canonical names. Generation is
+chain-based: one generation advances
+every active chain by one step (or, for \sampler{DRAM}, one delayed-rejection stage),
+waits at the usual feedback barrier for the batch's observables, and decides the next
+step from there --- the same propose/barrier/absorb shape as \sampler{AdaptiveBridson},
+just with Metropolis acceptance instead of level-set refinement.
+
+\begin{description}[style=nextline, leftmargin=1.2em]
+  \item[\sampler{MCMC}] Plain Metropolis --- fixed proposal scale, no adaptation;
+        \sampler{ToyMCMC} (Chapter~\ref{ch:toymcmc}) is this method's documented,
+        closed-validation sibling.
   \item[\sampler{AMMCMC}, \sampler{AM}] Adaptive Metropolis: the proposal covariance
         tunes itself from the chain's own history after a warm-up window.
   \item[\sampler{DRAM}] Delayed-Rejection Adaptive Metropolis: a rejected proposal gets
@@ -79,16 +128,14 @@ acceptance instead of level-set refinement.
   \item[\sampler{DEMCMC}] Differential Evolution MCMC: proposals jump along the vector
         between two other chains' current positions, also drawn from the complementary
         half of the population.
-  \item[\sampler{PTMCMC} (alias \sampler{PT})] Parallel tempering: multiple temperature
-        rungs run in parallel and periodically swap states, so hot chains cross
-        barriers that trap a single cold chain.
   \item[\sampler{PTEnsemble}] Parallel tempering with ensemble moves within each
-        temperature rung --- the two techniques combined.
+        temperature rung --- \sampler{PTMCMC} and \sampler{EnsembleMCMC}'s techniques
+        combined.
 \end{description}
 
-Resume is registered as \code{implemented} for every method in this family --- the same
-bar as the simple and adaptive samplers, ahead of nested sampling's \code{partial}
-status.
+Resume is registered as \code{implemented} for these eight too --- the same bar as
+\sampler{ToyMCMC}/\sampler{PTMCMC} and the simple/adaptive samplers, ahead of nested
+sampling's \code{partial} status.
 
 \section{The checklist}
 \label{sec:decision-table}
@@ -109,11 +156,10 @@ condition you satisfy is your answer.
         confidence contour, an exclusion edge --- rather than the whole space?
         $\rightarrow$ \sampler{AdaptiveBridson}.
   \item \textbf{Do you want a posterior-shaped point cloud, with no evidence
-        estimate needed?} $\rightarrow$ one of the \textsc{mcmc} family
-        (Section~\ref{sec:mcmc-family}): plain \sampler{MCMC}/\sampler{AM}/
-        \sampler{DRAM} for a well-behaved unimodal posterior,
-        \sampler{PTMCMC}/\sampler{PT}/\sampler{PTEnsemble} if it might be
-        multimodal enough to trap a single chain.
+        estimate needed?} $\rightarrow$ \sampler{ToyMCMC} (Chapter~\ref{ch:toymcmc})
+        for a well-behaved, plausibly unimodal posterior; \sampler{PTMCMC}
+        (Chapter~\ref{ch:ptmcmc}) if it might be multimodal enough to trap a single
+        chain.
   \item \textbf{Does a downstream tool need a regular, rectangular grid} to
         interpolate, contour, or Fourier-transform on? $\rightarrow$ \sampler{Grid},
         if the space is small and low-dimensional enough (Chapter~\ref{ch:grid}).
@@ -138,8 +184,8 @@ walked through the checklist above on its own:
         the landscape;
   \item an \sampler{AdaptiveBridson} card once you know which contour or exclusion
         edge you actually care about;
-  \item an \textsc{mcmc} or \sampler{Dynesty}/\sampler{MultiNest} card when you need
-        the posterior itself, or its evidence, for the paper;
+  \item a \sampler{ToyMCMC}/\sampler{PTMCMC} or \sampler{Dynesty}/\sampler{MultiNest}
+        card when you need the posterior itself, or its evidence, for the paper;
   \item a \sampler{CSV} card to re-run the interesting points from any of the above
         under a heavier workflow, keeping their original \textsc{uuid}s
         (Chapter~\ref{ch:csv-sampler}).
@@ -159,7 +205,7 @@ rebuilding the project.
         have no intrinsic dimension limit.
   \item \textbf{Budget honesty.} Only \sampler{Random} and \sampler{CSV} let you dial an
         exact sample count. \sampler{Grid} is a product; \sampler{Bridson}'s count
-        emerges from \yamlkey{Radius}; \sampler{AdaptiveBridson} stops on convergence
+        emerges from \yamlkey{radius}; \sampler{AdaptiveBridson} stops on convergence
         or its caps; the \textsc{mcmc} family runs a fixed chain count for a fixed
         iteration budget, not a target accepted-sample count. And a \yamlkey{selection}
         cut \emph{reduces} accepted counts for every fixed-set method
@@ -179,7 +225,7 @@ rebuilding the project.
 
 \begin{jtip}
 Every fixed-set, adaptive, and \textsc{mcmc} method mints deterministic \textsc{uuid}s
-from \code{(method, seed, \ldots)} --- fix \yamlkey{Bounds.Seed} and the run is re-proposable:
+from \code{(method, seed, \ldots)} --- fix \yamlkey{Bounds.seed} and the run is re-proposable:
 resume after a crash, replay on another machine, extend a \textsc{csv} of survivors, all
 without double-computing a point (Chapter~\ref{ch:reproducibility}).
 \sampler{Dynesty}/\sampler{MultiNest} are the exception --- their proposal \textsc{uuid}s

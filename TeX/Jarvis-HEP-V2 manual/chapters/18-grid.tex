@@ -30,7 +30,7 @@ The grid is laid out in u-space, so a \code{Log} variable gets a log-spaced
 \emph{physical} grid automatically --- declare the distribution you mean rather than
 hand-spacing physical values. \sampler{Grid} is the one method that needs no
 \yamlkey{Bounds} block at all --- \yamlkey{num} on each variable already determines the
-whole point set. The block is accepted, holding only \yamlkey{Bounds.Seed}, which
+whole point set. The block is accepted, holding only \yamlkey{Bounds.seed}, which
 matters just for tie-breaking bookkeeping; the point set itself is fully deterministic
 and needs no seed to reproduce.
 
@@ -96,7 +96,7 @@ place.
     Dimensions & any (product grows without mercy, Section~\ref{sec:grid-config}) \\
     Required keys & \yamlkey{num} per variable \\
     u$\to$x mapping & yes \\
-    \yamlkey{Seed} role & tie-breaking bookkeeping only --- point set needs no seed \\
+    \yamlkey{seed} role & tie-breaking bookkeeping only --- point set needs no seed \\
     \yamlkey{selection} & consumes slots, no top-up \\
     Extra output & --- \\
     \bottomrule

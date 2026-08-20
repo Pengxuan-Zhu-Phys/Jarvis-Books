@@ -9,7 +9,7 @@ assembles it into a discipline.
 \section{Determinism: what is guaranteed}
 \label{sec:determinism}
 
-With a fixed task card and a fixed \yamlkey{Bounds.Seed}:
+With a fixed task card and a fixed \yamlkey{Bounds.seed}:
 
 \begin{itemize}
   \item \textbf{The point set is deterministic --- for every fixed-set and
@@ -29,7 +29,7 @@ With a fixed task card and a fixed \yamlkey{Bounds.Seed}:
 \textbf{Nested sampling (\sampler{Dynesty}, \sampler{MultiNest}) is the exception.}
 Its proposed points carry a fresh random \textsc{uuid} each run, not a seed-derived
 hash, and there is no mid-run checkpoint (Section~\ref{sec:nested-distributed}). A
-fixed \yamlkey{Seed} still gives you the same \emph{sequence of proposals} from
+fixed \yamlkey{seed} still gives you the same \emph{sequence of proposals} from
 \code{numpy}'s generator, so results are statistically reproducible to the algorithm's
 own randomness --- but not point-for-point replayable by \textsc{uuid} the way the
 other methods are. For exact resume on a long nested run, use \code{dynesty}'s native
@@ -43,7 +43,7 @@ seeds in the card --- \yamlkey{Dump} a seed derived from the parameters if the t
 accepts one.
 
 \begin{jnote}
-There is no such thing as an unseeded run. \yamlkey{Bounds.Seed} defaults to \code{0},
+There is no such thing as an unseeded run. \yamlkey{Bounds.seed} defaults to \code{0},
 and \code{0} is seeded like any other value, so a card that never mentions a seed still
 produces the same point set every launch. What a seed buys you is therefore not
 reproducibility --- you already have that --- but \emph{independence}: give two runs of
@@ -82,7 +82,7 @@ markers. What it cannot carry --- the external tools themselves, their compilers
 \begin{itemize}
   \item tool names and versions (\textsc{spheno} 4.0.5, \ldots), and how they were
         built;
-  \item the \Jtwo\ version (\cli{pip show jarvishep2}) and the plugin package
+  \item the \Jtwo\ version (\cli{pip show Jarvis-HEP}) and the plugin package
         versions (\Portal, \Operas, \JPlot);
   \item the Python version.
 \end{itemize}
@@ -98,7 +98,7 @@ not move.
 \label{sec:repro-workflow}
 
 \begin{enumerate}
-  \item \textbf{Card in version control}, explicit \yamlkey{Bounds.Seed}, explicit
+  \item \textbf{Card in version control}, explicit \yamlkey{Bounds.seed}, explicit
         \yamlkey{run\_id}, tools pinned in \file{README.md}.
   \item \textbf{Run} --- resumable by construction; interruptions cost nothing.
   \item \textbf{Archive} \file{outputs/<scan>/} (or \cli{pack --repro} the whole

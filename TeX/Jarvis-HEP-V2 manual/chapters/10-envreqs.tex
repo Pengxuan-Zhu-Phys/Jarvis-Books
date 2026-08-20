@@ -4,8 +4,8 @@
 \newthought{One block controls the machinery.} \yamlkey{EnvReqs} carries two things: an
 entry point for \emph{shared default settings}, so a group of cards can agree on one
 runtime profile, and the \yamlkey{V2} map --- the only place scheduling, \file{SAMPLE/}
-layout, archiving and the broker are configured. \yamlkey{V2} has exactly nine keys, and
-this chapter is all nine.
+layout, archiving and the broker are configured. \yamlkey{V2} has exactly ten keys, and
+this chapter is all ten.
 
 \section{Only half of this block is checked}
 \label{sec:envreqs-zone}
@@ -21,7 +21,8 @@ immediately, telling you the key you invented and every key you could have meant
 \begin{jout}
 unsupported task EnvReqs.V2 setting(s): worker_count;
 supported settings are archiver, batch_size, check_modules,
-cleanup, factory, redis, sample_directory, worker, workers
+checkpoint_heartbeat_sec, factory, monitor, redis, sample_directory,
+worker, workers
 \end{jout}
 \end{terminal}
 
@@ -40,9 +41,9 @@ to judge how you spelled them.
 
 The practical consequence is worth carrying into the rest of the chapter: when a
 \yamlkey{V2} setting does not seem to be taking effect, the problem is not a typo. A typo
-would have stopped you at load time. Look instead at what is overriding it --- the shared
-defaults file below, or one of the two keys that can also be written elsewhere in the card
-(Sections~\ref{sec:sample-directory} and~\ref{sec:cleanup}).
+would have stopped you at load time. Look instead at the shared defaults file below, or at
+the short list of keys that are accepted and then deliberately ignored
+(Sections~\ref{sec:sample-directory} and~\ref{sec:archiver-policy}).
 
 \section{Shared defaults: \yamlkey{Check\_default\_dependencies}}
 \label{sec:check-default-deps}
@@ -73,26 +74,26 @@ file rather than the card.
 \begin{yamlwin}
 EnvReqs:
   V2:
-    workers: 4              # Worker processes        6.4
-    batch_size: 256         # sampler submit group    6.4
-    sample_directory:       # SAMPLE/ bucket policy   6.5
+    workers: 4              # Worker processes
+    batch_size: 256         # sampler submit group
+    sample_directory:       # SAMPLE/ bucket policy
       limit: 200
-    cleanup:                # result handoff          6.6
-      strategy: direct
-    archiver:               # persistence policy      6.7
+    archiver:               # persistence policy
       mode: process
       batch_size: 200
-    worker:                 # per-Worker policy       6.8
+    worker:                 # per-Worker policy
       force_serial_layers: false
       sample_artifacts: auto
-    factory:                # supervision, monitor    6.8
-      monitor_hz: 120
+    factory:                # supervision
       watchdog: {enabled: true, stale_sec: 30.0}
-    redis:                  # broker location         6.9
+    monitor:                # monitor snapshot rate
+      hz: 120
+    redis:                  # broker location
       host: 127.0.0.1
       port: 6379
-    check_modules:          # `Jarvis check` budget  6.10
+    check_modules:          # `Jarvis check` budget
       n_samples: 10
+    checkpoint_heartbeat_sec: 30   # checkpoint cadence
 \end{yamlwin}
 
 Every one of those keys is optional; the card above is a complete enumeration, not a
@@ -115,21 +116,20 @@ Chapter~\ref{ch:performance} gives the full guidance. The short version: for
 calculator-bound scans, set it near the number of calculator invocations your machine (and
 license pool) can genuinely sustain.
 
-\paragraph{\yamlkey{worker}, singular, means two different things.} The spelling without
-the \code{s} is dual-purpose, and which one you get depends on whether you wrote a number
-or a map:
+\paragraph{\yamlkey{worker}, singular, is not the count.} The two spellings are
+different settings, and the missing \code{s} is the single easiest slip to make in this
+block. \yamlkey{workers} is the count; \yamlkey{worker} is the per-Worker execution
+policy \emph{map} of Section~\ref{sec:worker-factory}. Writing a number where the map
+belongs stops the load rather than quietly running one Worker:
 
-\begin{itemize}
-  \item \yamlkey{worker: 4} --- a scalar. A compatibility spelling of \yamlkey{workers}.
-        It \emph{cannot} sit next to \yamlkey{workers}; writing both fails the load with
-        \code{EnvReqs.V2 accepts either workers or worker (count), not both}.
-  \item \yamlkey{worker: \{\ldots\}} --- a map. The per-Worker execution policy of
-        Section~\ref{sec:worker-factory}, which is a different setting entirely and
-        \emph{may} sit next to \yamlkey{workers}.
-\end{itemize}
+\begin{terminal}
+\begin{jout}
+EnvReqs.V2.worker is a policy mapping; use workers: N for the worker count
+\end{jout}
+\end{terminal}
 
-If you want both a count and a policy, the unambiguous form is \yamlkey{workers: N}
-alongside \yamlkey{worker: \{\ldots\}}.
+The two may sit side by side --- \yamlkey{workers: N} alongside
+\yamlkey{worker: \{\ldots\}} is the normal way to set a count and a policy at once.
 
 \begin{table}[ht]
   \footnotesize
@@ -162,10 +162,9 @@ Table~\ref{tab:sample-directory}.
 A bucket is packed only when it is sealed, no Sample in it is still active, and every
 Sample in it has been archived to the database --- packing can never outrun persistence.
 
-\paragraph{Where to write it.} The same map is accepted in two places, and
-\textbf{\yamlkey{Scan.sample\_directory} wins} when both are present
-(Section~\ref{sec:scan-block}). Put it under \yamlkey{Scan} when the policy belongs to one
-scan, and under \yamlkey{EnvReqs.V2} when it belongs to a shared profile.
+\paragraph{Where to write it.} \yamlkey{EnvReqs.V2} is the only home for this map ---
+\yamlkey{Scan} has no key of its own for it (\S\ref{sec:scan-block}), so there is nowhere
+else it could be shadowed from.
 
 \begin{jwarn}
 Two spellings, \yamlkey{archive\_samples} and \yamlkey{archive\_prune}, are accepted here
@@ -184,42 +183,20 @@ by \yamlkey{pack} above and by the Archiver's \yamlkey{pack\_buckets}
     \midrule
     \yamlkey{mode} & \code{process} & dedicated Archiver process, or a thread in the
                                        control process (\code{thread}) \\
-    \yamlkey{handoff} & \code{direct} & mirrors \yamlkey{cleanup.strategy} \\
     \yamlkey{pack\_buckets} & \code{true} & tar sealed buckets after archiving \\
     \yamlkey{batch\_size} & \code{200} & Samples buffered per database flush \\
     \yamlkey{flush\_interval\_sec} & \code{1.0} & time-based flush for partial batches
                                                   (floor \code{0.05}) \\
     \yamlkey{max\_hdf5\_bytes} & \code{1073741824} & shard the database once the current
                                        \file{*.hdf5} passes this size (1\,GiB) \\
-    \yamlkey{strategy} & \code{move} & \code{move} or \code{copy} when a staging hop is
-                                       active \\
-    \yamlkey{delete\_after\_archive} & \code{true} & remove staging residue when a
-                                                     staging hop is active \\
+    \yamlkey{strategy} & \code{move} & accepted, inert (see below) \\
+    \yamlkey{delete\_after\_archive} & \code{true} & accepted, inert (see below) \\
     \bottomrule
   \end{tabular}
   \endgroup
-  \caption{\yamlkey{archiver} keys. Also writable as \yamlkey{Calculators.Archiver};
-  task values win.}
+  \caption{\yamlkey{archiver} keys.}
   \label{tab:archiver-keys}
 \end{table}
-
-\section{\yamlkey{cleanup}: result handoff}
-\label{sec:cleanup}
-
-\begin{keylist}
-  \item[strategy] \code{direct} (default) or \code{mv\_to\_staging}. With
-        \code{direct}, a finished Sample's products are already in their final home
-        under \file{SAMPLE/} and the Archiver only writes database records. With
-        \code{mv\_to\_staging}, the Worker first moves the Sample directory into a
-        staging area and the Archiver moves it onward --- a buffer hop for setups where
-        final storage is slow or remote.
-  \item[staging\_dir] Unset by default, which means
-        \file{<task\_result\_dir>/\allowbreak{}staging}. Only consulted when
-        \yamlkey{strategy} is \code{mv\_to\_staging}.
-\end{keylist}
-
-The same map may be written as \yamlkey{Calculators.Cleanup}; the task-card value wins
-over the \yamlkey{EnvReqs.V2} value.
 
 \section{\yamlkey{archiver}: persistence policy}
 \label{sec:archiver-policy}
@@ -227,15 +204,25 @@ over the \yamlkey{EnvReqs.V2} value.
 Table~\ref{tab:archiver-keys} lists the keys that decide how much of a finished Sample
 survives on disk.
 
-The defaults --- a dedicated process, direct handoff, batched flushes, packed buckets ---
-are the production configuration; Chapter~\ref{ch:distributed-runtime} explains the
-machinery behind them and when to deviate.
+The defaults --- a dedicated process, batched flushes, packed buckets --- are the
+production configuration; Chapter~\ref{ch:distributed-runtime} explains the machinery
+behind them and when to deviate.
 
-\section{\yamlkey{worker} and \yamlkey{factory}: execution and supervision}
+\begin{jwarn}
+\yamlkey{strategy} and \yamlkey{delete\_after\_archive} are accepted and then ignored.
+A Worker writes each Sample's products straight to their final home under \file{SAMPLE/}
+(Section~\ref{sec:sample-lifecycle}), so there is no intermediate copy for either key to
+govern --- setting them changes nothing. The same is true of \yamlkey{archive\_samples}
+and \yamlkey{archive\_prune} under \yamlkey{sample\_directory}
+(Section~\ref{sec:sample-directory}).
+\end{jwarn}
+
+\section{\yamlkey{worker}, \yamlkey{factory}, \yamlkey{monitor}: execution and supervision}
 \label{sec:worker-factory}
 
-Two small policy groups you will rarely set, and should recognise when you meet them in
-somebody else's card.
+Three small policy groups you will rarely set, and should recognise when you meet them in
+somebody else's card. Each takes a map, and each accepts exactly the keys below --- an
+invented one is rejected by name, the same as at the top level of \yamlkey{V2}.
 
 \begin{keylist}
   \item[worker.force\_serial\_layers] \opt, default \code{false}. Run a Sample's
@@ -248,13 +235,15 @@ somebody else's card.
         \code{auto} creates it only when something actually needs it --- a
         \token{@Sdir} reference, a file-based calculator --- so opera-only scans write
         nothing per point.
-  \item[factory.monitor\_hz] \opt, default \code{120}, floor \code{1}. How often the
-        \code{TaskFactory} refreshes the snapshot that \cli{Jarvis monitor} reads
-        (Chapter~\ref{ch:monitoring}).
-  \item[factory.watchdog] \opt, a map: \yamlkey{enabled} (\code{true}),
+  \item[factory.watchdog] \opt, and \yamlkey{watchdog} is the \emph{only} key
+        \yamlkey{factory} takes. A map: \yamlkey{enabled} (\code{true}),
         \yamlkey{stale\_sec} (\code{30.0}), \yamlkey{poll\_interval\_sec} (\code{1.0}),
         \yamlkey{max\_sample\_retries} (\code{3}). Detects a Worker that has stopped
         reporting and re-queues the Sample it was holding, up to the retry limit.
+  \item[monitor.hz] \opt, default \code{120}, floor \code{1}, and likewise the only key
+        \yamlkey{monitor} takes. How often the \code{TaskFactory} refreshes the snapshot
+        \cli{Jarvis monitor} reads (Chapter~\ref{ch:monitoring}). Note the home: this is
+        a sibling of \yamlkey{factory}, not a key inside it.
 \end{keylist}
 
 \section{\yamlkey{redis}: where the broker lives}
@@ -283,14 +272,37 @@ through the runtime metadata it published, so they follow the card rather than a
 \section{\yamlkey{check\_modules}: the smoke-test budget}
 \label{sec:check-modules-settings}
 
-Two keys, consulted only by \cli{Jarvis check} (Chapter~\ref{ch:check-modules}):
+Three keys, consulted only by \cli{Jarvis check} (Chapter~\ref{ch:check-modules}):
 
 \begin{keylist}
   \item[data] \opt, default \marker{\&J/}\file{data/\allowbreak{}check\_modules\_points.csv}.
-        A \textsc{csv} of fixed points to rehearse with, if that file exists.
+        A \textsc{csv} of fixed points to rehearse with, if that file exists. This is the
+        \emph{only} place a check \textsc{csv} can be named.
   \item[n\_samples] \opt, default \code{10}. How many points to draw from your real
         \yamlkey{Sampling.Method} when no \textsc{csv} resolves.
+  \item[timeout\_sec] \opt, default \code{120.0}. How long \cli{check} waits for its
+        smoke Samples to reach the database --- a deadline, not a fixed sleep, so a fast
+        card finishes fast. \cli{Jarvis check --timeout} overrides it for one invocation
+        (\S\ref{sec:cli-check}).
 \end{keylist}
+
+\section{\yamlkey{checkpoint\_heartbeat\_sec}: how often state is saved}
+\label{sec:checkpoint-heartbeat}
+
+\opt, a positive number, default \code{30}, floor \code{1}. The cadence at which a
+sampler that snapshots \emph{during} a run writes its state: the fixed-set and
+\sampler{CSV} methods (Chapters~\ref{ch:random}--\ref{ch:csv-sampler}) and the
+\textsc{mcmc} family (Chapters~\ref{ch:toymcmc}--\ref{ch:ptmcmc}).
+
+It sets a floor, not a timer. The snapshot is taken at the first point the sampler can
+safely take one once this many seconds have elapsed --- a feedback boundary, never
+mid-generation --- so a checkpoint always describes a consistent state
+(Chapter~\ref{ch:checkpoint}). Lower it when a run is expensive to lose and cheap to
+snapshot; raise it when the state is large.
+
+Nested sampling does not use this value: \sampler{MultiNest} and \sampler{Dynesty} keep
+their own engine-save cadence (Section~\ref{sec:nested-distributed}), so changing it has
+no effect on those two.
 
 \section{What is \emph{not} here}
 \label{sec:not-here}

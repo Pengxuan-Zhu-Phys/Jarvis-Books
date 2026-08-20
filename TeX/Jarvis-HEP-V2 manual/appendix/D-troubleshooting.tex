@@ -25,7 +25,7 @@ The symptoms below are the ones that survive a clean validation.
         Table~\ref{tab:distributions} (Section~\ref{sec:variables-entry}).
   \item[Validation error \code{JV2-MTH-003}: \yamlkey{Sampling.Method} not
         implemented]
-        A typo'd or unsupported method name; the seven valid values are listed in
+        A typo'd or unsupported method name; the nine valid values are listed in
         Section~\ref{sec:method}. Under \yamlkey{mode: check\_modules} this
         only fires when \emph{no} check-points \textsc{csv} also resolves --- delete
         the stray \yamlkey{Method} or fix it (Section~\ref{sec:check-points-source}).
@@ -110,6 +110,8 @@ The symptoms below are the ones that survive a clean validation.
         Its bucket was packed --- look inside \file{SAMPLE/<bucket>.tar.gz}
         (Section~\ref{sec:sample-outputs}); records in the database carry the paths.
   \item[\cli{Jarvis plot} exits 2]
-        The \code{plot} extra is not installed, or you passed a scan card instead of a
-        \JPlot\ scene (Chapter~\ref{ch:jarvisplot}).
+        Almost always: you passed a scan card instead of a \JPlot\ scene
+        (Chapter~\ref{ch:jarvisplot}). \JPlot\ is a core dependency, so a genuinely
+        missing package means a broken environment --- the error names the exact
+        \code{pip install} command to repair it.
 \end{description}

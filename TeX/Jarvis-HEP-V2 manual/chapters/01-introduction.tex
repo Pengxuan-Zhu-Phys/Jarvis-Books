@@ -202,9 +202,10 @@ Every run writes a predictable, self-contained tree under your project
 \section{The package family}
 \label{sec:ecosystem}
 
-\Jtwo\ delegates specialised jobs to sibling packages. Two install automatically; one
-is optional. Upgrading a sibling adds features without a runtime release.
-Table~\ref{tab:ecosystem} names all three and what each is responsible for.
+\Jtwo\ delegates specialised jobs to sibling packages, and all three install
+automatically as core dependencies --- nothing to opt into. Upgrading a sibling adds
+features without a runtime release. Table~\ref{tab:ecosystem} names all three and
+what each is responsible for.
 
 \begin{table}[ht]
   \footnotesize
@@ -219,7 +220,7 @@ Table~\ref{tab:ecosystem} names all three and what each is responsible for.
               \textsc{csv}, \textsc{slha}, \ldots\ (Section~\ref{sec:format-catalog}) \\
     \Operas & automatic   & registry of reusable Python operators and expression
               functions (Chapter~\ref{ch:jarvis-operas}) \\
-    \JPlot  & optional \code{[plot]} extra & \textsc{yaml}-driven figures from scan
+    \JPlot  & automatic   & \textsc{yaml}-driven figures from scan
               outputs (Chapter~\ref{ch:jarvisplot}) \\
     \bottomrule
   \end{tabular}

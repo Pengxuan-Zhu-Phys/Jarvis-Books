@@ -23,7 +23,7 @@ Jarvis <intent> <card>.yaml [flags]
 
 The intent comes first because it is the decision you actually make; the card is the
 noun it acts on. \cli{Jarvis -h} prints the whole surface, and it does not print a flat
-list --- the commands arrive already sorted into the five groups of
+list --- the commands arrive already sorted into the six groups of
 Table~\ref{tab:cli-groups}, which are the groups you actually work in:
 
 \begin{table}[ht]
@@ -34,6 +34,9 @@ Table~\ref{tab:cli-groups}, which are the groups you actually work in:
     \toprule
     \textbf{Group} & \textbf{Commands} & \textbf{What the group is for} \\
     \midrule
+    YAML authoring &
+      \clih{man} &
+      write a correct card, before you run anything (\S\ref{sec:cli-man}) \\
     Scan workflow &
       \clih{validate} \clih{check} \clih{run} &
       the same card, executed at three depths (\S\ref{sec:cli-ladder}) \\
@@ -52,9 +55,9 @@ Table~\ref{tab:cli-groups}, which are the groups you actually work in:
     \bottomrule
   \end{tabular}
   \endgroup
-  \caption[The five command groups printed by \clih{Jarvis -h}.]{The five command
-  groups printed by \clih{Jarvis -h}. Within the first group the order is the order you
-  should use them in.}
+  \caption[The six command groups printed by \clih{Jarvis -h}.]{The six command
+  groups printed by \clih{Jarvis -h}, in print order. Within the \emph{Scan workflow}
+  group specifically, the order is the order you should use them in.}
   \label{tab:cli-groups}
 \end{table}
 
@@ -63,6 +66,12 @@ command moves or appears, the help panel is where it shows up first. Two habits 
 Run \cli{Jarvis -h} when you have forgotten \emph{which} command, and
 \cli{Jarvis <command> -h} when you have forgotten \emph{which flag} --- the help text
 says so itself, and every command accepts both \cli{-h} and \cli{--help}.
+
+Three top-level options stand outside the groups because they answer a question about
+your installation rather than acting on a scan: \cli{-h}/\cli{--help} above,
+\cli{-v}/\cli{--version} for the banner and the runtime version
+(Section~\ref{sec:verify-version}), and \cli{--refs} for the papers to cite when the
+scan becomes one (\S\ref{sec:cli-refs}).
 
 \paragraph{The card never changes between intents.} This is the single most important
 consequence of the design, and it is worth stating as a rule: the file you hand to
@@ -88,6 +97,94 @@ Provide a task YAML or a subcommand
 The same instinct governs conflicts. Naming two intents at once --- a subcommand plus a
 legacy flag that means something different (Section~\ref{sec:cli-legacy}) --- is a usage
 error, not a precedence puzzle to be resolved silently in your favour.
+
+\section{\clih{man}: the schema, without leaving the terminal}
+\label{sec:cli-man}
+
+\emph{YAML authoring} prints first in Table~\ref{tab:cli-groups} because it comes before
+everything else: every diagnostic in a validation report carries a \code{hint} field, and
+for most findings that hint \emph{is} a \cli{Jarvis man} command aimed at exactly the
+block that is unhappy --- the runtime falls back to generating one whenever the check
+that raised the finding did not already spell out a more specific fix in words
+(Section~\ref{sec:validation}). \cli{man} is the tool those hints point to --- the
+task-card schema and the sampler catalog, walked one dotted path at a time, so a card can
+usually be fixed without this book open.
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis man                        # the domain index
+Jarvis man yaml.Sampling.Method   # walk the task-card schema itself
+Jarvis man sampler.Bridson        # one method's full Bounds reference
+Jarvis man example.random         # a complete, runnable task card
+\end{jcmd}
+\end{terminal}
+
+\subsection{Six domains, one dotted path}
+
+A topic is a single dotted path --- \code{sampler.Bridson}, not
+\code{sampler Bridson} --- and it always resolves into one of six domains:
+
+\begin{keylist}
+  \item[yaml] Walks the task-card schema directly, at any depth: \cli{Jarvis man
+        yaml.Calculators.Modules.execution} opens the same node
+        Table~\ref{tab:block-owners} points you to by chapter.
+  \item[sampler] One page per sampling method --- its \yamlkey{Bounds} keys, which are
+        required, and a ready-to-paste \textsc{yaml} block. \cli{Jarvis man sampler}
+        alone lists every method; see below for what it leaves out.
+  \item[calculator] The \yamlkey{Calculators.Modules[]} surface, plus \Portal\ file-type
+        tables for \yamlkey{execution.input}/\yamlkey{output} via \cli{--type} ---
+        the same tables \cli{Jarvis portal man} prints (\S\ref{sec:cli-discovery}), one
+        format at a time.
+  \item[operas] The \yamlkey{Operas.Modules[]} call syntax (Chapter~\ref{ch:operas}).
+  \item[tokens] The token vocabulary --- \token{@Sdir}, \marker{\&J/},
+        \code{\$\{LibDeps:\}} --- covered in full in Chapter~\ref{ch:command-system}.
+  \item[example] Complete, shippable task cards: \code{random}, \code{random-operas},
+        \code{random-calculator}, \code{bridson}, \code{csv}, \code{dynesty},
+        \code{multinest}, \code{calculator}. Unlike Appendix~\ref{app:gallery}, these
+        are generated from the live schema, not typed prose, so they cannot drift out
+        of sync with the runtime that reads them.
+\end{keylist}
+
+\paragraph{\clih{--full}: the stable/unstable line.} Plain \cli{Jarvis man sampler}
+lists only the nine methods whose \yamlkey{Bounds} contract is finished ---
+\sampler{AdaptiveBridson}, \sampler{Bridson}, \sampler{CSV}, \sampler{Dynesty},
+\sampler{Grid}, \sampler{MultiNest}, \sampler{PTMCMC}, \sampler{Random},
+\sampler{ToyMCMC}. \cli{--full} adds the remaining eight \textsc{mcmc} methods
+(Section~\ref{sec:mcmc-family}), each marked \code{status: unstable}: they run, but
+\yamlkey{Bounds} for them is not a closed surface yet, so \cli{Jarvis validate} will
+not catch a typo in one of their keys the way it catches one in
+\yamlkey{Bounds.radius}. Treat the default, short list as the methods this book and
+the schema both consider finished; reach for \cli{--full} only once you already know
+you are choosing one of those eight.
+
+\subsection{For scripts and coding agents}
+
+\cli{--json} turns any page into one machine-readable object with a stable key
+contract --- \code{summary}, \code{keys}, \code{examples}, \code{related\_diagnostics},
+\code{see\_also}, and page-specific extras such as \code{methods} or
+\code{example\_refs}. \cli{--code JV2-XXX-NNN} does the reverse lookup: given a
+diagnostic code, it opens the man page that explains it, which is the same jump the
+\code{hint} field makes automatically.
+
+An unknown topic is a usage error, not a crash, and it offers a spelling correction
+where it can:
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis man Sampling.Bunds
+\end{jcmd}
+\termsep
+\begin{jout}
+Unknown man topic: Sampling.Bunds (did you mean: Sampling, sampler.Bridson,
+AdaptiveBridson)
+Try: Jarvis man   or   Jarvis man sampler.Bridson
+\end{jout}
+\end{terminal}
+
+Exit code \code{2}, the same usage-error code as a bad flag. With \cli{--json} the same
+failure comes back as an envelope (\code{ok: false}, a \code{diagnostics} array, and the
+same \code{see\_also} suggestions) instead of two lines on standard error, so a script
+never has to scrape prose to notice it asked for something that does not exist.
 
 \section{The ladder of commitment}
 \label{sec:cli-ladder}
@@ -172,7 +269,7 @@ Config validation failed (1 error(s), 0 warning(s)):
   [error] JV2-MTH-003  Sampling.Method
           'Dynastey' is not implemented in Jarvis-HEP V2. Available: AM, AMMCMC,
           AdaptiveBridson, Bridson, CSV, DEMCMC, DRAM, Dynesty, Ensemble,
-          EnsembleMCMC, Grid, MCMC, MultiNest, PT, PTEnsemble, PTMCMC, Random
+          EnsembleMCMC, Grid, MCMC, MultiNest, PTEnsemble, PTMCMC, Random, ToyMCMC
 \end{jout}
 \end{terminal}
 
@@ -200,7 +297,8 @@ just not quite the way you think'' should be caught first.
 
 \paragraph{\clih{--json}.} The same report, on standard output, as one \textsc{json}
 object --- \code{ok}, the resolved \code{task\_yaml} path, the \code{scan\_name}, and an
-\code{issues} array of the four fields above:
+\code{issues} array of the four fields above, plus a \code{hint}: an executable
+\cli{Jarvis man} command aimed at this exact finding (\S\ref{sec:cli-man}):
 
 \begin{terminal}
 \begin{jout}
@@ -208,7 +306,7 @@ object --- \code{ok}, the resolved \code{task\_yaml} path, the \code{scan\_name}
   "issues": [
     {
       "code": "JV2-MTH-003",
-      "hint": null,
+      "hint": "Run: Jarvis man sampler",
       "level": "error",
       "message": "'Dynastey' is not implemented in Jarvis-HEP V2. ...",
       "path": "Sampling.Method"
@@ -244,10 +342,20 @@ from a \textsc{csv} if your card resolves to one, or about ten drawn from your r
 shell commands, the same \Portal\ readers and writers, the same \Operas\ calls, the same
 likelihood expression.
 
-Two flags earn their keep here. \cli{--strict} applies to the same validation gate as
-above. \cli{--console-level DEBUG} raises what reaches the screen, which is what you want
-the first time a card fails on a new machine --- the files were already recording at
-\code{DEBUG} either way (\S\ref{sec:cli-logging-flags}).
+\cli{check} takes the same \cli{--strict}, \cli{--skip-library-installation},
+\cli{--console-level}, and \cli{--silence} as \cli{run}, with one difference and one
+addition. The difference: \cli{check} defaults \cli{--console-level} to \code{DEBUG}
+rather than \code{WARNING}, because watching the output \emph{is} the point of the
+command --- you are rehearsing a workflow, not minding a scan. The addition:
+
+\begin{keylist}
+  \item[--timeout SECONDS] How long to wait for the smoke Samples to reach the database.
+        A deadline, not a fixed sleep, so a card that finishes sooner exits sooner. It
+        overrides \yamlkey{EnvReqs.V2.check\_modules.timeout\_sec} for this one
+        invocation, and falls back to \code{120} when neither is set
+        (Section~\ref{sec:check-modules-settings}).
+\end{keylist}
+
 Chapter~\ref{ch:check-modules} covers where the points come from and how to read the
 per-Sample output that follows.
 
@@ -276,6 +384,11 @@ happens; \cli{--resume} answers yes non-interactively
         batch queues and \cli{nohup}, where there is no terminal to answer the question.
   \item[--strict] Promote validation warnings to errors, exactly as in
         Section~\ref{sec:cli-validate}. Costs nothing; run it this way.
+  \item[--skip-library-installation] Do not build anything under \yamlkey{LibDeps}
+        (Chapter~\ref{ch:libdeps}); require every declared library path to already
+        exist, and fail if one does not. The flag for a shared cluster where the tools
+        were installed once, deliberately, by somebody else --- and the way to be sure a
+        run is using \emph{that} build rather than quietly making its own.
   \item[--skip-draw-flowchart] Skip the \file{flowchart.json} and \file{flowchart.png}
         export. Useful on headless machines and in repeated short runs where you already
         know the workflow graph.
@@ -632,6 +745,47 @@ up as an absent name rather than as a puzzling \yamlkey{expression} failure half
 through a scan. When a card names something these commands do not list, the card is
 wrong about this machine.
 
+\section{\clih{--refs}: what to cite}
+\label{sec:cli-refs}
+
+\begin{terminal}
+\begin{jcmd}
+Jarvis --refs
+\end{jcmd}
+\end{terminal}
+
+When a scan becomes a paper, the methods section owes citations to more than \Jtwo\
+itself: the sampler you used is somebody's published algorithm.
+\cli{--refs} prints that list --- the framework paper, then one entry per built-in
+sampler method, each with authors, title, and an arXiv number or \textsc{doi}:
+
+\begin{terminal}
+\begin{jout}
+Jarvis-HEP V2 references
+
+Framework
+[1] Jarvis-HEP framework
+    Jarvis-HEP: A lightweight Python framework for workflow composition and
+    parameter scans in high-energy physics
+    Erdong Guo, Paul Jackson, Jin-Min Yang, Pengxuan Zhu
+    arXiv: 2604.25557
+
+Built-in sampler methods
+[2] Bridson / AdaptiveBridson
+    Fast Poisson Disk Sampling in Arbitrary Dimensions
+    Robert Bridson
+    DOI: 10.1145/1278780.1278807
+...
+Random, Grid, and CSV are native Jarvis proposal/input strategies; no external
+sampler citation is required.
+\end{jout}
+\end{terminal}
+
+The closing line is the useful part: it tells you when there is \emph{nothing} to cite
+beyond the framework, which is a question a methods section otherwise leaves you
+guessing at. Every work cited there also appears in this book's own bibliography,
+attached to the chapter that explains the method.
+
 \section{Legacy spellings}
 \label{sec:cli-legacy}
 
@@ -642,7 +796,6 @@ flag, \Jtwo\ treats it as a path and lets a trailing legacy flag pick the intent
 \begin{itemize}
   \item \cli{Jarvis <task>.yaml} routes to \cli{run}.
   \item \cli{Jarvis <task>.yaml --resume} routes to \cli{run --resume}.
-  \item \cli{Jarvis <task>.yaml --check-modules} routes to \cli{check}.
   \item \cli{Jarvis <task>.yaml --validate} routes to \cli{validate}.
   \item \cli{Jarvis <task>.yaml --convert} routes to \cli{convert}.
   \item \cli{Jarvis --monitor} routes to \cli{monitor} (\S\ref{sec:cli-ps-kill}).

@@ -91,7 +91,7 @@ scans make joining the cheap pass and the expensive pass a one-line \code{merge}
   \item \textbf{Re-running known points.} Benchmarks, another paper's published set, or
         a previous scan's survivors --- anywhere the point set itself, not a generation
         rule, is the input.
-  \item \textbf{No u-space semantics apply.} \yamlkey{Radius}, \yamlkey{"Point number"},
+  \item \textbf{No u-space semantics apply.} \yamlkey{radius}, \yamlkey{point\_number},
         and the distribution catalog (Chapter~\ref{ch:variables}) are all irrelevant
         here; only the file's columns matter.
   \item \textbf{Not a generator.} If you need \emph{new} points, \sampler{CSV} is never
@@ -119,7 +119,7 @@ u-space or \yamlkey{Mapper} involved at all. Table~\ref{tab:csv-summary} sums it
     Dimensions & any \\
     Required keys & \yamlkey{Bounds.path} \\
     u$\to$x mapping & none --- physical rows travel as-is \\
-    \yamlkey{Seed} role & --- \\
+    \yamlkey{seed} role & --- \\
     \yamlkey{selection} & consumes rows, no top-up \\
     Extra output & --- \\
     \bottomrule
