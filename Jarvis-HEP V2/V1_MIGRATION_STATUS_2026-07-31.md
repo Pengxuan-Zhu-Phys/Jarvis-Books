@@ -114,7 +114,7 @@ EnvReqs/LibDeps）**全部由 HEP 自己拥有**，没有任何外部组件参�
 1. **"已注册但未验收"的 10 个 MCMC 家族方法**：代码在、`Jarvis2 validate` 通过、用户现在就能
    `Method: DRAM` 直接开跑。如果这个家族确实还不该给用户用，建议在注册层标成 experimental
    （校验时给 warning，或从 `JV2-MTH-003` 的 "Available:" 列表里摘掉），
-   而不是让"校验通过"暗示它已就绪。（此问题在 `SCHEMA_REVIEW_2026-07-31.md` §1 已提过，仍未决。）
+   而不是让"校验通过"暗示它已就绪。（此问题在 [`archive/reviews/SCHEMA_REVIEW_2026-07-31.md`](archive/reviews/SCHEMA_REVIEW_2026-07-31.md) §1 已提过；MCMC Bounds 仍标 `unstable`，见 D25 / D13.14。）
 
 2. **`--refs`**：已作为 D18.8 完成；后续只需在新增内置采样器时补充其引用。
 

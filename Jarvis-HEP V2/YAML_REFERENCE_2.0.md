@@ -10,9 +10,9 @@ reads — including defaults, valid values, aliases, and validation behavior. Us
 to review whether the YAML interaction design is complete and coherent.
 **Companion docs**: [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md) (architecture),
 [`components/config_schema.md`](components/config_schema.md) (loader internals),
-[`DESIGN_PRINCIPLES_REVIEW_2.0.md`](DESIGN_PRINCIPLES_REVIEW_2.0.md) (code-quality review,
-including the `Distributor`/IO-type registry work that will change some of the "hard error"
-behavior documented in §13).
+[`DESIGN_ARCHITECTURE_HARDENING_2.0.md`](DESIGN_ARCHITECTURE_HARDENING_2.0.md) (D25 structure
+track). The 2026-07 D9 review is archived at
+[`archive/reviews/DESIGN_PRINCIPLES_REVIEW_2.0.md`](archive/reviews/DESIGN_PRINCIPLES_REVIEW_2.0.md).
 
 > Everything below is derived from the code, not from the design sketches. Keys that appear in
 > the design docs but are **not** implemented are listed in Appendix A, not in the main body.
@@ -986,23 +986,35 @@ Scaffold templates: `project_template/bin/sampling/Sampling_{Dynesty,MultiNest}_
 
 ### 6.11 MCMC family: `MCMC` / `AMMCMC` / `AM` / `DRAM`
 
+> **Current vs target contract:** this section records the current D13 migration surface,
+> whose per-method JSON Schemas are still marked `unstable`. The reviewed canonical YAML,
+> strict schema, minimal class architecture, Redis contract, and trace/checkpoint design are
+> specified in
+> [`DESIGN_MCMC_ARCHITECTURE_2.0.md`](DESIGN_MCMC_ARCHITECTURE_2.0.md). Until that work is
+> implemented, do not read the target document as an as-built runtime guarantee.
+
 Feedback-driven Metropolis on Redis. One generation ≈ one proposal stage across chains;
 Workers evaluate `LogL`; control absorbs accept/reject.
 
 | Key (`Sampling.Bounds`) | Aliases | Default | Notes |
 |---|---|---|---|
-| `num_chains` | `chains` | `1` | Prefer `chains ≥ workers` |
-| `num_iters` | `steps` | required-ish | Iterations per chain |
-| `proposal_scale` | — | `0.1` | Gaussian scale (unit cube) |
-| `on_failure` | — | `reject` | `reject` \| `halt` |
-| `adapt.enabled` | `adapt_enabled` | `true` (AM/DRAM) | Adaptive covariance |
-| `adapt.start_iter` / `adapt.window` / `adapt.eps` / `adapt.scale` | dotted or flat | V1 defaults | AM/DRAM |
-| `dr.steps` | `dr_steps` | `2` | DRAM delayed-rejection stages |
-| `dr.scale_factors` | `dr_scale_factors` | `[1.0, 0.5]` | DRAM |
+| `num_chains` | `chains` | required | Prefer chains >= workers |
+| `num_iters` | `steps`, `iterations` | required | Iterations per chain |
+| `proposal_scale` | nested `proposal.scale` | `0.1` | Gaussian scale (unit cube); scalar broadcasts, or list gives one value / one per chain |
+| `proposal_scales` | nested `proposal.scales` | omitted | One value or one per chain |
+| `seed` | — | `0` | Lower-case key in current code |
+| `on_failure` | `Sampling.on_failure` fallback | `reject` | Current Bounds precedence; target moves it to Sampling root |
+| `adapt_enabled` | nested `adapt.enabled` | `true` (AM/DRAM) | Adaptive covariance |
+| `adapt_start_iter` / `adapt_window` / `adapt_eps` / `adapt_scale` | nested `adapt.*` | `100` / `25` / `1e-6` / `2.38` | AM/DRAM |
+| `dr_steps` | nested `dr.steps` | `2` | DRAM delayed-rejection stages |
+| `dr_scale_factors` | nested `dr.scale_factors` | `[1.0, 0.5]` | DRAM |
 
-**Outputs:** `DATABASE/samples.hdf5` rows include `chain_id`, `step`, `stage`;
-`DATABASE/chain_history.csv` has `accepted`/`weight`; `DATABASE/sampler_summary.json`
-has accept rates + Gelman–Rubin `rhat_logl`. See [datarecorder.md](components/datarecorder.md) §2.1.
+**Current outputs:** `DATABASE/samples.hdf5` is the evaluated-proposal archive; do not
+assume control-side `chain_id` / `step` / `stage` annotations crossed the current light
+Sample task wire. `DATABASE/chain_history.csv` is a diagnostic export with
+`accepted`/`weight`, not yet the authoritative full-state posterior trace proposed by the
+2.1 design. `DATABASE/sampler_summary.json` contains current accept-rate and logL-based
+diagnostics. See [datarecorder.md](components/datarecorder.md) §2.1.
 
 ### 6.12 Ensemble / DE / PT: `EnsembleMCMC` / `Ensemble` / `DEMCMC` / `PT*` 
 
@@ -1010,13 +1022,13 @@ Same `MCMCSampler` class, different engines:
 
 | Method | Engine notes |
 |---|---|
-| `EnsembleMCMC` / `Ensemble` | Stretch move; half-ensemble barriers; `stretch_a` (default 2.0) |
-| `DEMCMC` | Differential evolution; `de.gamma` / `de.noise` / `de.crossover` |
+| `EnsembleMCMC` / `Ensemble` | Stretch move; half-ensemble barriers; flat `stretch_a` (default 2.0; nested alias accepted) |
+| `DEMCMC` | Differential evolution; flat `de_gamma` / `de_noise` / `de_crossover` (nested aliases accepted) |
 | `PTMCMC` / `PT` / `PTEnsemble` | Parallel tempering; temperature ladder + control-side swaps |
 
 Common Bounds keys from §6.11 still apply (`num_chains`, `num_iters`, …). PT extras:
-temperature ladder from Bounds (see engine config contract). Summary includes
-`swap_attempts` / `swap_accepts` when PT is active.
+flat `temperature_ladder` and `exchange_interval` (nested compatibility aliases are
+accepted). Summary includes `swap_attempts` / `swap_accepts` when PT is active.
 
 ### 6.12b `Sampling.FeedbackReturn` (optional, D13.8)
 
@@ -1425,9 +1437,9 @@ use; AdaptiveBridson targets and sampler selections use control-process contexts
 `LogGauss` omits the normalisation term; `Heaviside(0) = 0.5`. The mechanism is
 `ExpressionContext → CompiledExpression` for Operas, Likelihood, Calculator/Portal, Selection,
 and AdaptiveBridson; the YAML structures remain unchanged. See
-[`V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md`](V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md)
+[`V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md`](archive/reviews/V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md)
 for the source audit and
-[`OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md`](OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md)
+[`OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md`](archive/reviews/OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md)
 for the external extension lifecycle.
 
 `call_mode: acall` recipe (the operator is an `async def`, awaited on a private event loop —

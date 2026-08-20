@@ -9,6 +9,11 @@ verified: 2026-07-21 @ jarvis2/2daf417
 
 # 用 MCMC 做后验扫描
 
+> 当前 D13 实现可运行，但 MCMC 的严格 YAML schema、完整状态轨迹和部分算法修正仍按
+> [`../DESIGN_MCMC_ARCHITECTURE_2.0.md`](../DESIGN_MCMC_ARCHITECTURE_2.0.md) 2.1
+> 方案实施中。当前 `chain_history.csv` 是诊断导出，不要把它误当成已经完成校正的
+> authoritative posterior trace。
+
 ## 目标
 
 用 DRAM（自适应 + 延迟拒绝，最皮实的单链族方法）跑出后验样本，
@@ -32,9 +37,9 @@ Sampling:
     - name: y
       distribution: {type: Flat, parameters: {min: 0.0, max: 5.0}}
   Bounds:
-    Seed: 21
-    chains: 8            # 链数；≥ workers，否则 Worker 闲置
-    steps: 2000          # 每链迭代数
+    seed: 21
+    num_chains: 8        # 链数；≥ workers，否则 Worker 闲置
+    num_iters: 2000      # 每链迭代数
     proposal_scale: 0.1  # 初始高斯提议尺度（单位立方体坐标）
     dr_steps: 2          # DRAM 延迟拒绝级数
   LogLikelihood:
@@ -74,5 +79,5 @@ Jarvis2 run mcmc_card.yaml
 
 - **接受率≈0 或≈1** → `proposal_scale` 太大/太小 → 调一个量级；AM/DRAM 会自适应，
   但起点太离谱仍会浪费 burn-in。
-- **R-hat 明显 >1.1** → 没收敛 → 加 `steps`，或换 EnsembleMCMC/PT。
-- **Worker 大量 idle** → `chains < workers` → 加链数。
+- **R-hat 明显 >1.1** → 没收敛 → 加 `num_iters`，或换 EnsembleMCMC/PT。
+- **Worker 大量 idle** → `num_chains < workers` → 加链数。

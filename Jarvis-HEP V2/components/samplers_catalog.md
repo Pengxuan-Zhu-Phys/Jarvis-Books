@@ -26,13 +26,33 @@ SamplingVirtial (sampler.py)               # base: build_sample + Redis submit
       ├─ Bridson  (bridson.py)        method="Bridson"
       └─ FeedbackSampler (feedback_sampler.py)   # propose → hep:feedback → absorb
            ├─ AdaptiveBridsonSampler (adaptive_bridson.py)
-           ├─ MCMCSampler (mcmc_sampler.py)  # MCMC/AM/DRAM + Ensemble/DE/PT
+           ├─ MCMCBaseSampler (mcmc_sampler.py)   # shared MCMC runtime
+           │    ├─ MCMCSampler (mcmc.py)
+           │    ├─ ToyMCMCSampler (toymcmc.py)
+           │    ├─ AdaptiveMCMCBase (adaptive_mcmc.py)
+           │    │    ├─ AMMCMCSampler (ammcmc.py) → AMSampler (am.py)
+           │    │    └─ DRAMSampler (dram.py)
+           │    ├─ EnsembleMCMCBase (ensemble_mcmc.py)
+           │    │    ├─ EnsembleMCMCSampler / EnsembleSampler
+           │    │    └─ PTEnsembleSampler (ptensemble.py)
+           │    ├─ DEMCMCSampler (demcmc.py)
+           │    └─ PTMCMCBase (ptmcmc.py) → PTMCMCSampler / PTSampler
            ├─ DynestySampler (dynesty_sampler.py)      # always DynamicNestedSampler
            └─ MultiNestSampler (multinest_sampler.py)  # always static NestedSampler
 SeededOperaSampler (seeded_sampler.py)     # SamplingVirtial directly (test/acceptance)
 ```
 
-Each subclass implements the same contract: `set_config` → `propose_next` →
+`MCMCBaseSampler` owns the common chain registry, feedback barriers, acceptance
+bookkeeping, diagnostics, and checkpoint transport. Concrete method files provide
+their own `_configure_method`, `_make_engine`, and capability hooks. Adding a new
+sampler therefore means adding a subclass and a Distributor factory entry; the base
+class does not branch on method names. `mcmc_base.py` is the stable public import path,
+while `mcmc_sampler.py` retains legacy factory imports. MCMC checkpoints keep the
+explicit runtime envelope and also carry a versioned native pickle of chain engines,
+RNG state, adaptation state, and chain history; Redis/Mapper/population callbacks are
+reattached after restore.
+
+Each sampler implements the same contract: `set_config` → `propose_next` →
 `run_distributed` → `repropose_unfinished` (resume) → `at_safe_barrier` →
 `export_runtime_state` / `import_runtime_state`. Helper module `stateless_batch.py` provides
 `deterministic_sampler_uuid`, `flush_batch`, `run_stateless_distributed`; `sampling_utils.py`
@@ -129,10 +149,13 @@ selection compile-count caching, distributed submission counts, export/import ro
   `FeedbackSampler` (`adaptive_bridson.py`). Config: `Sampling.AdaptiveBridson`.
   Full spec: [adaptive_voronoi_contour.md](adaptive_voronoi_contour.md).
   Tests: `tests/test_adaptive_bridson.py`.
-- **MCMC / AMMCMC / AM / DRAM** (D13.2) — **shipped** on `FeedbackSampler`
-  (`mcmc_sampler.py` + `Sampling/Source/MCMC/` engines). V1 Bounds surface
+- **MCMC / ToyMCMC / AMMCMC / AM / DRAM** (D13.2) — **shipped** on `FeedbackSampler`
+  (`mcmc.py`, `toymcmc.py`, `ammcmc.py`, `am.py`, `dram.py`, plus the shared
+  `MCMCBaseSampler` runtime). V1 Bounds surface
   (`num_chains`/`chains`, `num_iters`/`steps`, `proposal_scale`, adapt/dr keys).
-  Tests: `tests/test_mcmc_sampler.py` (worker-count independence, Core DRAM e2e).
+  Native MCMC state pickle is written at the low-frequency sampling checkpoint;
+  final/explicit checkpoints retain the durable archive barrier. Tests:
+  `tests/test_mcmc_sampler.py` (worker-count independence, native state restore, Core DRAM e2e).
 - **Ensemble / DEMCMC / PT** (D13.3) — **shipped**: stretch (`EnsembleMCMC`/`Ensemble`),
   DE (`DEMCMC`), parallel tempering (`PTMCMC`/`PT`/`PTEnsemble`). Half-ensemble
   barriers; control-side temperature swaps. Tests: `tests/test_ensemble_samplers.py`.

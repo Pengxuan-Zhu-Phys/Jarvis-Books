@@ -6,7 +6,7 @@
 calculator"*, and write down the install-reuse behavior that shipped in `f106b65` without
 a design doc.
 **Supersedes**: the recommendation in
-[`CODE_REVIEW_2026-07-23.md`](CODE_REVIEW_2026-07-23.md) §1.1 to make the fingerprint
+[`CODE_REVIEW_2026-07-23.md`](archive/reviews/CODE_REVIEW_2026-07-23.md) §1.1 to make the fingerprint
 content-aware — see §1.
 
 ---

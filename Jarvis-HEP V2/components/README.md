@@ -1,17 +1,15 @@
 # V2 Component Designs — As-Built Reference
 
-Per-class detailed references for the V2 runtime (`jarvishep2`). Each doc fixes the **shipped code
-structure**: which classes are defined, every member function (signature + behavior), the class /
-instance attributes, inter-component interfaces, drift from the original design, and the tests that
-exercise it.
+Per-class references for the V2 runtime (`jarvishep2`). Each doc was written to fix **shipped
+code structure** (classes, members, tests). Several pages still carry a mid-July 2026 stamp
+(`d0de31a`, `Jarvis2`, Core at 675 lines). **Code is ground truth.** For current sizes,
+layering, and the D25 split plan see
+[`../DESIGN_ARCHITECTURE_HARDENING_2.0.md`](../DESIGN_ARCHITECTURE_HARDENING_2.0.md).
+Do not treat a member table here as complete if it disagrees with the file.
 
-> **As-built baseline:** runtime D0–D7 + D11/D12 UI; later stamps on docs that mention them:
-> FileOperation SAMPLE save (`399633b`), Archiver logger (`67d760d`), full CSV + scan performance
-> (`11c0489` / `4e562e0`) as of **2026-07-16**. Architecture:
-> [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md). Open work:
-> [`../V2_DISTRIBUTED_PLAN.md`](../V2_DISTRIBUTED_PLAN.md). Portal/IO:
-> [`../DESIGN_PORTAL_IO_2.0.md`](../DESIGN_PORTAL_IO_2.0.md). Monitor progress design:
-> [`../DESIGN_SAMPLE_PROGRESS_MONITOR.md`](../DESIGN_SAMPLE_PROGRESS_MONITOR.md).
+> Architecture: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md).
+> Open work: [`../V2_DISTRIBUTED_PLAN.md`](../V2_DISTRIBUTED_PLAN.md).
+> Portal/IO: [`../DESIGN_PORTAL_IO_2.0.md`](../DESIGN_PORTAL_IO_2.0.md).
 
 > **No `ModuleManager`** — module config is a picklable blueprint ([config_schema.md](config_schema.md)),
 > execution is the [Worker](worker.md). **No shared `Module` ABC** — `CalculatorModule` and
@@ -33,7 +31,7 @@ exercise it.
 | 8 | [TaskFactory](factory.md) | `jarvishep2/factory.py` | done (+ watchdog) |
 | 9 | [Sampler base](sampler.md) | `jarvishep2/Sampling/sampler.py` | done (minimal) |
 | 10 | [DataRecorder / Archiver](datarecorder.md) | `jarvishep2/archiver.py`, `database.py`, `archive_handoff.py`, `file_ops.py`, `sample_bucket.py` | done (JSON-rows HDF5 + pack-after-archive + Archiver logger) |
-| 11 | [Core orchestrator](core.md) | `jarvishep2/core.py`, `client.py` | done |
+| 11 | [Core orchestrator](core.md) | `jarvishep2/core.py`, `client.py` | done — **god-object; D25.3 splits it** |
 
 **Supporting:**
 
@@ -61,10 +59,10 @@ exercise it.
 
 | Component | Shipped module(s) | Note |
 |-----------|-------------------|------|
-| [Samplers catalog](samplers_catalog.md) | `Sampling/{bridson,randoms,grid,csv_sampler,seeded_sampler,checkpointed_sampler,stateless_batch,sampling_utils,feedback_sampler}.py` | 4 stateless + FeedbackSampler family |
-| [Distributor (dispatch)](distributor.md) | `jarvishep2/distributor.py` | Bridson/Random/Grid/CSV + AdaptiveLevelSet |
-| [FeedbackSampler base](feedback_sampler.md) | `Sampling/feedback_sampler.py` | ✅ D13.1 — propose → hep:feedback → absorb contract + porting guide |
-| [Adaptive level-set sampler](adaptive_voronoi_contour.md) | `Sampling/adaptive_level_set.py` | ✅ D10 core — feedback-driven level-set tracer on FeedbackSampler |
+| [Samplers catalog](samplers_catalog.md) | `Sampling/*` | 4 stateless + AdaptiveBridson + MCMC family + Dynesty/MultiNest |
+| [Distributor (dispatch)](distributor.md) | `jarvishep2/distributor.py` | registry; D25.1 makes this the catalog SSOT |
+| [FeedbackSampler base](feedback_sampler.md) | `Sampling/feedback_sampler.py` | D13.1 — propose → hep:feedback → absorb |
+| [AdaptiveBridson](adaptive_voronoi_contour.md) | `Sampling/adaptive_bridson.py` | D10 + live-band. Filename is historical; YAML name is **AdaptiveBridson** only |
 | MCMC / AM / DRAM | `Sampling/mcmc_sampler.py`, `Sampling/Source/MCMC/*` | ✅ D13.2 — V1 engines on FeedbackSampler; methods MCMC/AMMCMC/AM/DRAM |
 | Ensemble / DE / PT | `mcmc_sampler.py`, `Source/MCMC/engine_{ensemble,demcmc}.py` | ✅ D13.3 — half-ensemble + PT exchange; EnsembleMCMC/DEMCMC/PTMCMC/PTEnsemble |
 | [Benchmark mode](benchmark.md) | — | ⚠️ **not a module** (see `core.run_check_modules`) |
@@ -75,10 +73,10 @@ exercise it.
 |-----------|-------------------|------|
 | [Shared expression runtime (字母运算)](expression.md) | `expression.py`, `inner_func.py` | `ExpressionContext` + immutable `CompiledExpression`; all YAML expression consumers |
 | [CLI parsing (命令行解析)](cli.md) | `jarvishep2/client.py`, `process_cleanup.py` | subcommands + `-v` / `ps` / `kill` / logging flags |
-| [Config loader & normalization](config_schema.md) | `task_config.py`, `runtime_config.py`, `worker_config.py` | no jsonschema / env checks |
+| [Config loader & normalization](config_schema.md) | `task_config.py`, `runtime_config.py`, `worker_config.py`, `task_schema.py`, `task_validation.py`, `contracts/` | JSON Schema + Python contracts (D13.9 / D17) |
 | [Paths & runtime tokens](paths_tokens.md) | `jarvishep2/base.py` | functions, no `Base` class |
-| [Project tools](project_tools.md) | `jarvishep2/project_*.py` / CLI `Jarvis2 project` | done (D12.5/D12.6) |
-| [Utils / versioning / convert / plot](utils.md) | — | ⚠️ **not ported** |
+| [Project tools](project_tools.md) | `jarvishep2/project_*.py` / CLI `Jarvis project` | done (D12.5/D12.6) |
+| [Utils / versioning / convert / plot](utils.md) | `versioning.py`, `plot_scene.py`, `flowchart.py`, `core.convert` | convert + plot scenes shipped; page still incomplete |
 
 > **Folded-in glue:** `log_kv` → [logger](logger.md); `calculator_pools` → [redis_queue](redis_queue.md);
 > `archive_handoff` / `file_ops` / `database` → [datarecorder](datarecorder.md);

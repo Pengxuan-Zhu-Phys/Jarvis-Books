@@ -9,8 +9,10 @@ that maps a YAML `Sampling.Method` string to a concrete sampler class.
 **Reuses V1**: none by import.
 
 > **As-built:** hard-coded `match`/`case` is gone. Samplers register via
-> `Distributor.register(name, factory, stateless=…, resume=…)`. Built-ins: Bridson, Random,
-> Grid, CSV. New samplers register without editing `set_method`.
+> `Distributor.register(name, factory, stateless=…, resume=…)`. Built-ins include the four
+> coverage methods **plus** AdaptiveBridson, the MCMC family, Dynesty, and MultiNest.
+> **D25.1** makes this table the single catalog (manifest / contracts / mapper / man must
+> not keep private copies of the 17 names).
 
 ---
 

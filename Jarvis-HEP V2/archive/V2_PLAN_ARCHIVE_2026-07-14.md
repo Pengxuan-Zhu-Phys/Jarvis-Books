@@ -627,7 +627,7 @@ Statuses here are frozen history; the live plan only tracks open work.
   failures (Redis collision fixture, one near-threshold scaling timing, and four legacy
   `--plot` parser tests), retained under D13.15 rather than hidden.
 - **Design and evidence**: [`DESIGN_CALCULATOR_MODES_2.0.md`](../DESIGN_CALCULATOR_MODES_2.0.md)
-  and [`D20_MULTIMODE_REVIEW_2026-08-02.md`](../D20_MULTIMODE_REVIEW_2026-08-02.md).
+  and [`D20_MULTIMODE_REVIEW_2026-08-02.md`](reviews/D20_MULTIMODE_REVIEW_2026-08-02.md).
 - **Out of scope**: D8, D14, D15, D18.7–D18.9, D19, and D13.12/D13.15 fixes.
 
 ---

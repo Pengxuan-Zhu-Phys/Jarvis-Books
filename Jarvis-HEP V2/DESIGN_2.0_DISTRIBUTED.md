@@ -1,8 +1,8 @@
 # Jarvis-HEP V2 — Distributed Runtime Architecture
 
 **Version target**: 2.0.0
-**Status**: Active design — single source of truth for the V2 runtime core
-**Date**: 2026-06-24
+**Status**: Active design — single source of truth for the V2 **runtime core**
+**Date**: 2026-06-24 · structure track 2026-08-20: [`DESIGN_ARCHITECTURE_HARDENING_2.0.md`](DESIGN_ARCHITECTURE_HARDENING_2.0.md) (D25). Open work: [`V2_DISTRIBUTED_PLAN.md`](V2_DISTRIBUTED_PLAN.md).
 **Baseline**: v1.6.11 + committed M0/M1 (frozen V1 line)
 **Supersedes (data plane only)**: the retired throughput-core design `DESIGN_2.0_CORE.md` (archived in the Jarvis-HEP repo under `docs/archive/2026-06_v2_throughput_core/`).
 
@@ -289,7 +289,7 @@ variables, sampler `selection`, and AdaptiveLevelSet targets. It contains the co
 V1 lightweight surface: 38 log/exponential, trigonometric, hyperbolic, general-math, and
 Gaussian/Heaviside functions plus `Pi/E/Inf` (and V2 `pi/PI` aliases). Domain wrappers retain
 their public errors and result coercion. The authoritative inventory is
-[`V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md`](V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md).
+[`V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md`](archive/reviews/V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md).
 Contexts and compiled callables are process-local runtime state: they are never placed in Redis
 or checkpoints and are rebuilt from YAML/config after `spawn` or resume.
 

@@ -98,7 +98,7 @@ Dissolved/Retired/Control-local* row names its destination. Vendored trees
 
 > This map was written against the **design**. After the full build, several rows resolve
 > differently — the per-component docs are now as-built. Key deltas (full list in
-> [`../CODE_REVIEW_2.0.md`](../CODE_REVIEW_2.0.md)):
+> [`../archive/reviews/CODE_REVIEW_2.0.md`](../archive/reviews/CODE_REVIEW_2.0.md)):
 >
 > - **Renamed/relocated:** `mapping.py`→`mapper.py`, `hdf5writer.py`→`database.py`,
 >   `expression.py`→`inner_func.py`+`sampling_utils.py`, `config.py`→`runtime_config.py`+

@@ -7,7 +7,7 @@ from **`jarvishep2/card/logging.yaml`** (style file; defaults preserve historica
 scan-scoped component files under `logs/<scan>/`; CLI `--console-level` / `--silence`.
 QueueListener architecture unchanged (D0.3).
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §9;
-[`../PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](../PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md) §5.1.
+[`../archive/reviews/PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md`](../archive/reviews/PROTOTYPE_CLOSEOUT_REVIEW_2026-07-14.md) §5.1.
 **Reuses V1**: none by import — top-level rendering and per-Sample sink/replay are **fresh
 reimplementations** of the V1 visual contract. Templates: `jarvishep2/card/logging.yaml`,
 logo at `jarvishep2/card/logo` + `jarvishep2/versioning.py`.

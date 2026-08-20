@@ -5,7 +5,7 @@
 **Requirement (maintainer)**: *"让 coding agent 按照严格 json schema 的形式进行校验，即如果出现
 了非法的 key and/or value type，提出明显的日志提醒，并退出。"*
 **Builds on**: D13.9 validation gate ([`DESIGN_YAML_VALIDATION_2.0.md`](DESIGN_YAML_VALIDATION_2.0.md)),
-findings in [`SCHEMA_REVIEW_2026-07-31.md`](SCHEMA_REVIEW_2026-07-31.md).
+findings in [`SCHEMA_REVIEW_2026-07-31.md`](archive/reviews/SCHEMA_REVIEW_2026-07-31.md).
 
 ---
 

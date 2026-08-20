@@ -1,15 +1,18 @@
 # Component — Core orchestrator (`jarvishep2/core.py`, `jarvishep2/client.py`)
 
-**Role**: the `Jarvis2` run orchestrator. Wires config → Redis → CommandParser → Sampler →
-Factory/Workers → Archiver → checkpoint, drives the scan, and tears everything down.
-**Status**: **As-built** @ `jarvis2` `d0de31a`. `core.py` 675 lines + `client.py` 133 lines.
+**Role**: the `Jarvis` control-process orchestrator. Wires config → Redis → CommandParser →
+Sampler → Factory/Workers → Archiver → checkpoint, drives the scan, and tears everything down.
+**Status**: **As-built but stale below.** Measured 2026-08-20: `core.py` ~2702 lines /
+~80 methods, `client.py` ~1968 lines. CLI is `Jarvis` (not `Jarvis2`). Convert, plot scenes,
+check-modules, resume, and nested/MCMC dispatch **are** implemented. Member table below is
+the D1-era snapshot — trust the code. Split plan: **D25.3** in
+[`../DESIGN_ARCHITECTURE_HARDENING_2.0.md`](../DESIGN_ARCHITECTURE_HARDENING_2.0.md).
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §0.1, §2.
 **Reuses V1**: none by import.
 
 > **As-built drift:** the design's 15-step `init_argparser → … → run` sequence is condensed into
-> `bootstrap_distributed_runtime()` + `run()`. Supported task types are **check-modules** and
-> **stateless distributed samplers** (Bridson/Random/Grid/CSV); `--benchmark`/`--convert`/`--plot`
-> are **not** implemented (see [benchmark.md](benchmark.md)).
+> `bootstrap_distributed_runtime()` + `run()`. `run()` then dispatches check-modules /
+> `run_distributed` / `run_adaptive` from `Sampling.Method`.
 
 ---
 

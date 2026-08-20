@@ -5,7 +5,8 @@ watchdog. It does **not** execute tasks, hold calculators, or own Sample objects
 **Status**: **As-built** @ `jarvis2` (D9.4) — composition of private `_MonitorLoop` /
 `_Watchdog`; explicit construction preferred. ~676 lines.
 **Design refs**: [`../DESIGN_2.0_DISTRIBUTED.md`](../DESIGN_2.0_DISTRIBUTED.md) §6;
-[`../DESIGN_PRINCIPLES_REVIEW_2.0.md`](../DESIGN_PRINCIPLES_REVIEW_2.0.md) §3.4 / D9.4.
+[`../archive/reviews/DESIGN_PRINCIPLES_REVIEW_2.0.md`](../archive/reviews/DESIGN_PRINCIPLES_REVIEW_2.0.md) §3.4 / D9.4.
+Second hardening pass: [`../DESIGN_ARCHITECTURE_HARDENING_2.0.md`](../DESIGN_ARCHITECTURE_HARDENING_2.0.md).
 **Reuses V1**: none by import — replaces the singleton thread-pool `WorkerFactory`.
 
 ---

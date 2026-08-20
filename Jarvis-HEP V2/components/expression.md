@@ -7,7 +7,7 @@
 [samplers_catalog.md](samplers_catalog.md).
 **Reuses V1**: the complete lightweight function/constant contract, reimplemented with
 NumPy/SymPy semantics; no V1 runtime imports. Migration audit:
-[`../V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md`](../V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md).
+[`../archive/reviews/V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md`](../archive/reviews/V1_LIGHTWEIGHT_FUNCTION_MIGRATION_2026-07-13.md).
 
 The former state had separate `sympify`/`lambdify` implementations in Likelihood, Operas,
 Calculator I/O, sampler selection, and AdaptiveLevelSet. That duplication is removed:

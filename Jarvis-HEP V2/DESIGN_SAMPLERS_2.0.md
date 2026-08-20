@@ -2,7 +2,7 @@
 
 **Status**: design accepted 2026-07-16; **D13.1–D13.7 closed** (samplers + nuisance +
 Dynesty/MultiNest + diagnostics + review fixes). **Review**:
-[`D13_SAMPLERS_REVIEW_2026-07-17.md`](D13_SAMPLERS_REVIEW_2026-07-17.md) — architecture
+[`D13_SAMPLERS_REVIEW_2026-07-17.md`](archive/reviews/D13_SAMPLERS_REVIEW_2026-07-17.md) — architecture
 verdict positive; §2 findings fixed in D13.7 (fail-loud pool dispatch, feedback-drop
 logging, `re_run_physics` V1-true default, MCMC ESS).
 **Date**: 2026-07-16 (from the post-D12 capability review in this repo's session notes)
@@ -11,6 +11,14 @@ profiling) onto the V2 distributed execution model. **V1 `Sampling` YAML surface
 preserved verbatim** — a V1 card with `Method: DRAM` must run unmodified.
 **Maintainer constraint**: **D8 Agent Bridge stays parked** — nothing here may depend on
 D8 verbs, `run_state.json`, or agent stop-ack.
+
+> **MCMC internal-architecture follow-up (revision 2.1, 2026-08-11):** this document defines the
+> feedback transport and the original D13 migration boundary. The target internal MCMC
+> package, canonical YAML and strict schemas, the decision not to create a second
+> `mcmc/sampling.py`, minimal class set, Redis/durable-prefix contract, typed runtime state,
+> PTEnsemble shape correction, full-state trace semantics, scientific maturity gates, and
+> staged refactor are specified in
+> [`DESIGN_MCMC_ARCHITECTURE_2.0.md`](DESIGN_MCMC_ARCHITECTURE_2.0.md).
 
 ---
 

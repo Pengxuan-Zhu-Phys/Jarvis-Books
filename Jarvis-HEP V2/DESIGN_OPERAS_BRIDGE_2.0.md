@@ -87,7 +87,7 @@ Worker-owned `ExpressionContext`, shared by Operas inputs, Calculator/Portal Dum
 and Likelihood. Control-process sampler expressions use the same builder.
 
 No registry lookup occurs during repeated expression evaluation. See
-[`OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md`](OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md).
+[`OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md`](archive/reviews/OPERAS_DYNAMIC_FUNCTION_DISCOVERY_2026-07-13.md).
 
 ### 4.4 Call contract (unchanged)
 
@@ -137,7 +137,7 @@ run: 10,034 submitted/finished, zero failed, and exact recomputation parity for 
 Operas input expressions are compiled once per Worker and reused for all Samples, matching the
 Likelihood lifecycle. Both now use the same object model and standard function namespace as
 Calculator/Portal, Selection, and AdaptiveLevelSet expressions.
-See [`EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md`](EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md).
+See [`EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md`](archive/reviews/EGGBOX_BRIDSON_OPERAS_ACCEPTANCE_2026-07-13.md).
 
 ---
 

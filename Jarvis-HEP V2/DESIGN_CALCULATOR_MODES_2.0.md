@@ -3,7 +3,7 @@
 **Status**: implemented, shared-only; D20.5–D20.8 hardening completed in the working tree
 **Scope**: V2-only; do not backport to V1
 **Last updated**: 2026-08-02
-**Review evidence**: [`D20_MULTIMODE_REVIEW_2026-08-02.md`](D20_MULTIMODE_REVIEW_2026-08-02.md)
+**Review evidence**: [`D20_MULTIMODE_REVIEW_2026-08-02.md`](archive/reviews/D20_MULTIMODE_REVIEW_2026-08-02.md)
 
 ---
 
