@@ -1,6 +1,6 @@
 # V2 Distributed Runtime — Development Plan (Agent Execution Playbook)
 
-Last updated: 2026-08-20. CLI is **`Jarvis`** (older rows still say `Jarvis2` — same entry point).
+Last updated: 2026-08-21. CLI is **`Jarvis`** (older rows still say `Jarvis2` — same entry point).
 Architecture: [`DESIGN_2.0_DISTRIBUTED.md`](DESIGN_2.0_DISTRIBUTED.md).
 **This file is open work only.** Closed D0–D24 history:
 [`archive/V2_PLAN_ARCHIVE_2026-07-14.md`](archive/V2_PLAN_ARCHIVE_2026-07-14.md) and
@@ -18,10 +18,11 @@ That document is the WP spec; this ledger only tracks status.
 
 **Parked:** D8 Agent Bridge (maintainer, re-confirmed). Do not start Agent JSON verbs.
 
-**Next pick (structure):** D25.1 (`SamplerSpec` catalog), then D25.7 (test markers /
-D13.15), then D25.3 (Core split).
-**Next pick (feature):** D14.1, but **do not grow `core.py`** until D25.3, and **do not
-grow `adaptive_bridson.py`** until D13.12.
+**Next pick (structure):** D25.4 (`RedisQueue` split) or D25.5 (`SampleExecutor`);
+D25.6 (MCMC names) and D25.8 (runtime read model) may proceed in parallel.
+**Next pick (feature):** D14.1 is allowed now that D25.3 landed. **Do not grow
+`adaptive_bridson.py`** until D13.12. New Core behavior goes on the collaborators,
+not the façade.
 
 Audience: coding agents and maintainers. One WP = one PR = one session.
 
@@ -110,7 +111,7 @@ that design; do not execute until unparked.
 | D13.12 | Decompose `AdaptiveBridson.run_adaptive` | todo | [`archive/reviews/CODE_REVIEW_2026-07-23.md`](archive/reviews/CODE_REVIEW_2026-07-23.md) §3. Extract fill / root-corr / bridge / advance behind `LoopDecision`. Behavior-preserving. Gate: `tests/test_adaptive_bridson.py`. **Do before the next feature lands in that file.** Not part of D25. |
 | D13.13 | `convert` in `components/cli.md` | todo | Doc-only. `Jarvis convert` exists; the component page still omits it. |
 | D13.14 | I/O validation follows Portal, not a pinned manifest | todo | [`archive/reviews/SCHEMA_REVIEW_2026-07-31.md`](archive/reviews/SCHEMA_REVIEW_2026-07-31.md). Accept a format when `available_io_formats()` supports it; manifest *enriches*. Relax `test_manifest_matches_builtin_portal_formats` to subset. Distributor↔manifest equality already exists; keep it (D25.1 will own the method side). MCMC Bounds stay open/`unstable`. AdaptiveBridson closed-block is **done** (`f983772`). |
-| D13.15 | Triage ignored / standing test failures | todo | `pyproject.toml` `--ignore`s eight runtime modules. Overlaps **D25.7**: convert ignores to `pytest.mark.slow` (or xfail/skip with a reason). Green must mean green. |
+| D13.15 | Triage ignored / standing test failures | todo | D25.7 converted the eight `--ignore`s to `pytest.mark.slow`. Remaining fast-gate failures (check-modules `wait_for_results` extra kwargs; official-library browse example; Examples PTMCMC Bounds vs `proposal_scales`) still need xfail/skip-with-reason or a fix. |
 
 ### D18 leftovers
 
@@ -179,13 +180,13 @@ Do not copy that spec here.
 | WP | Title | Priority | Depends | Status |
 |---|---|---|---|---|
 | D25.0 | Docs library hygiene | — | — | **done** (2026-08-20) |
-| D25.1 | `SamplerSpec` method catalog (single source of truth) | P0 | — | todo |
-| D25.2 | Validation / CLI do not import the runtime graph | P1 | D25.1 | todo |
-| D25.3 | Split `Jarvis2Core` into façade + collaborators | P0 | D25.2 recommended | todo |
+| D25.1 | `SamplerSpec` method catalog (single source of truth) | P0 | — | **done** (2026-08-20) |
+| D25.2 | Validation / CLI do not import the runtime graph | P1 | D25.1 | **done** (2026-08-20) |
+| D25.3 | Split `Jarvis2Core` into façade + collaborators | P0 | D25.2 recommended | **done** (2026-08-21) |
 | D25.4 | Split `RedisQueue` by keyspace | P1 | D25.3 | todo |
 | D25.5 | `SampleExecutor` extracted from `Worker` | P1 | D25.3 | todo |
 | D25.6 | MCMC / `Sampling` public names | P2 | D25.1 | todo |
-| D25.7 | Test markers instead of `addopts --ignore` (closes D13.15) | P1 | — | todo |
+| D25.7 | Test markers instead of `addopts --ignore` (closes D13.15) | P1 | — | **done** (2026-08-20; DX 2026-08-21: named `.py` files drop default `-m not slow`) |
 | D25.8 | One runtime read model (`Runtime` vs `EnvReqs.V2`) | P2 | — | todo |
 | D25.9 | Slice `client.py` | P3 | D25.2, D25.3 | todo |
 | D25.10 | Package layout + optional `SamplingVirtial` rename | P3 | D25.3–D25.6 | todo |

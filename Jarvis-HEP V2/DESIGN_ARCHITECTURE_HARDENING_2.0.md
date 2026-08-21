@@ -366,10 +366,10 @@ D8 Agent                                  stays parked
 D25.9 CLI slice / D25.10 layout           last
 ```
 
-**Next pick if you are on the structure track:** **D25.1**, then **D25.7**, then **D25.3**.
-**Next pick if you are on the feature track:** do **not** add methods to `core.py`
-or `adaptive_bridson.py` until D25.3 / D13.12 respectively. D14.1 (remote workers)
-is the first feature WP that is allowed to start in parallel with D25.1.
+**Next pick if you are on the structure track:** **D25.4** or **D25.5** (D25.6 / D25.8 may proceed in parallel).
+**Next pick if you are on the feature track:** D14.1 is allowed. Do **not** add
+methods to `adaptive_bridson.py` until D13.12. New Core behavior belongs on
+`_RuntimeSupervisor` / `_ScanDriver` / `_ResumeService`, not the façade.
 
 ---
 
