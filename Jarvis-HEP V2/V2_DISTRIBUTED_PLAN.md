@@ -18,8 +18,8 @@ That document is the WP spec; this ledger only tracks status.
 
 **Parked:** D8 Agent Bridge (maintainer, re-confirmed). Do not start Agent JSON verbs.
 
-**Next pick (structure):** D25.6 (MCMC names) or D25.8 (runtime read model);
-D25.9 waits on both D25.2 (done) and D25.3 (done).
+**Next pick (structure):** D25.8 (runtime read model). D25.9 may proceed
+(D25.2 and D25.3 are done).
 **Next pick (feature):** D14.1 is allowed now that D25.3 landed. **Do not grow
 `adaptive_bridson.py`** until D13.12. New Core behavior goes on the collaborators,
 not the façade.
@@ -185,7 +185,7 @@ Do not copy that spec here.
 | D25.3 | Split `Jarvis2Core` into façade + collaborators | P0 | D25.2 recommended | **done** (2026-08-21) |
 | D25.4 | Split `RedisQueue` by keyspace | P1 | D25.3 | **done** (2026-08-21) |
 | D25.5 | `SampleExecutor` extracted from `Worker` | P1 | D25.3 | **done** (2026-08-21) |
-| D25.6 | MCMC / `Sampling` public names | P2 | D25.1 | todo |
+| D25.6 | MCMC / `Sampling` public names | P2 | D25.1 | **done** (2026-08-21) |
 | D25.7 | Test markers instead of `addopts --ignore` (closes D13.15) | P1 | — | **done** (2026-08-20; DX 2026-08-21: named `.py` files drop default `-m not slow`) |
 | D25.8 | One runtime read model (`Runtime` vs `EnvReqs.V2`) | P2 | — | todo |
 | D25.9 | Slice `client.py` | P3 | D25.2, D25.3 | todo |
