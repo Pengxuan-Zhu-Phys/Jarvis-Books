@@ -366,7 +366,7 @@ D8 Agent                                  stays parked
 D25.9 CLI slice / D25.10 layout           last
 ```
 
-**Next pick if you are on the structure track:** **D25.4** or **D25.5** (D25.6 / D25.8 may proceed in parallel).
+**Next pick if you are on the structure track:** **D25.5** (D25.6 / D25.8 may proceed in parallel).
 **Next pick if you are on the feature track:** D14.1 is allowed. Do **not** add
 methods to `adaptive_bridson.py` until D13.12. New Core behavior belongs on
 `_RuntimeSupervisor` / `_ScanDriver` / `_ResumeService`, not the façade.
